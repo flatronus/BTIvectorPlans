@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Toolbar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .toolbar-button:hover .tooltip {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="bg-white shadow-md">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between py-2">
+                <!-- Logo/Brand -->
+                <div class="flex items-center">
+                    <i class="fas fa-paint-brush text-blue-600 text-2xl mr-2"></i>
+                    <span class="font-bold text-xl hidden md:block">Design Tool</span>
+                </div>
+                
+                <!-- Main Toolbar -->
+                <div class="flex items-center space-x-1 md:space-x-3 overflow-x-auto py-2">
+                    <!-- File Operations -->
+                    <div class="flex items-center space-x-1 md:space-x-3">
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-plus text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Create</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Create New (Ctrl+N)
+                            </div>
+                        </button>
+                        
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-folder-open text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Open</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Open File (Ctrl+O)
+                            </div>
+                        </button>
+                        
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-save text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Save</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Save (Ctrl+S)
+                            </div>
+                        </button>
+                    </div>
+                    
+                    <div class="h-6 w-px bg-gray-300"></div>
+                    
+                    <!-- Tools -->
+                    <div class="flex items-center space-x-1 md:space-x-3">
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-hand-paper text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Hand</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Hand Tool (H)
+                            </div>
+                        </button>
+                        
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-search text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Zoom</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Zoom Tool (Z)
+                            </div>
+                        </button>
+                        
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-sync-alt text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Orientation</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Change Orientation
+                            </div>
+                        </button>
+                        
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <i class="fas fa-square text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Frame</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Frame Tool (F)
+                            </div>
+                        </button>
+                    </div>
+                    
+                    <div class="h-6 w-px bg-gray-300"></div>
+                    
+                    <!-- Zoom Controls -->
+                    <div class="flex items-center space-x-1 md:space-x-3">
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomIn()">
+                            <i class="fas fa-search-plus text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Zoom In</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Zoom In (Ctrl+=)
+                            </div>
+                        </button>
+                        
+                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomOut()">
+                            <i class="fas fa-search-minus text-gray-700"></i>
+                            <span class="hidden md:inline ml-1 text-sm">Zoom Out</span>
+                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                                Zoom Out (Ctrl+-)
+                            </div>
+                        </button>
+                    </div>
+                    
+                    <div class="h-6 w-px bg-gray-300"></div>
+                    
+                    <!-- Exit -->
+                    <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                        <i class="fas fa-sign-out-alt text-gray-700"></i>
+                        <span class="hidden md:inline ml-1 text-sm">Exit</span>
+                        <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                            Exit Application (Alt+F4)
+                        </div>
+                    </button>
+                </div>
+                
+                <!-- User/Actions -->
+                <div class="hidden md:flex items-center space-x-3">
+                    <button class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+                        <i class="fas fa-cloud-upload-alt mr-1"></i>
+                        <span>Publish</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 overflow-auto p-4">
+        <svg class="w-full h-full bg-[#e6f2ff]" viewBox="0 0 900 1200" preserveAspectRatio="xMidYMid meet">
+            <!-- A4 Paper Frame (210x297mm at 96dpi = 794x1123px) -->
+            <rect 
+                x="50" 
+                y="50" 
+                width="794" 
+                height="1123" 
+                fill="none" 
+                stroke="#1e88e5" 
+                stroke-width="2" 
+                vector-effect="non-scaling-stroke"
+                class="paper-frame"
+            />
+        </svg>
+    </div>
+
+    <style>
+        .paper-frame {
+            filter: drop-shadow(0 0 2px rgba(30, 136, 229, 0.5));
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+    <script src="script.js"></script>
+</body>
+</html>
