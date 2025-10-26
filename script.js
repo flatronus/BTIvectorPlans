@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const isWebCodeApp = window.location.protocol === 'file:' ||
-                         !window.location.hostname ||
-                         window.location.hostname === 'localhost' ||
-                         navigator.userAgent.toLowerCase().includes('web code') ||
-                         /Android/.test(navigator.userAgent);  // Додано для Android-планшетів
+    // Визначення середовища (покращена логіка)
+    const isWebCodeApp = navigator.userAgent.toLowerCase().includes('web code');
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isLocalFile = window.location.protocol === 'file:';
+    
     window.isWebCodeApp = isWebCodeApp;
+    window.isAndroid = isAndroid;
 
     // Canvas Management System
     const canvasManager = {
@@ -112,26 +113,33 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         saveCanvas(id) {
-            const canvas = this.canvases.find(c => c.id === id);
-            if (!canvas) return;
-            
-            const canvasElement = document.querySelector(`[data-canvas-id="${id}"]`);
-            const svgElement = canvasElement.querySelector('svg');
-            
-            // Get SVG content
-            const svgData = svgElement.outerHTML;
-            const blob = new Blob([svgData], { type: 'image/svg+xml' });
-            
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            if ('showSaveFilePicker' in window && !isWebCodeApp) {  // Не використовувати в Web Code
-                this.saveWithFilePicker(canvas, blob);
-            } else if (isWebCodeApp || isMobile) {
-                this.saveForWebCodeOrMobile(canvas, blob);
-            } else {
-                this.saveWithDownload(canvas, blob);
-            }
-        },
+    const canvas = this.canvases.find(c => c.id === id);
+    if (!canvas) return;
+    
+    const canvasElement = document.querySelector(`[data-canvas-id="${id}"]`);
+    const svgElement = canvasElement.querySelector('svg');
+    
+    // Get SVG content
+    const svgData = svgElement.outerHTML;
+    const blob = new Blob([svgData], { type: 'image/svg+xml' });
+    
+    // Визначення платформи
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isDesktop = !isMobile && 'showSaveFilePicker' in window;
+    
+    // Вибір методу збереження
+    if (isDesktop) {
+        // ПК - File System Access API
+        this.saveWithFilePicker(canvas, blob);
+    } else if (isMobile || isWebCodeApp) {
+        // Android/Mobile - модалка з копіюванням
+        const fileName = canvas.savedPath || `${canvas.name}.svg`;
+        this.showCopyModal(svgData, fileName);
+    } else {
+        // Fallback - звичайне завантаження
+        this.saveWithDownload(canvas, blob);
+    }
+},
         
         async saveWithFilePicker(canvas, blob) {
             try {
@@ -159,6 +167,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         },
+        
+        showCopyModal(svgContent, fileName) {
+    document.getElementById('svgCode').value = svgContent;
+    document.getElementById('modalTitle').textContent = `Copy SVG Code for "${fileName}"`;
+    document.getElementById('copyModal').style.display = 'block';
+},
 
         saveForWebCodeOrMobile(canvas, blob, fileName) {
             const reader = new FileReader();
@@ -178,7 +192,6 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         saveWithDownload(canvas, blob) {
-            // ... (залишається без змін, як у вашому коді)
             try {
                 let fileName;
                 if (canvas.savedPath) {
@@ -196,6 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = fileName;
+                link.style.display = 'none';
                 
                 document.body.appendChild(link);
                 link.click();
@@ -203,10 +217,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     document.body.removeChild(link);
                     URL.revokeObjectURL(url);
-                    alert(`File saved: ${fileName}`);
                 }, 100);
                 
+                alert(`File saved: ${fileName}`);
+                
             } catch (err) {
+                console.error('Save error:', err);
                 alert('Save error: ' + err.message);
             }
         },
@@ -217,11 +233,104 @@ document.addEventListener('DOMContentLoaded', function() {
             let initialDistance = 0;
             let initialViewBox = null;
 
-            // ... (touch/mouse events залишаються без змін, вони вже оптимізовані для Android)
+            // Mouse events для десктопу
+            svgElement.addEventListener('mousedown', (e) => {
+                if (e.button === 0) { // Ліва кнопка миші
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    svgElement.style.cursor = 'grabbing';
+                }
+            });
 
-            // Додано: кращий cursor для touch
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                const dx = (startX - e.clientX) * (canvas.viewBox.width / svgElement.clientWidth);
+                const dy = (startY - e.clientY) * (canvas.viewBox.height / svgElement.clientHeight);
+                
+                canvas.viewBox.x += dx;
+                canvas.viewBox.y += dy;
+                
+                svgElement.setAttribute('viewBox', 
+                    `${canvas.viewBox.x} ${canvas.viewBox.y} ${canvas.viewBox.width} ${canvas.viewBox.height}`
+                );
+                
+                startX = e.clientX;
+                startY = e.clientY;
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                svgElement.style.cursor = 'grab';
+            });
+
+            // Touch events для планшета
+            svgElement.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                } else if (e.touches.length === 2) {
+                    isDragging = false;
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    initialDistance = Math.hypot(
+                        touch2.clientX - touch1.clientX,
+                        touch2.clientY - touch1.clientY
+                    );
+                    initialViewBox = { ...canvas.viewBox };
+                }
+            });
+
+            svgElement.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                
+                if (e.touches.length === 1 && isDragging) {
+                    const dx = (startX - e.touches[0].clientX) * (canvas.viewBox.width / svgElement.clientWidth);
+                    const dy = (startY - e.touches[0].clientY) * (canvas.viewBox.height / svgElement.clientHeight);
+                    
+                    canvas.viewBox.x += dx;
+                    canvas.viewBox.y += dy;
+                    
+                    svgElement.setAttribute('viewBox', 
+                        `${canvas.viewBox.x} ${canvas.viewBox.y} ${canvas.viewBox.width} ${canvas.viewBox.height}`
+                    );
+                    
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                } else if (e.touches.length === 2 && initialDistance > 0) {
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    const currentDistance = Math.hypot(
+                        touch2.clientX - touch1.clientX,
+                        touch2.clientY - touch1.clientY
+                    );
+                    
+                    const scale = initialDistance / currentDistance;
+                    canvas.viewBox.width = initialViewBox.width * scale;
+                    canvas.viewBox.height = initialViewBox.height * scale;
+                    
+                    canvas.viewBox.width = Math.max(200, Math.min(5000, canvas.viewBox.width));
+                    canvas.viewBox.height = Math.max(200, Math.min(5000, canvas.viewBox.height));
+                    
+                    svgElement.setAttribute('viewBox', 
+                        `${canvas.viewBox.x} ${canvas.viewBox.y} ${canvas.viewBox.width} ${canvas.viewBox.height}`
+                    );
+                }
+            });
+
+            svgElement.addEventListener('touchend', () => {
+                isDragging = false;
+                initialDistance = 0;
+            });
+
+            // Оптимізація для touch-пристроїв
             if (/Android|iPhone|iPad/.test(navigator.userAgent)) {
-                svgElement.style.touchAction = 'manipulation';  // Для кращої responsivity на touch
+                svgElement.style.touchAction = 'none';
+                svgElement.style.cursor = 'grab';
+            } else {
+                svgElement.style.cursor = 'grab';
             }
         }
     };
@@ -231,9 +340,48 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize first canvas
     canvasManager.createCanvas();
 
+    // Zoom functions
+    window.zoomIn = function() {
+        if (!window.canvasManager || !window.canvasManager.activeCanvasId) return;
+        
+        const canvas = window.canvasManager.canvases.find(c => c.id === window.canvasManager.activeCanvasId);
+        if (!canvas) return;
+        
+        const svgElement = document.querySelector(`[data-canvas-id="${canvas.id}"] svg`);
+        if (!svgElement) return;
+        
+        canvas.viewBox.width *= 0.9;
+        canvas.viewBox.height *= 0.9;
+        canvas.viewBox.x += canvas.viewBox.width * 0.05;
+        canvas.viewBox.y += canvas.viewBox.height * 0.05;
+        
+        svgElement.setAttribute('viewBox', 
+            `${canvas.viewBox.x} ${canvas.viewBox.y} ${canvas.viewBox.width} ${canvas.viewBox.height}`
+        );
+    };
+
+    window.zoomOut = function() {
+        if (!window.canvasManager || !window.canvasManager.activeCanvasId) return;
+        
+        const canvas = window.canvasManager.canvases.find(c => c.id === window.canvasManager.activeCanvasId);
+        if (!canvas) return;
+        
+        const svgElement = document.querySelector(`[data-canvas-id="${canvas.id}"] svg`);
+        if (!svgElement) return;
+        
+        canvas.viewBox.width *= 1.1;
+        canvas.viewBox.height *= 1.1;
+        canvas.viewBox.x -= canvas.viewBox.width * 0.045;
+        canvas.viewBox.y -= canvas.viewBox.height * 0.045;
+        
+        svgElement.setAttribute('viewBox', 
+            `${canvas.viewBox.x} ${canvas.viewBox.y} ${canvas.viewBox.width} ${canvas.viewBox.height}`
+        );
+    };
+
     // Toolbar button functionality (без змін)
 
-    // Додано: Клавіатурні скорочення (працюють на планшеті з клавіатурою)
+    // Додано: Клавіатурні скорочення (працюють на десктопі та планшеті з клавіатурою)
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {
             switch (e.key.toLowerCase()) {
@@ -243,8 +391,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 case 'o':
                     e.preventDefault();
-                    // Додати логіку open, якщо потрібно
-                    alert('Open functionality: Implement window.canvasManager.openCanvas()');
+                    alert('Open functionality: Not yet implemented');
                     break;
                 case 's':
                     e.preventDefault();
@@ -260,21 +407,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     zoomOut();
                     break;
             }
-        } else {
-            switch (e.key.toLowerCase()) {
-                case 'h':
-                    // Toggle hand tool
-                    document.querySelector('.fa-hand-paper').closest('.toolbar-button').click();
-                    break;
-                case 'z':
-                    // Toggle zoom tool
-                    document.querySelector('.fa-search').closest('.toolbar-button').click();
-                    break;
-                case 'f':
-                    // Frame tool
-                    document.querySelector('.fa-square').closest('.toolbar-button').click();
-                    break;
-            }
         }
     });
 
@@ -286,41 +418,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // Special handling for Web Code (оновлено)
-    window.saveToWebCode = function(fileName, content) {
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(content).then(() => {
-                alert(`SVG copied! Paste into "${fileName}" in Web Code.`);
-            }).catch(() => {
-                prompt(`Copy manually:`, content);
-            });
-        } else {
-            prompt(`Save as "${fileName}":`, content);
+    // Функції для модалки
+    window.copySvgCode = function() {
+        const textarea = document.getElementById('svgCode');
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); // Для мобільних
+        navigator.clipboard.writeText(textarea.value).then(() => {
+            alert('Copied to clipboard! Paste into your editor.');
+        }).catch(() => {
+            // Fallback для старих браузерів
+            document.execCommand('copy');
+            alert('Copied (fallback method)!');
+        });
+    };
+
+    window.closeModal = function() {
+        document.getElementById('copyModal').style.display = 'none';
+    };
+
+    // Закриття модалки по кліку поза нею
+    window.onclick = function(event) {
+        const modal = document.getElementById('copyModal');
+        if (event.target === modal) {
+            modal.style.display = 'none';
         }
     };
-    // Функції для модалки
-window.copySvgCode = function() {
-    const textarea = document.getElementById('svgCode');
-    textarea.select();
-    textarea.setSelectionRange(0, 99999); // Для мобільних
-    navigator.clipboard.writeText(textarea.value).then(() => {
-        alert('Copied to clipboard! Paste into your editor.');
-    }).catch(() => {
-        // Fallback для старих браузерів
-        document.execCommand('copy');
-        alert('Copied (fallback method)!');
-    });
-};
-
-window.closeModal = function() {
-    document.getElementById('copyModal').style.display = 'none';
-};
-
-// Закриття модалки по кліку поза нею
-window.onclick = function(event) {
-    const modal = document.getElementById('copyModal');
-    if (event.target === modal) {
-        modal.style.display = 'none';
-    }
-};
 });
