@@ -511,4 +511,15 @@ document.addEventListener('DOMContentLoaded', function() {
             modal.style.display = 'none';
         }
     };
+    
+    // Функція відкриття модалки фігур (Shapes)
+    window.openShapeModal = function() {
+        document.getElementById('shapeModal').style.display = 'block';
+    };
+    
+    // Функція закриття модалки фігур
+    window.closeShapeModal = function() {
+        document.getElementById('shapeModal').style.display = 'none';
+    };
+    
 });
