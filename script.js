@@ -96,6 +96,74 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update global svg reference
             window.svg = activeCanvas ? activeCanvas.querySelector('svg') : null;
         },
+        
+        openCanvas() {
+            if ('showOpenFilePicker' in window) {
+                // Сучасний API для ПК/мобільних (працює на Android Chrome 86+)
+                window.showOpenFilePicker({
+                    types: [{
+                        description: 'SVG Files',
+                        accept: { 'image/svg+xml': ['.svg'] }
+                    }]
+                }).then(async ([handle]) => {
+                    const file = await handle.getFile();
+                    const reader = new FileReader();
+                    reader.onload = (e) => this.loadSvgFromContent(e.target.result, file.name.replace('.svg', ''));
+                    reader.readAsText(file);
+                }).catch(err => {
+                    if (err.name !== 'AbortError') alert('Open failed: ' + err.message);
+                });
+            } else {
+                // Fallback для старих браузерів/мобільних
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.svg';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => this.loadSvgFromContent(e.target.result, file.name.replace('.svg', ''));
+                        reader.readAsText(file);
+                    }
+                };
+                input.click();
+            }
+        },
+        
+        loadSvgFromContent(svgContent, name) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = svgContent;
+            const svg = tempDiv.querySelector('svg');
+            if (!svg) {
+                alert('Invalid SVG file');
+                return;
+            }
+            const id = this.nextId++;
+            const viewBox = svg.getAttribute('viewBox');
+            const [x, y, width, height] = viewBox ? viewBox.split(/\s+/).map(Number) : [0, 0, 900, 1200];
+            const canvas = {
+                id,
+                name: `C${id}`,
+                fullName: name || `Canvas ${id}`,
+                viewBox: { x, y, width, height },
+                savedPath: `${name || 'imported'}.svg`
+            };
+            this.canvases.push(canvas);
+            this.renderImportedCanvas(canvas, svg.outerHTML);
+            this.renderTab(canvas);
+            this.setActiveCanvas(id);
+        },
+        
+        renderImportedCanvas(canvas, svgContent) {
+            const container = document.getElementById('canvas-container');
+            const svgElement = document.createElement('div');
+            svgElement.className = 'w-full h-full';
+            svgElement.style.display = 'none';
+            svgElement.setAttribute('data-canvas-id', canvas.id);
+            svgElement.innerHTML = svgContent;
+            container.appendChild(svgElement);
+            this.attachCanvasEvents(svgElement.querySelector('svg'), canvas);
+        },
 
         closeCanvas(id) {
             if (this.canvases.length <= 1) {
@@ -113,33 +181,33 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         saveCanvas(id) {
-    const canvas = this.canvases.find(c => c.id === id);
-    if (!canvas) return;
-    
-    const canvasElement = document.querySelector(`[data-canvas-id="${id}"]`);
-    const svgElement = canvasElement.querySelector('svg');
-    
-    // Get SVG content
-    const svgData = svgElement.outerHTML;
-    const blob = new Blob([svgData], { type: 'image/svg+xml' });
-    
-    // Визначення платформи
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isDesktop = !isMobile && 'showSaveFilePicker' in window;
-    
-    // Вибір методу збереження
-    if (isDesktop) {
-        // ПК - File System Access API
-        this.saveWithFilePicker(canvas, blob);
-    } else if (isMobile || isWebCodeApp) {
-        // Android/Mobile - модалка з копіюванням
-        const fileName = canvas.savedPath || `${canvas.name}.svg`;
-        this.showCopyModal(svgData, fileName);
-    } else {
-        // Fallback - звичайне завантаження
-        this.saveWithDownload(canvas, blob);
-    }
-},
+            const canvas = this.canvases.find(c => c.id === id);
+            if (!canvas) return;
+            
+            const canvasElement = document.querySelector(`[data-canvas-id="${id}"]`);
+            const svgElement = canvasElement.querySelector('svg');
+            
+            // Get SVG content
+            const svgData = svgElement.outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            
+            // Визначення платформи
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const isDesktop = !isMobile && 'showSaveFilePicker' in window;
+            
+            // Вибір методу збереження
+            if (isDesktop) {
+                // ПК - File System Access API
+                this.saveWithFilePicker(canvas, blob);
+            } else if (isMobile || isWebCodeApp) {
+                // Android/Mobile - модалка з копіюванням
+                const fileName = canvas.savedPath || `${canvas.name}.svg`;
+                this.showCopyModal(svgData, fileName);
+            } else {
+                // Fallback - звичайне завантаження
+                this.saveWithDownload(canvas, blob);
+            }
+        },
         
         async saveWithFilePicker(canvas, blob) {
             try {
@@ -169,10 +237,10 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         showCopyModal(svgContent, fileName) {
-    document.getElementById('svgCode').value = svgContent;
-    document.getElementById('modalTitle').textContent = `Copy SVG Code for "${fileName}"`;
-    document.getElementById('copyModal').style.display = 'block';
-},
+            document.getElementById('svgCode').value = svgContent;
+            document.getElementById('modalTitle').textContent = `Copy SVG Code for "${fileName}"`;
+            document.getElementById('copyModal').style.display = 'block';
+        },
 
         saveForWebCodeOrMobile(canvas, blob, fileName) {
             const reader = new FileReader();
