@@ -522,4 +522,126 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('shapeModal').style.display = 'none';
     };
     
+    // Змінні для створення фігур
+    let shapePoints = [{x: 400, y: 300, num: 1}]; // Початкова точка
+    let shapeLines = [];
+    let pointCounter = 1;
+    
+    // Функція додавання точки
+    window.addPoint = function() {
+        // Відкрити модалку введення координат
+        document.getElementById('coordModal').style.display = 'block';
+        document.getElementById('coordInput').value = ''; // Очистити поле
+        document.getElementById('coordInput').focus(); // Фокус на поле
+    };
+    
+    // Функція додавання діагоналі
+    window.addDiagonal = function() {
+        alert('Функція "Діагональ" буде реалізована далі');
+        console.log('Add diagonal clicked');
+    };
+    
+    // Оновлення відображення фігури на полотні
+    function updateShapeCanvas() {
+        const svg = document.getElementById('shapeCanvas');
+        // Очистити все крім початкової точки
+        while (svg.childNodes.length > 2) {
+            svg.removeChild(svg.lastChild);
+        }
+        
+        // Малювати лінії
+        shapeLines.forEach(line => {
+            const lineEl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            lineEl.setAttribute('x1', line.x1);
+            lineEl.setAttribute('y1', line.y1);
+            lineEl.setAttribute('x2', line.x2);
+            lineEl.setAttribute('y2', line.y2);
+            lineEl.setAttribute('stroke', '#2196F3');
+            lineEl.setAttribute('stroke-width', '2');
+            svg.appendChild(lineEl);
+        });
+        
+        // Малювати точки (крім першої)
+        shapePoints.slice(1).forEach(point => {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', point.x);
+            circle.setAttribute('cy', point.y);
+            circle.setAttribute('r', '5');
+            circle.setAttribute('fill', '#e53935');
+            svg.appendChild(circle);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', point.x + 10);
+            text.setAttribute('y', point.y - 5);
+            text.setAttribute('font-size', '16');
+            text.setAttribute('fill', '#e53935');
+            text.setAttribute('font-weight', 'bold');
+            text.textContent = point.num;
+            svg.appendChild(text);
+        });
+    }
+    
+    // Функція закриття модалки координат
+    window.closeCoordModal = function() {
+        document.getElementById('coordModal').style.display = 'none';
+    };
+    
+    // Функція обробки введених координат
+    window.submitCoords = function() {
+        const input = document.getElementById('coordInput').value.trim();
+        
+        if (!input) {
+            alert('Будь ласка, введіть координати');
+            return;
+        }
+        
+        // Розділити по рядках і перетворити на числа
+        const numbers = input.split('\n')
+            .map(line => line.trim())
+            .filter(line => line !== '')
+            .map(line => parseFloat(line))
+            .filter(num => !isNaN(num));
+        
+        if (numbers.length === 0) {
+            alert('Не знайдено жодного числа');
+            return;
+        }
+        
+        console.log('Введені координати:', numbers);
+        alert(`Введено ${numbers.length} чисел: ${numbers.join(', ')}`);
+        
+        // TODO: Обробка координат для створення точок
+        
+        closeCoordModal();
+    };
+    
+    // Змінні для налаштувань
+    let currentAngle = 'up'; // up, down, left, right, free
+    let currentLineType = 'line'; // line, arc
+    
+    // Функція вибору напрямку кута
+    window.setAngle = function(direction) {
+        currentAngle = direction;
+        console.log('Обрано напрямок:', direction);
+        
+        const directions = {
+            'up': 'Вверх (90°)',
+            'down': 'Вниз (90°)',
+            'right': 'Вправо (90°)',
+            'left': 'Вліво (90°)',
+            'free': 'Вільний кут'
+        };
+        
+        // TODO: Можна додати візуальну індикацію вибраної кнопки
+        console.log('Встановлено:', directions[direction]);
+    };
+    
+    // Функція вибору типу лінії
+    window.setLineType = function(type) {
+        currentLineType = type;
+        console.log('Обрано тип лінії:', type === 'line' ? 'Лінія' : 'Дуга');
+        
+        // TODO: Можна додати візуальну індикацію вибраної кнопки
+    };
+    
 });
