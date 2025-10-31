@@ -531,8 +531,10 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addPoint = function() {
         // Відкрити модалку введення координат
         document.getElementById('coordModal').style.display = 'block';
-        document.getElementById('coordInput').value = ''; // Очистити поле
-        document.getElementById('coordInput').focus(); // Фокус на поле
+        // Фокус на поле (з невеликою затримкою для коректної роботи)
+        setTimeout(() => {
+            document.getElementById('coordInput').focus();
+        }, 100);
     };
     
     // Функція додавання діагоналі
@@ -643,5 +645,48 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // TODO: Можна додати візуальну індикацію вибраної кнопки
     };
+    
+    // Змінна для вибраного елемента
+    let selectedElement = null;
+    
+    // Функція вибору елемента
+    window.selectElement = function(code) {
+        selectedElement = code;
+        console.log('Обрано елемент:', code);
+        
+        // Вставка кодового значення в поле вводу координат
+        const coordInput = document.getElementById('coordInput');
+        
+        // Зберігаємо позицію курсора
+        const cursorPos = coordInput.selectionStart;
+        const textBefore = coordInput.value.substring(0, cursorPos);
+        const textAfter = coordInput.value.substring(cursorPos);
+        
+        // Вставляємо код на позицію курсора (з новим рядком якщо потрібно)
+        const newText = textBefore + (textBefore && !textBefore.endsWith('\n') ? '\n' : '') + code;
+        coordInput.value = newText + textAfter;
+        
+        // Встановлюємо курсор після вставленого тексту
+        const newCursorPos = newText.length;
+        coordInput.setSelectionRange(newCursorPos, newCursorPos);
+        
+        // Повертаємо фокус на поле
+        coordInput.focus();
+        
+        // TODO: Можна додати візуальну індикацію вибраної кнопки
+    };
+    
+    // Функція створення коду елемента "Вікно"
+    function createWindowElement() {
+        return `<!-- Вікно 1 (WI1) -->
+    <!-- Параметри: ширина, висота -->
+    <!-- Приклад: 100, 150 -->
+    <g id="WI1">
+      <rect x="0" y="0" width="100" height="150" 
+            fill="none" stroke="black" stroke-width="2"/>
+      <line x1="0" y1="75" x2="100" y2="75" 
+            stroke="black" stroke-width="2"/>
+    </g>`;
+    }
     
 });
