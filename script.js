@@ -654,32 +654,21 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Функція закриття модалки координат з обробкою введених даних
     window.closeCoordModal = function() {
-        alert('Кнопка OK натиснута!');
-        
         const inputText = document.getElementById('coordInput').value.trim();
-        alert('Текст введення: ' + inputText);
         
         if (inputText) {
             const parsedData = parseCoordinateInput(inputText);
-            alert('Результат парсингу: ' + (parsedData ? 'OK' : 'NULL'));
             
             if (parsedData) {
                 // Якщо редагуємо існуючу лінію
                 if (window.editingLineId) {
-                    alert('Редагуємо лінію ID: ' + window.editingLineId);
                     updateExistingLine(window.editingLineId, parsedData);
                     window.editingLineId = null;
-                    alert('Лінію оновлено!');
                 } else {
-                    alert('Малюємо нову лінію');
                     // Малюємо нову лінію
                     drawLineOnCanvas(parsedData);
                 }
-            } else {
-                alert('ПОМИЛКА: parsedData is null!');
             }
-        } else {
-            alert('ПОМИЛКА: inputText порожній!');
         }
         
         document.getElementById('coordModal').style.display = 'none';
@@ -841,7 +830,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Функція парсингу введених координат
     function parseCoordinateInput(inputText) {
         const lines = inputText.trim().split('\n').map(line => line.trim()).filter(line => line);
-        alert('Розділено на рядки: ' + lines.length + ' рядків');
         
         if (lines.length < 2) {
             alert('Введіть принаймні напрямок та тип лінії');
@@ -1255,10 +1243,8 @@ function updateLinesList() {
     
     // Функція оновлення існуючої лінії
     function updateExistingLine(lineId, parsedData) {
-        alert('updateExistingLine викликано для ID: ' + lineId);
         
         const lineIndex = figureLines.findIndex(l => l.id === lineId);
-        alert('Знайдено індекс лінії: ' + lineIndex);
         
         if (lineIndex === -1) {
             alert('ПОМИЛКА: Лінію не знайдено!');
@@ -1274,8 +1260,6 @@ function updateLinesList() {
             }
         }
         
-        alert('Нова довжина: ' + newLength);
-        
         // Зберігаємо оновлені дані
         figureLines[lineIndex].direction = parsedData.direction;
         figureLines[lineIndex].lineType = parsedData.lineType;
@@ -1283,20 +1267,14 @@ function updateLinesList() {
         figureLines[lineIndex].code = document.getElementById('coordInput').value;
         figureLines[lineIndex].length = newLength;
         
-        alert('Дані лінії оновлено. Викликаємо перерахунок...');
-        
         // Якщо змінена НЕ остання лінія перед замикаючою, потрібно перерахувати замикаючу
         const closingLineIndex = figureLines.findIndex(l => l.isClosing);
         if (closingLineIndex !== -1 && lineIndex < closingLineIndex) {
-            alert('Перераховуємо замикаючу лінію');
             recalculateClosingLine();
         }
         
-        alert('Викликаємо redrawEntireFigure...');
         // Перемальовуємо всю фігуру з урахуванням змін
         redrawEntireFigure();
-        
-        alert('Фігуру перемальовано!');
     }
     
     // Функція перерахунку замикаючої лінії
