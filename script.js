@@ -654,24 +654,36 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Функція закриття модалки координат з обробкою введених даних
     window.closeCoordModal = function() {
+        alert('Кнопка OK натиснута!');
+        
         const inputText = document.getElementById('coordInput').value.trim();
+        alert('Текст введення: ' + inputText);
         
         if (inputText) {
             const parsedData = parseCoordinateInput(inputText);
+            alert('Результат парсингу: ' + (parsedData ? 'OK' : 'NULL'));
             
             if (parsedData) {
                 // Якщо редагуємо існуючу лінію
                 if (window.editingLineId) {
+                    alert('Редагуємо лінію ID: ' + window.editingLineId);
                     updateExistingLine(window.editingLineId, parsedData);
                     window.editingLineId = null;
+                    alert('Лінію оновлено!');
                 } else {
+                    alert('Малюємо нову лінію');
                     // Малюємо нову лінію
                     drawLineOnCanvas(parsedData);
                 }
+            } else {
+                alert('ПОМИЛКА: parsedData is null!');
             }
+        } else {
+            alert('ПОМИЛКА: inputText порожній!');
         }
         
         document.getElementById('coordModal').style.display = 'none';
+        document.getElementById('coordInput').value = '';
     };
     
     // Функція обробки введених координат
@@ -829,6 +841,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Функція парсингу введених координат
     function parseCoordinateInput(inputText) {
         const lines = inputText.trim().split('\n').map(line => line.trim()).filter(line => line);
+        alert('Розділено на рядки: ' + lines.length + ' рядків');
         
         if (lines.length < 2) {
             alert('Введіть принаймні напрямок та тип лінії');
@@ -883,11 +896,13 @@ document.addEventListener('DOMContentLoaded', function() {
             endX = shapePoints[0].x;
             endY = shapePoints[0].y;
             
-            // Обчислюємо довжину
-            const dx = endX - lastPoint.x;
-            const dy = endY - lastPoint.y;
-            const scale = 50;
-            lineLength = Math.sqrt(dx * dx + dy * dy) / scale;
+            // Знаходимо довжину з введених даних (останнє число)
+            for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+                if (parsedData.elements[i].type === 'number') {
+                    lineLength = parsedData.elements[i].value;
+                    break;
+                }
+            }
         } else {
             endX = lastPoint.x;
             endY = lastPoint.y;
@@ -971,33 +986,6 @@ document.addEventListener('DOMContentLoaded', function() {
             svg.appendChild(text);
         }
         
-        // Функція обчислення та відображення площі
-function calculateAndDisplayArea() {
-    if (shapePoints.length < 3) return;
-    
-    // Обчислення площі за формулою Гаусса (Shoelace formula)
-    let area = 0;
-    for (let i = 0; i < shapePoints.length; i++) {
-        const j = (i + 1) % shapePoints.length;
-        area += shapePoints[i].x * shapePoints[j].y;
-        area -= shapePoints[j].x * shapePoints[i].y;
-    }
-    area = Math.abs(area) / 2;
-    
-    // Конвертуємо з пікселів² в метри² (масштаб: 1 метр = 50 пікселів)
-    const scale = 50;
-    const areaInMeters = area / (scale * scale);
-    
-    // Форматуємо до 1 знака після коми
-    const formattedArea = areaInMeters.toFixed(1);
-    
-    // Зберігаємо площу
-    window.calculatedArea = formattedArea;
-    
-    // Оновлюємо список ліній з площею
-    updateLinesList();
-}
-        
         // Зберігаємо лінію в масив
         const lineData = {
             id: lineIdCounter,
@@ -1007,7 +995,8 @@ function calculateAndDisplayArea() {
             lineType: parsedData.lineType,
             elements: parsedData.elements,
             code: document.getElementById('coordInput').value,
-            length: lineLength
+            length: lineLength,
+            isClosing: isClosing  // ДОДАНО: позначка замикаючої лінії
         };
         figureLines.push(lineData);
         
@@ -1015,6 +1004,33 @@ function calculateAndDisplayArea() {
         updateLinesList();
         
         lineIdCounter++;
+    }
+    
+    // Функція обчислення та відображення площі
+    function calculateAndDisplayArea() {
+        if (shapePoints.length < 3) return;
+        
+        // Обчислення площі за формулою Гаусса (Shoelace formula)
+        let area = 0;
+        for (let i = 0; i < shapePoints.length; i++) {
+            const j = (i + 1) % shapePoints.length;
+            area += shapePoints[i].x * shapePoints[j].y;
+            area -= shapePoints[j].x * shapePoints[i].y;
+        }
+        area = Math.abs(area) / 2;
+        
+        // Конвертуємо з пікселів² в метри² (масштаб: 1 метр = 50 пікселів)
+        const scale = 50;
+        const areaInMeters = area / (scale * scale);
+        
+        // Форматуємо до 1 знака після коми
+        const formattedArea = areaInMeters.toFixed(1);
+        
+        // Зберігаємо площу
+        window.calculatedArea = formattedArea;
+        
+        // Оновлюємо список ліній з площею
+        updateLinesList();
     }
     
     function drawLineDimension(x1, y1, x2, y2, lengthInMeters) {
@@ -1239,18 +1255,149 @@ function updateLinesList() {
     
     // Функція оновлення існуючої лінії
     function updateExistingLine(lineId, parsedData) {
+        alert('updateExistingLine викликано для ID: ' + lineId);
+        
         const lineIndex = figureLines.findIndex(l => l.id === lineId);
-        if (lineIndex === -1) return;
+        alert('Знайдено індекс лінії: ' + lineIndex);
+        
+        if (lineIndex === -1) {
+            alert('ПОМИЛКА: Лінію не знайдено!');
+            return;
+        }
+        
+        // Знаходимо нову довжину лінії (останнє число в elements)
+        let newLength = 0;
+        for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+            if (parsedData.elements[i].type === 'number') {
+                newLength = parsedData.elements[i].value;
+                break;
+            }
+        }
+        
+        alert('Нова довжина: ' + newLength);
         
         // Зберігаємо оновлені дані
-        const oldLine = figureLines[lineIndex];
         figureLines[lineIndex].direction = parsedData.direction;
         figureLines[lineIndex].lineType = parsedData.lineType;
         figureLines[lineIndex].elements = parsedData.elements;
         figureLines[lineIndex].code = document.getElementById('coordInput').value;
+        figureLines[lineIndex].length = newLength;
         
+        alert('Дані лінії оновлено. Викликаємо перерахунок...');
+        
+        // Якщо змінена НЕ остання лінія перед замикаючою, потрібно перерахувати замикаючу
+        const closingLineIndex = figureLines.findIndex(l => l.isClosing);
+        if (closingLineIndex !== -1 && lineIndex < closingLineIndex) {
+            alert('Перераховуємо замикаючу лінію');
+            recalculateClosingLine();
+        }
+        
+        alert('Викликаємо redrawEntireFigure...');
         // Перемальовуємо всю фігуру з урахуванням змін
         redrawEntireFigure();
+        
+        alert('Фігуру перемальовано!');
+    }
+    
+    // Функція перерахунку замикаючої лінії
+    function recalculateClosingLine() {
+        const closingLineIndex = figureLines.findIndex(l => l.isClosing);
+        if (closingLineIndex === -1) return;
+        
+        // Тимчасово видаляємо замикаючу лінію
+        const closingLine = figureLines[closingLineIndex];
+        figureLines.splice(closingLineIndex, 1);
+        
+        // Перемальовуємо фігуру без замикаючої
+        const svg = document.getElementById('shapeCanvas');
+        while (svg.firstChild) {
+            svg.removeChild(svg.firstChild);
+        }
+        
+        shapePoints = [{x: 400, y: 300, num: 1}];
+        
+        // Малюємо початкову точку
+        const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        startCircle.setAttribute('cx', '400');
+        startCircle.setAttribute('cy', '300');
+        startCircle.setAttribute('r', '5');
+        startCircle.setAttribute('fill', '#e53935');
+        svg.appendChild(startCircle);
+        
+        const startText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        startText.setAttribute('x', '410');
+        startText.setAttribute('y', '295');
+        startText.setAttribute('font-size', '16');
+        startText.setAttribute('fill', '#e53935');
+        startText.setAttribute('font-weight', 'bold');
+        startText.textContent = '1';
+        svg.appendChild(startText);
+        
+        let currentPointNum = 1;
+        const scale = 50;
+        
+        // Малюємо всі лінії крім замикаючої
+        figureLines.forEach((lineData) => {
+            const lastPoint = shapePoints[shapePoints.length - 1];
+            let endX = lastPoint.x;
+            let endY = lastPoint.y;
+            
+            const scaledLength = lineData.length * scale;
+            
+            switch(lineData.direction) {
+                case 'top':
+                    endY = lastPoint.y - scaledLength;
+                    break;
+                case 'bottom':
+                    endY = lastPoint.y + scaledLength;
+                    break;
+                case 'left':
+                    endX = lastPoint.x - scaledLength;
+                    break;
+                case 'right':
+                    endX = lastPoint.x + scaledLength;
+                    break;
+            }
+            
+            currentPointNum++;
+            const newPoint = { x: endX, y: endY, num: currentPointNum };
+            shapePoints.push(newPoint);
+        });
+        
+        // Тепер обчислюємо нову довжину замикаючої лінії
+        const lastPoint = shapePoints[shapePoints.length - 1];
+        const firstPoint = shapePoints[0];
+        
+        const dx = firstPoint.x - lastPoint.x;
+        const dy = firstPoint.y - lastPoint.y;
+        const distanceInPixels = Math.sqrt(dx * dx + dy * dy);
+        const newClosingLength = (distanceInPixels / scale).toFixed(2);
+        
+        console.log('Нова довжина замикаючої лінії:', newClosingLength);
+        
+        // Оновлюємо дані замикаючої лінії
+        closingLine.length = parseFloat(newClosingLength);
+        
+        // Оновлюємо елементи (останнє число)
+        for (let i = closingLine.elements.length - 1; i >= 0; i--) {
+            if (closingLine.elements[i].type === 'number') {
+                closingLine.elements[i].value = parseFloat(newClosingLength);
+                break;
+            }
+        }
+        
+        // Оновлюємо код
+        const codeLines = closingLine.code.split('\n');
+        for (let i = codeLines.length - 1; i >= 0; i--) {
+            if (!isNaN(parseFloat(codeLines[i]))) {
+                codeLines[i] = newClosingLength;
+                break;
+            }
+        }
+        closingLine.code = codeLines.join('\n');
+        
+        // Повертаємо замикаючу лінію назад
+        figureLines.push(closingLine);
     }
     
     // Функція перемалювання всієї фігури
@@ -1290,34 +1437,35 @@ function updateLinesList() {
             const lastPoint = shapePoints[shapePoints.length - 1];
             
             // Обчислення кінцевої точки
-            let endX = lastPoint.x;
-            let endY = lastPoint.y;
-            let lineLength = 0;
+            let endX, endY;
             
-            // Знаходимо загальну довжину лінії
-            for (let i = lineData.elements.length - 1; i >= 0; i--) {
-                if (lineData.elements[i].type === 'number') {
-                    lineLength = lineData.elements[i].value;
-                    break;
+            // ВИПРАВЛЕННЯ: для замикаючої лінії завжди використовуємо першу точку
+            if (lineData.isClosing) {
+                endX = shapePoints[0].x;
+                endY = shapePoints[0].y;
+            } else {
+                // Для звичайної лінії обчислюємо відносно попередньої точки
+                endX = lastPoint.x;
+                endY = lastPoint.y;
+                
+                const lineLength = lineData.length;
+                const scaledLength = lineLength * scale;
+                
+                // Обчислюємо кінцеву точку в залежності від напрямку
+                switch(lineData.direction) {
+                    case 'top':
+                        endY = lastPoint.y - scaledLength;
+                        break;
+                    case 'bottom':
+                        endY = lastPoint.y + scaledLength;
+                        break;
+                    case 'left':
+                        endX = lastPoint.x - scaledLength;
+                        break;
+                    case 'right':
+                        endX = lastPoint.x + scaledLength;
+                        break;
                 }
-            }
-            
-            const scaledLength = lineLength * scale;
-            
-            // Обчислюємо кінцеву точку в залежності від напрямку
-            switch(lineData.direction) {
-                case 'top':
-                    endY = lastPoint.y - scaledLength;
-                    break;
-                case 'bottom':
-                    endY = lastPoint.y + scaledLength;
-                    break;
-                case 'left':
-                    endX = lastPoint.x - scaledLength;
-                    break;
-                case 'right':
-                    endX = lastPoint.x + scaledLength;
-                    break;
             }
             
             // Малюємо лінію
@@ -1331,41 +1479,53 @@ function updateLinesList() {
             line.setAttribute('id', `line-${lineData.id}`);
             svg.appendChild(line);
             
-            // ДОДАТИ ЦЕЙ РЯДОК:
-        drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length);
+            // Малюємо розмір лінії
+            drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length);
             
             // Малюємо елементи на лінії
             drawElementsOnLine(lineData, lastPoint.x, lastPoint.y, endX, endY, scale);
             
-            // Додаємо нову точку
-            currentPointNum++;
-            const newPoint = { x: endX, y: endY, num: currentPointNum };
-            shapePoints.push(newPoint);
-            
-            // Оновлюємо номери точок в даних лінії
-            figureLines[index].from = lastPoint.num;
-            figureLines[index].to = currentPointNum;
-            
-            // Малюємо нову точку
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', endX);
-            circle.setAttribute('cy', endY);
-            circle.setAttribute('r', '5');
-            circle.setAttribute('fill', '#e53935');
-            svg.appendChild(circle);
-            
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', endX + 10);
-            text.setAttribute('y', endY - 5);
-            text.setAttribute('font-size', '16');
-            text.setAttribute('fill', '#e53935');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = currentPointNum;
-            svg.appendChild(text);
+            // ВИПРАВЛЕННЯ: для замикаючої лінії НЕ створюємо нову точку
+            if (!lineData.isClosing) {
+                // Додаємо нову точку
+                currentPointNum++;
+                const newPoint = { x: endX, y: endY, num: currentPointNum };
+                shapePoints.push(newPoint);
+                
+                // Оновлюємо номери точок в даних лінії
+                figureLines[index].from = lastPoint.num;
+                figureLines[index].to = currentPointNum;
+                
+                // Малюємо нову точку
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', endX);
+                circle.setAttribute('cy', endY);
+                circle.setAttribute('r', '5');
+                circle.setAttribute('fill', '#e53935');
+                svg.appendChild(circle);
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', endX + 10);
+                text.setAttribute('y', endY - 5);
+                text.setAttribute('font-size', '16');
+                text.setAttribute('fill', '#e53935');
+                text.setAttribute('font-weight', 'bold');
+                text.textContent = currentPointNum;
+                svg.appendChild(text);
+            } else {
+                // Для замикаючої лінії просто оновлюємо номери
+                figureLines[index].from = lastPoint.num;
+                figureLines[index].to = 1; // Завжди повертаємось до точки 1
+            }
         });
         
         // Оновлюємо pointCounter
         pointCounter = currentPointNum;
+        
+        // Перераховуємо площу після перемалювання
+        if (figureLines.some(line => line.isClosing)) {
+            calculateAndDisplayArea();
+        }
         
         // Оновлюємо список ліній
         updateLinesList();
