@@ -244,6 +244,9 @@
                 <button style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="addPoint()">
                     <i class="fas fa-plus"></i> Додати
                 </button>
+                <button style="padding: 10px 20px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeShape()">
+                    <i class="fas fa-link"></i> Замкнути
+                </button>
                 <button style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="addDiagonal()">
                     <i class="fas fa-slash"></i> Діагональ
                 </button>
@@ -331,8 +334,14 @@
                 <div style="font-weight: bold; margin-bottom: 10px; color: #9C27B0; font-size: 14px;">Елементи</div>
                 <div style="display: grid; grid-template-columns: auto auto; gap: 8px; font-size: 12px; max-height: 200px; overflow-y: auto;">
                     
-                    <span style="padding: 4px 0;">Вікно 1</span>
-                    <button onclick="selectElement('WI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">WI1</button>
+                    <!-- Вікно 1 -->
+                    <div style="padding: 4px 0; display: flex; align-items: center; justify-content: flex-start;">
+                        <svg width="60" height="10" viewBox="0 0 60 10" style="border: 1px solid #999;">
+                            <rect x="1" y="1" width="58" height="8" fill="none" stroke="black" stroke-width="1"/>
+                            <line x1="1" y1="5" x2="59" y2="5" stroke="black" stroke-width="1"/>
+                        </svg>
+                    </div>
+                    <button onclick="selectElement('WI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">WI1</button>                    
                     
                     <span style="padding: 4px 0;">Двері 1</span>
                     <button onclick="selectElement('DV1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">DV1</button>
