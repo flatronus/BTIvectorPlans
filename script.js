@@ -7,12 +7,26 @@ document.addEventListener('DOMContentLoaded', function() {
     window.isWebCodeApp = isWebCodeApp;
     window.isAndroid = isAndroid;
 
+    // Змінна для розміщення розмірів (true = ззовні, false = всередині)
+    let dimensionsOutside = false;
+        
+    // Функція перемикання розміщення розмірів
+    window.toggleDimensionSide = function() {
+        dimensionsOutside = document.getElementById('dimensionSideCheckbox').checked;
+            
+        // Перемальовуємо фігуру з новим розміщенням розмірів
+        if (figureLines.length > 0) {
+            redrawEntireFigure();
+        }
+    };
+    
     // Canvas Management System
     const canvasManager = {
         canvases: [],
         activeCanvasId: null,
         nextId: 1,
-
+        
+        
         createCanvas() {
             const id = this.nextId++;
             const canvas = {
@@ -1022,55 +1036,60 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function drawLineDimension(x1, y1, x2, y2, lengthInMeters) {
-    const svg = document.getElementById('shapeCanvas');
-    
-    // Обчислюємо центр лінії
-    const centerX = (x1 + x2) / 2;
-    const centerY = (y1 + y2) / 2;
-    
-    // Обчислюємо вектор напрямку лінії
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.sqrt(dx * dx + dy * dy);
-    
-    if (length === 0) return;
-    
-    // Одиничний вектор вздовж лінії
-    const ux = dx / length;
-    const uy = dy / length;
-    
-    // Перпендикулярний вектор (всередину фігури - праворуч від лінії)
-    const px = uy;
-    const py = -ux;
-    
-    // Відстань тексту від лінії (5 пікселів всередину)
-    const offset = 5;
-    
-    // Позиція тексту
-    const textX = centerX + px * offset;
-    const textY = centerY + py * offset;
-    
-    // Обчислюємо кут повороту тексту (щоб був вздовж лінії)
-    let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    
-    // Нормалізуємо кут щоб текст не був догори ногами
-    if (angle > 90) angle -= 180;
-    if (angle < -90) angle += 180;
-    
-    // Форматуємо довжину до 2 знаків після коми
-    const formattedLength = lengthInMeters.toFixed(2);
-    
-    // Створюємо текст розміру
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', textX);
-    text.setAttribute('y', textY);
-    text.setAttribute('font-size', '8');
-    text.setAttribute('fill', 'black');
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('transform', `rotate(${angle}, ${textX}, ${textY})`);
-    text.textContent = formattedLength;
-    svg.appendChild(text);
-}
+        const svg = document.getElementById('shapeCanvas');
+        
+        // Обчислюємо центр лінії
+        const centerX = (x1 + x2) / 2;
+        const centerY = (y1 + y2) / 2;
+        
+        // Обчислюємо вектор напрямку лінії
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        if (length === 0) return;
+        
+        // Одиничний вектор вздовж лінії
+        const ux = dx / length;
+        const uy = dy / length;
+        
+        // Перпендикулярний вектор
+        const px = uy;
+        const py = -ux;
+        
+        // Відстань тексту від лінії (фіксована відстань 15 пікселів)
+        const offset = 15;
+        
+        // Визначаємо напрямок зміщення в залежності від налаштування
+        const direction = dimensionsOutside ? 1 : -1;
+        
+        // Позиція тексту (завжди на однаковій відстані від лінії)
+        const textX = centerX + px * offset * direction;
+        const textY = centerY + py * offset * direction;
+        
+        // Обчислюємо кут повороту тексту (щоб був вздовж лінії)
+        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        
+        // Нормалізуємо кут щоб текст не був догори ногами
+        if (angle > 90) angle -= 180;
+        if (angle < -90) angle += 180;
+        
+        // Форматуємо довжину до 2 знаків після коми
+        const formattedLength = lengthInMeters.toFixed(2);
+        
+        // Створюємо текст розміру
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', textX);
+        text.setAttribute('y', textY);
+        text.setAttribute('font-size', '12');
+        text.setAttribute('fill', 'black');
+        text.setAttribute('font-weight', 'bold');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('transform', `rotate(${angle}, ${textX}, ${textY})`);
+        text.textContent = formattedLength;
+        svg.appendChild(text);
+    }
     
     // Функція малювання елементів (вікна, двері, отвори) на лінії
     function drawElementsOnLine(parsedData, x1, y1, x2, y2, scale) {
