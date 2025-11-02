@@ -1233,6 +1233,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const areaInput = document.createElement('input');
             areaInput.type = 'number';
+            areaInput.inputMode = 'decimal'; // Додайте цей рядок
             areaInput.step = '0.1';
             areaInput.value = window.customArea || window.calculatedArea;
             areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
