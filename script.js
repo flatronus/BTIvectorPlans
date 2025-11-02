@@ -1244,65 +1244,44 @@ document.addEventListener('DOMContentLoaded', function() {
             linesList.appendChild(areaInputContainer);
         }
         
-        // Список ліній з чекбоксами
+        // Список ліній з чекбоксами в одному рядку
         figureLines.forEach(line => {
             const lineContainer = document.createElement('div');
-            lineContainer.style.cssText = 'padding: 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px;';
+            lineContainer.style.cssText = 'padding: 6px 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
             
             // Кнопка назви лінії
             const lineButton = document.createElement('button');
-            lineButton.style.cssText = 'width: 100%; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold; margin-bottom: 5px;';
-            lineButton.textContent = `Лінія ${line.from}-${line.to}`;
+            lineButton.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
+            lineButton.textContent = `${line.from}-${line.to}`;
             lineButton.onclick = () => editLine(line);
             lineContainer.appendChild(lineButton);
             
-            // Контейнер для чекбоксів
-            const checkboxContainer = document.createElement('div');
-            checkboxContainer.style.cssText = 'display: flex; flex-direction: column; gap: 4px; font-size: 11px;';
-            
-            // Чекбокс видимості
-            const visibilityLabel = document.createElement('label');
-            visibilityLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer;';
-            
+            // Чекбокс видимості (іконка ока)
             const visibilityCheckbox = document.createElement('input');
             visibilityCheckbox.type = 'checkbox';
-            visibilityCheckbox.checked = line.dimensionVisible !== false; // За замовчуванням true
-            visibilityCheckbox.style.cssText = 'margin-right: 5px; width: 14px; height: 14px; cursor: pointer;';
+            visibilityCheckbox.checked = line.dimensionVisible !== false;
+            visibilityCheckbox.title = 'Показати розмір';
+            visibilityCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
             visibilityCheckbox.onchange = function(e) {
                 e.stopPropagation();
                 line.dimensionVisible = this.checked;
                 redrawEntireFigure();
             };
+            lineContainer.appendChild(visibilityCheckbox);
             
-            const visibilityText = document.createElement('span');
-            visibilityText.textContent = 'Показати розмір';
-            
-            visibilityLabel.appendChild(visibilityCheckbox);
-            visibilityLabel.appendChild(visibilityText);
-            checkboxContainer.appendChild(visibilityLabel);
-            
-            // Чекбокс розвороту
-            const rotateLabel = document.createElement('label');
-            rotateLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer;';
-            
+            // Чекбокс розвороту (іконка обертання)
             const rotateCheckbox = document.createElement('input');
             rotateCheckbox.type = 'checkbox';
-            rotateCheckbox.checked = line.dimensionRotated === true; // За замовчуванням false
-            rotateCheckbox.style.cssText = 'margin-right: 5px; width: 14px; height: 14px; cursor: pointer;';
+            rotateCheckbox.checked = line.dimensionRotated === true;
+            rotateCheckbox.title = 'Розвернути на 180°';
+            rotateCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
             rotateCheckbox.onchange = function(e) {
                 e.stopPropagation();
                 line.dimensionRotated = this.checked;
                 redrawEntireFigure();
             };
+            lineContainer.appendChild(rotateCheckbox);
             
-            const rotateText = document.createElement('span');
-            rotateText.textContent = 'Розвернути 180°';
-            
-            rotateLabel.appendChild(rotateCheckbox);
-            rotateLabel.appendChild(rotateText);
-            checkboxContainer.appendChild(rotateLabel);
-            
-            lineContainer.appendChild(checkboxContainer);
             linesList.appendChild(lineContainer);
         });
     }
