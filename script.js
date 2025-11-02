@@ -7,13 +7,13 @@ document.addEventListener('DOMContentLoaded', function() {
     window.isWebCodeApp = isWebCodeApp;
     window.isAndroid = isAndroid;
 
-    // Змінна для розміщення розмірів (true = ззовні, false = всередині)
+    // Змінна для розміщення розмірів (true = zzовні, false = всередині)
     let dimensionsOutside = false;
-        
+    
     // Функція перемикання розміщення розмірів
     window.toggleDimensionSide = function() {
         dimensionsOutside = document.getElementById('dimensionSideCheckbox').checked;
-            
+        
         // Перемальовуємо фігуру з новим розміщенням розмірів
         if (figureLines.length > 0) {
             redrawEntireFigure();
@@ -948,8 +948,8 @@ document.addEventListener('DOMContentLoaded', function() {
         line.setAttribute('id', `line-${lineIdCounter}`);
         svg.appendChild(line);
         
-        // Малюємо розмір лінії
-        drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineLength);
+        // Малюємо розмір лінії (поки без lineData, бо він ще не створений)
+        drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineLength, null);
         
         // Малюємо елементи на лінії
         const scale = 50;
@@ -998,7 +998,9 @@ document.addEventListener('DOMContentLoaded', function() {
             elements: parsedData.elements,
             code: document.getElementById('coordInput').value,
             length: lineLength,
-            isClosing: isClosing  // ДОДАНО: позначка замикаючої лінії
+            isClosing: isClosing,  // ДОДАНО: позначка замикаючої лінії
+            dimensionVisible: true,  // НОВЕ: видимість розміру для цієї лінії
+            dimensionRotated: false  // НОВЕ: розворот розміру для цієї лінії
         };
         figureLines.push(lineData);
         
@@ -1035,7 +1037,10 @@ document.addEventListener('DOMContentLoaded', function() {
         updateLinesList();
     }
     
-    function drawLineDimension(x1, y1, x2, y2, lengthInMeters) {
+    function drawLineDimension(x1, y1, x2, y2, lengthInMeters, lineData) {
+        // Якщо розміри приховані для цієї лінії, не малюємо їх
+        if (lineData && lineData.dimensionVisible === false) return;
+        
         const svg = document.getElementById('shapeCanvas');
         
         // Обчислюємо центр лінії
@@ -1073,6 +1078,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Нормалізуємо кут щоб текст не був догори ногами
         if (angle > 90) angle -= 180;
         if (angle < -90) angle += 180;
+        
+        // Додаємо розворот на 180° якщо активовано для цієї лінії
+        if (lineData && lineData.dimensionRotated === true) {
+            angle += 180;
+        }
         
         // Форматуємо довжину до 2 знаків після коми
         const formattedLength = lengthInMeters.toFixed(2);
@@ -1200,49 +1210,102 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Функція оновлення списку ліній
-function updateLinesList() {
-    const linesList = document.getElementById('linesList');
-    linesList.innerHTML = '';
-    
-    // Якщо є обчислена площа, показуємо її
-    if (window.calculatedArea) {
-        // Розрахована площа S
-        const areaDisplay = document.createElement('div');
-        areaDisplay.style.cssText = 'padding: 8px; background: #e8f5e9; border: 1px solid #4CAF50; border-radius: 4px; margin-bottom: 10px; font-weight: bold; font-size: 12px; text-align: center;';
-        areaDisplay.textContent = `S = ${window.calculatedArea} м²`;
-        linesList.appendChild(areaDisplay);
+    function updateLinesList() {
+        const linesList = document.getElementById('linesList');
+        linesList.innerHTML = '';
         
-        // Редагована площа S'
-        const areaInputContainer = document.createElement('div');
-        areaInputContainer.style.cssText = 'padding: 8px; background: #fff3e0; border: 1px solid #FF9800; border-radius: 4px; margin-bottom: 10px;';
+        // Якщо є обчислена площа, показуємо її
+        if (window.calculatedArea) {
+            // Розрахована площа S
+            const areaDisplay = document.createElement('div');
+            areaDisplay.style.cssText = 'padding: 8px; background: #e8f5e9; border: 1px solid #4CAF50; border-radius: 4px; margin-bottom: 10px; font-weight: bold; font-size: 12px; text-align: center;';
+            areaDisplay.textContent = `S = ${window.calculatedArea} м²`;
+            linesList.appendChild(areaDisplay);
+            
+            // Редагована площа S'
+            const areaInputContainer = document.createElement('div');
+            areaInputContainer.style.cssText = 'padding: 8px; background: #fff3e0; border: 1px solid #FF9800; border-radius: 4px; margin-bottom: 10px;';
+            
+            const areaLabel = document.createElement('div');
+            areaLabel.style.cssText = 'font-weight: bold; font-size: 10px; margin-bottom: 5px; text-align: center;';
+            areaLabel.textContent = "S' (редагована):";
+            areaInputContainer.appendChild(areaLabel);
+            
+            const areaInput = document.createElement('input');
+            areaInput.type = 'number';
+            areaInput.step = '0.1';
+            areaInput.value = window.customArea || window.calculatedArea;
+            areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
+            areaInput.onchange = function() {
+                window.customArea = parseFloat(this.value).toFixed(1);
+            };
+            areaInputContainer.appendChild(areaInput);
+            
+            linesList.appendChild(areaInputContainer);
+        }
         
-        const areaLabel = document.createElement('div');
-        areaLabel.style.cssText = 'font-weight: bold; font-size: 10px; margin-bottom: 5px; text-align: center;';
-        areaLabel.textContent = "S' (редагована):";
-        areaInputContainer.appendChild(areaLabel);
-        
-        const areaInput = document.createElement('input');
-        areaInput.type = 'number';
-        areaInput.step = '0.1';
-        areaInput.value = window.customArea || window.calculatedArea;
-        areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
-        areaInput.onchange = function() {
-            window.customArea = parseFloat(this.value).toFixed(1);
-        };
-        areaInputContainer.appendChild(areaInput);
-        
-        linesList.appendChild(areaInputContainer);
+        // Список ліній з чекбоксами
+        figureLines.forEach(line => {
+            const lineContainer = document.createElement('div');
+            lineContainer.style.cssText = 'padding: 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px;';
+            
+            // Кнопка назви лінії
+            const lineButton = document.createElement('button');
+            lineButton.style.cssText = 'width: 100%; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold; margin-bottom: 5px;';
+            lineButton.textContent = `Лінія ${line.from}-${line.to}`;
+            lineButton.onclick = () => editLine(line);
+            lineContainer.appendChild(lineButton);
+            
+            // Контейнер для чекбоксів
+            const checkboxContainer = document.createElement('div');
+            checkboxContainer.style.cssText = 'display: flex; flex-direction: column; gap: 4px; font-size: 11px;';
+            
+            // Чекбокс видимості
+            const visibilityLabel = document.createElement('label');
+            visibilityLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer;';
+            
+            const visibilityCheckbox = document.createElement('input');
+            visibilityCheckbox.type = 'checkbox';
+            visibilityCheckbox.checked = line.dimensionVisible !== false; // За замовчуванням true
+            visibilityCheckbox.style.cssText = 'margin-right: 5px; width: 14px; height: 14px; cursor: pointer;';
+            visibilityCheckbox.onchange = function(e) {
+                e.stopPropagation();
+                line.dimensionVisible = this.checked;
+                redrawEntireFigure();
+            };
+            
+            const visibilityText = document.createElement('span');
+            visibilityText.textContent = 'Показати розмір';
+            
+            visibilityLabel.appendChild(visibilityCheckbox);
+            visibilityLabel.appendChild(visibilityText);
+            checkboxContainer.appendChild(visibilityLabel);
+            
+            // Чекбокс розвороту
+            const rotateLabel = document.createElement('label');
+            rotateLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer;';
+            
+            const rotateCheckbox = document.createElement('input');
+            rotateCheckbox.type = 'checkbox';
+            rotateCheckbox.checked = line.dimensionRotated === true; // За замовчуванням false
+            rotateCheckbox.style.cssText = 'margin-right: 5px; width: 14px; height: 14px; cursor: pointer;';
+            rotateCheckbox.onchange = function(e) {
+                e.stopPropagation();
+                line.dimensionRotated = this.checked;
+                redrawEntireFigure();
+            };
+            
+            const rotateText = document.createElement('span');
+            rotateText.textContent = 'Розвернути 180°';
+            
+            rotateLabel.appendChild(rotateCheckbox);
+            rotateLabel.appendChild(rotateText);
+            checkboxContainer.appendChild(rotateLabel);
+            
+            lineContainer.appendChild(checkboxContainer);
+            linesList.appendChild(lineContainer);
+        });
     }
-    
-    // Список ліній
-    figureLines.forEach(line => {
-        const lineItem = document.createElement('button');
-        lineItem.style.cssText = 'padding: 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; text-align: left; font-size: 12px;';
-        lineItem.textContent = `${line.from}-${line.to}`;
-        lineItem.onclick = () => editLine(line);
-        linesList.appendChild(lineItem);
-    });
-}
     
     // Функція редагування лінії
     function editLine(line) {
@@ -1476,8 +1539,8 @@ function updateLinesList() {
             line.setAttribute('id', `line-${lineData.id}`);
             svg.appendChild(line);
             
-            // Малюємо розмір лінії
-            drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length);
+            // Малюємо розмір лінії з налаштуваннями конкретної лінії
+            drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length, lineData);
             
             // Малюємо елементи на лінії
             drawElementsOnLine(lineData, lastPoint.x, lastPoint.y, endX, endY, scale);
