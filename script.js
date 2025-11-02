@@ -10,6 +10,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Змінна для розміщення розмірів (true = zzовні, false = всередині)
     let dimensionsOutside = false;
     
+    // Структура для зберігання ліній фігури
+    let figureLines = []; // Масив об'єктів {id, from, to, direction, lineType, elements, code}
+    let lineIdCounter = 1;
+    
+    // ДОДАТИ ЦІ НОВІ ЗМІННІ:
+    let pendingFreeLines = []; // Масив ліній з невідомим кутом, які очікують розрахунку
+    let freeLineQuadrant = null; // Поточний квадрант для free лінії ('top-right', 'top-left', 'bottom-right', 'bottom-left')
+    
     // Функція перемикання розміщення розмірів
     window.toggleDimensionSide = function() {
         dimensionsOutside = document.getElementById('dimensionSideCheckbox').checked;
@@ -540,9 +548,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let shapePoints = [{x: 400, y: 300, num: 1}]; // Початкова точка
     let shapeLines = [];
     let pointCounter = 1;
-    // Структура для зберігання ліній фігури
-    let figureLines = []; // Масив об'єктів {id, from, to, direction, lineType, elements, code}
-    let lineIdCounter = 1;
     
     // Функція додавання точки
     window.addPoint = function() {
@@ -735,6 +740,29 @@ document.addEventListener('DOMContentLoaded', function() {
             'free': 'free'
         };
         
+        // Якщо обрано free, зберігаємо квадрант для подальшого використання
+        if (direction === 'free') {
+            // Чекаємо на вибір квадранту (up/down/left/right стане квадрантом)
+            freeLineQuadrant = null;
+        } else if (direction === 'up') {
+            // Якщо до цього було free, це квадрант
+            if (currentAngle === 'free' || document.getElementById('coordInput').value.includes('free')) {
+                freeLineQuadrant = 'top';
+            }
+        } else if (direction === 'down') {
+            if (currentAngle === 'free' || document.getElementById('coordInput').value.includes('free')) {
+                freeLineQuadrant = 'bottom';
+            }
+        } else if (direction === 'left') {
+            if (currentAngle === 'free' || document.getElementById('coordInput').value.includes('free')) {
+                freeLineQuadrant = 'left';
+            }
+        } else if (direction === 'right') {
+            if (currentAngle === 'free' || document.getElementById('coordInput').value.includes('free')) {
+                freeLineQuadrant = 'right';
+            }
+        }
+        
         // Вставка коду напрямку в поле вводу координат
         const coordInput = document.getElementById('coordInput');
         const code = directions[direction];
@@ -755,7 +783,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Повертаємо фокус на поле
         coordInput.focus();
         
-        console.log('Встановлено код:', code);
+        console.log('Встановлено код:', code, 'Квадрант:', freeLineQuadrant);
     };
     
     // Функція вибору типу лінії
@@ -857,8 +885,28 @@ document.addEventListener('DOMContentLoaded', function() {
             return null;
         }
         
-        // Другий рядок - тип лінії (line, curve)
-        const lineType = lines[1].toLowerCase();
+        // ДОДАНО: Перевірка квадранту для free
+        let quadrant = null;
+        let startIndex = 1;
+        
+        if (direction === 'free') {
+            // Другий рядок може бути квадрантом (top, bottom, left, right)
+            if (lines.length > 1 && ['top', 'bottom', 'left', 'right'].includes(lines[1].toLowerCase())) {
+                quadrant = lines[1].toLowerCase();
+                startIndex = 2;
+            } else if (freeLineQuadrant) {
+                // Використовуємо збережений квадрант
+                quadrant = freeLineQuadrant;
+            }
+        }
+        
+        // Тип лінії (line, curve)
+        if (lines.length < startIndex + 1) {
+            alert('Введіть тип лінії');
+            return null;
+        }
+        
+        const lineType = lines[startIndex].toLowerCase();
         if (!['line', 'curve'].includes(lineType)) {
             alert('Невірний тип лінії. Використовуйте: line, curve');
             return null;
@@ -866,7 +914,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Решта рядків - числа та коди елементів
         const elements = [];
-        for (let i = 2; i < lines.length; i++) {
+        for (let i = startIndex + 1; i < lines.length; i++) {
             const value = lines[i];
             
             // Перевірка чи це число
@@ -878,137 +926,178 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        return { direction, lineType, elements };
+        return { direction, lineType, elements, quadrant };
     }
     
     // Функція малювання лінії на полотні
-    function drawLineOnCanvas(parsedData) {
-        const svg = document.getElementById('shapeCanvas');
-        const lastPoint = shapePoints[shapePoints.length - 1];
+function drawLineOnCanvas(parsedData) {
+    const svg = document.getElementById('shapeCanvas');
+    const lastPoint = shapePoints[shapePoints.length - 1];
+    
+    // Перевіряємо чи це замикаюча лінія
+    const isClosing = window.isClosingLine || false;
+    
+    // ДОДАНО: Перевірка чи це free лінія (не замикаюча)
+    if (parsedData.direction === 'free' && !isClosing) {
+        // Зберігаємо лінію як pending (очікує розрахунку)
+        const lineLength = parsedData.elements.find(el => el.type === 'number')?.value || 0;
         
-        // Перевіряємо чи це замикаюча лінія
-        const isClosing = window.isClosingLine || false;
-        
-        // Обчислення кінцевої точки в залежності від напрямку
-        let endX, endY;
-        let lineLength = 0;
-        
-        if (isClosing) {
-            // Для замикаючої лінії - завжди перша точка
-            endX = shapePoints[0].x;
-            endY = shapePoints[0].y;
-            
-            // Знаходимо довжину з введених даних (останнє число)
-            for (let i = parsedData.elements.length - 1; i >= 0; i--) {
-                if (parsedData.elements[i].type === 'number') {
-                    lineLength = parsedData.elements[i].value;
-                    break;
-                }
-            }
-        } else {
-            endX = lastPoint.x;
-            endY = lastPoint.y;
-            
-            // Знаходимо загальну довжину лінії (останнє число в elements)
-            for (let i = parsedData.elements.length - 1; i >= 0; i--) {
-                if (parsedData.elements[i].type === 'number') {
-                    lineLength = parsedData.elements[i].value;
-                    break;
-                }
-            }
-            
-            // Масштаб: 1 метр = 50 пікселів
-            const scale = 50;
-            const scaledLength = lineLength * scale;
-            
-            switch(parsedData.direction) {
-                case 'top':
-                    endY = lastPoint.y - scaledLength;
-                    break;
-                case 'bottom':
-                    endY = lastPoint.y + scaledLength;
-                    break;
-                case 'left':
-                    endX = lastPoint.x - scaledLength;
-                    break;
-                case 'right':
-                    endX = lastPoint.x + scaledLength;
-                    break;
-            }
-        }
-        
-        // Малюємо лінію
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', lastPoint.x);
-        line.setAttribute('y1', lastPoint.y);
-        line.setAttribute('x2', endX);
-        line.setAttribute('y2', endY);
-        line.setAttribute('stroke', '#2196F3');
-        line.setAttribute('stroke-width', '2');
-        line.setAttribute('id', `line-${lineIdCounter}`);
-        svg.appendChild(line);
-        
-        // Малюємо розмір лінії (поки без lineData, бо він ще не створений)
-        drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineLength, null);
-        
-        // Малюємо елементи на лінії
-        const scale = 50;
-        drawElementsOnLine(parsedData, lastPoint.x, lastPoint.y, endX, endY, scale);
-        
-        // Для замикаючої лінії не створюємо нову точку
-        let targetPointNum;
-        if (isClosing) {
-            targetPointNum = 1;
-            window.isClosingLine = false; // Скидаємо прапорець
-            
-            // Обчислюємо площу замкнутої фігури
-            calculateAndDisplayArea();
-        } else {
-            // Додаємо нову точку
-            pointCounter++;
-            const newPoint = { x: endX, y: endY, num: pointCounter };
-            shapePoints.push(newPoint);
-            targetPointNum = pointCounter;
-            
-            // Малюємо нову точку
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', endX);
-            circle.setAttribute('cy', endY);
-            circle.setAttribute('r', '5');
-            circle.setAttribute('fill', '#e53935');
-            svg.appendChild(circle);
-            
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', endX + 10);
-            text.setAttribute('y', endY - 5);
-            text.setAttribute('font-size', '16');
-            text.setAttribute('fill', '#e53935');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = pointCounter;
-            svg.appendChild(text);
-        }
-        
-        // Зберігаємо лінію в масив
         const lineData = {
             id: lineIdCounter,
             from: lastPoint.num,
-            to: targetPointNum,
+            to: null, // Поки невідомо
             direction: parsedData.direction,
             lineType: parsedData.lineType,
             elements: parsedData.elements,
             code: document.getElementById('coordInput').value,
             length: lineLength,
-            isClosing: isClosing,  // ДОДАНО: позначка замикаючої лінії
-            dimensionVisible: true,  // НОВЕ: видимість розміру для цієї лінії
-            dimensionRotated: false  // НОВЕ: розворот розміру для цієї лінії
+            isClosing: false,
+            isPending: true, // НОВЕ: позначка що лінія очікує
+            quadrant: parsedData.quadrant, // НОВЕ: квадрант напрямку
+            dimensionVisible: true,
+            dimensionRotated: false
         };
+        
+        pendingFreeLines.push(lineData);
         figureLines.push(lineData);
-        
-        // Оновлюємо список ліній
-        updateLinesList();
-        
         lineIdCounter++;
+        
+        // Додаємо тимчасову точку (буде перерахована пізніше)
+        pointCounter++;
+        const tempPoint = { x: lastPoint.x, y: lastPoint.y, num: pointCounter, isTemp: true };
+        shapePoints.push(tempPoint);
+        
+        updateLinesList();
+        alert('Лінія з невідомим кутом збережена. Додайте замикаючу лінію для розрахунку фігури.');
+        
+        // Скидаємо квадрант
+        freeLineQuadrant = null;
+        
+        return;
     }
+    
+    // Обчислення кінцевої точки в залежності від напрямку
+    let endX, endY;
+    let lineLength = 0;
+    
+    if (isClosing) {
+        // ДОДАНО: Обробка замикаючої лінії з free
+        if (parsedData.direction === 'free' && pendingFreeLines.length > 0) {
+            // Розраховуємо трикутник/багатокутник
+            calculateFreeAngleFigure(parsedData);
+            return;
+        }
+        
+        // Для замикаючої лінії - завжди перша точка
+        endX = shapePoints[0].x;
+        endY = shapePoints[0].y;
+        
+        // Знаходимо довжину з введених даних (останнє число)
+        for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+            if (parsedData.elements[i].type === 'number') {
+                lineLength = parsedData.elements[i].value;
+                break;
+            }
+        }
+    } else {
+        endX = lastPoint.x;
+        endY = lastPoint.y;
+        
+        // Знаходимо загальну довжину лінії (останнє число в elements)
+        for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+            if (parsedData.elements[i].type === 'number') {
+                lineLength = parsedData.elements[i].value;
+                break;
+            }
+        }
+        
+        // Масштаб: 1 метр = 50 пікселів
+        const scale = 50;
+        const scaledLength = lineLength * scale;
+        
+        switch(parsedData.direction) {
+            case 'top':
+                endY = lastPoint.y - scaledLength;
+                break;
+            case 'bottom':
+                endY = lastPoint.y + scaledLength;
+                break;
+            case 'left':
+                endX = lastPoint.x - scaledLength;
+                break;
+            case 'right':
+                endX = lastPoint.x + scaledLength;
+                break;
+        }
+    }
+    
+    // Малюємо лінію
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', lastPoint.x);
+    line.setAttribute('y1', lastPoint.y);
+    line.setAttribute('x2', endX);
+    line.setAttribute('y2', endY);
+    line.setAttribute('stroke', '#2196F3');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('id', `line-${lineIdCounter}`);
+    svg.appendChild(line);
+    
+    // Малюємо розмір лінії
+    drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineLength, null);
+    
+    // Малюємо елементи на лінії
+    const scale = 50;
+    drawElementsOnLine(parsedData, lastPoint.x, lastPoint.y, endX, endY, scale);
+    
+    // Для замикаючої лінії не створюємо нову точку
+    let targetPointNum;
+    if (isClosing) {
+        targetPointNum = 1;
+        window.isClosingLine = false;
+        calculateAndDisplayArea();
+    } else {
+        pointCounter++;
+        const newPoint = { x: endX, y: endY, num: pointCounter };
+        shapePoints.push(newPoint);
+        targetPointNum = pointCounter;
+        
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', endX);
+        circle.setAttribute('cy', endY);
+        circle.setAttribute('r', '5');
+        circle.setAttribute('fill', '#e53935');
+        svg.appendChild(circle);
+        
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', endX + 10);
+        text.setAttribute('y', endY - 5);
+        text.setAttribute('font-size', '16');
+        text.setAttribute('fill', '#e53935');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = pointCounter;
+        svg.appendChild(text);
+    }
+    
+    // Зберігаємо лінію в масив
+    const lineData = {
+        id: lineIdCounter,
+        from: lastPoint.num,
+        to: targetPointNum,
+        direction: parsedData.direction,
+        lineType: parsedData.lineType,
+        elements: parsedData.elements,
+        code: document.getElementById('coordInput').value,
+        length: lineLength,
+        isClosing: isClosing,
+        isPending: false,
+        dimensionVisible: true,
+        dimensionRotated: false
+    };
+    figureLines.push(lineData);
+    
+    updateLinesList();
+    lineIdCounter++;
+}
     
     // Функція обчислення та відображення площі
     function calculateAndDisplayArea() {
@@ -1210,82 +1299,86 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Функція оновлення списку ліній
-    function updateLinesList() {
-        const linesList = document.getElementById('linesList');
-        linesList.innerHTML = '';
+function updateLinesList() {
+    const linesList = document.getElementById('linesList');
+    linesList.innerHTML = '';
+    
+    // Якщо є обчислена площа, показуємо її
+    if (window.calculatedArea) {
+        // Розрахована площа S
+        const areaDisplay = document.createElement('div');
+        areaDisplay.style.cssText = 'padding: 8px; background: #e8f5e9; border: 1px solid #4CAF50; border-radius: 4px; margin-bottom: 10px; font-weight: bold; font-size: 12px; text-align: center;';
+        areaDisplay.textContent = `S = ${window.calculatedArea} м²`;
+        linesList.appendChild(areaDisplay);
         
-        // Якщо є обчислена площа, показуємо її
-        if (window.calculatedArea) {
-            // Розрахована площа S
-            const areaDisplay = document.createElement('div');
-            areaDisplay.style.cssText = 'padding: 8px; background: #e8f5e9; border: 1px solid #4CAF50; border-radius: 4px; margin-bottom: 10px; font-weight: bold; font-size: 12px; text-align: center;';
-            areaDisplay.textContent = `S = ${window.calculatedArea} м²`;
-            linesList.appendChild(areaDisplay);
-            
-            // Редагована площа S'
-            const areaInputContainer = document.createElement('div');
-            areaInputContainer.style.cssText = 'padding: 8px; background: #fff3e0; border: 1px solid #FF9800; border-radius: 4px; margin-bottom: 10px;';
-            
-            const areaLabel = document.createElement('div');
-            areaLabel.style.cssText = 'font-weight: bold; font-size: 10px; margin-bottom: 5px; text-align: center;';
-            areaLabel.textContent = "S' (редагована):";
-            areaInputContainer.appendChild(areaLabel);
-            
-            const areaInput = document.createElement('input');
-            areaInput.type = 'number';
-            areaInput.inputMode = 'decimal'; // Додайте цей рядок
-            areaInput.step = '0.1';
-            areaInput.value = window.customArea || window.calculatedArea;
-            areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
-            areaInput.onchange = function() {
-                window.customArea = parseFloat(this.value).toFixed(1);
-            };
-            areaInputContainer.appendChild(areaInput);
-            
-            linesList.appendChild(areaInputContainer);
-        }
+        // Редагована площа S'
+        const areaInputContainer = document.createElement('div');
+        areaInputContainer.style.cssText = 'padding: 8px; background: #fff3e0; border: 1px solid #FF9800; border-radius: 4px; margin-bottom: 10px;';
         
-        // Список ліній з чекбоксами в одному рядку
-        figureLines.forEach(line => {
-            const lineContainer = document.createElement('div');
-            lineContainer.style.cssText = 'padding: 6px 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
-            
-            // Кнопка назви лінії
-            const lineButton = document.createElement('button');
-            lineButton.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
-            lineButton.textContent = `${line.from}-${line.to}`;
-            lineButton.onclick = () => editLine(line);
-            lineContainer.appendChild(lineButton);
-            
-            // Чекбокс видимості (іконка ока)
-            const visibilityCheckbox = document.createElement('input');
-            visibilityCheckbox.type = 'checkbox';
-            visibilityCheckbox.checked = line.dimensionVisible !== false;
-            visibilityCheckbox.title = 'Показати розмір';
-            visibilityCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
-            visibilityCheckbox.onchange = function(e) {
-                e.stopPropagation();
-                line.dimensionVisible = this.checked;
-                redrawEntireFigure();
-            };
-            lineContainer.appendChild(visibilityCheckbox);
-            
-            // Чекбокс розвороту (іконка обертання)
-            const rotateCheckbox = document.createElement('input');
-            rotateCheckbox.type = 'checkbox';
-            rotateCheckbox.checked = line.dimensionRotated === true;
-            rotateCheckbox.title = 'Розвернути на 180°';
-            rotateCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
-            rotateCheckbox.onchange = function(e) {
-                e.stopPropagation();
-                line.dimensionRotated = this.checked;
-                redrawEntireFigure();
-            };
-            lineContainer.appendChild(rotateCheckbox);
-            
-            linesList.appendChild(lineContainer);
-        });
+        const areaLabel = document.createElement('div');
+        areaLabel.style.cssText = 'font-weight: bold; font-size: 10px; margin-bottom: 5px; text-align: center;';
+        areaLabel.textContent = "S' (редагована):";
+        areaInputContainer.appendChild(areaLabel);
+        
+        const areaInput = document.createElement('input');
+        areaInput.type = 'number';
+        areaInput.inputMode = 'decimal';
+        areaInput.step = '0.1';
+        areaInput.value = window.customArea || window.calculatedArea;
+        areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
+        areaInput.onchange = function() {
+            window.customArea = parseFloat(this.value).toFixed(1);
+        };
+        areaInputContainer.appendChild(areaInput);
+        
+        linesList.appendChild(areaInputContainer);
     }
+    
+    // Список ліній з чекбоксами в одному рядку
+    figureLines.forEach(line => {
+        const lineContainer = document.createElement('div');
+        // ДОДАНО: Інший колір для pending ліній
+        const bgColor = line.isPending ? '#fff3e0' : '#f0f0f0';
+        lineContainer.style.cssText = `padding: 6px 8px; background: ${bgColor}; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;`;
+        
+        // Кнопка назви лінії
+        const lineButton = document.createElement('button');
+        lineButton.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
+        // ДОДАНО: Позначка для pending ліній
+        const pendingMark = line.isPending ? ' ⏳' : '';
+        lineButton.textContent = `${line.from}-${line.to || '?'}${pendingMark}`;
+        lineButton.onclick = () => editLine(line);
+        lineContainer.appendChild(lineButton);
+        
+        // Чекбокс видимості (іконка ока)
+        const visibilityCheckbox = document.createElement('input');
+        visibilityCheckbox.type = 'checkbox';
+        visibilityCheckbox.checked = line.dimensionVisible !== false;
+        visibilityCheckbox.title = 'Показати розмір';
+        visibilityCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+        visibilityCheckbox.onchange = function(e) {
+            e.stopPropagation();
+            line.dimensionVisible = this.checked;
+            redrawEntireFigure();
+        };
+        lineContainer.appendChild(visibilityCheckbox);
+        
+        // Чекбокс розвороту (іконка обертання)
+        const rotateCheckbox = document.createElement('input');
+        rotateCheckbox.type = 'checkbox';
+        rotateCheckbox.checked = line.dimensionRotated === true;
+        rotateCheckbox.title = 'Розвернути на 180°';
+        rotateCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+        rotateCheckbox.onchange = function(e) {
+            e.stopPropagation();
+            line.dimensionRotated = this.checked;
+            redrawEntireFigure();
+        };
+        lineContainer.appendChild(rotateCheckbox);
+        
+        linesList.appendChild(lineContainer);
+    });
+}
     
     // Функція редагування лінії
     function editLine(line) {
@@ -1441,134 +1534,345 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Функція перемалювання всієї фігури
-    function redrawEntireFigure() {
-        const svg = document.getElementById('shapeCanvas');
+function redrawEntireFigure() {
+    const svg = document.getElementById('shapeCanvas');
+    
+    // Очищаємо весь SVG (крім viewBox)
+    while (svg.firstChild) {
+        svg.removeChild(svg.firstChild);
+    }
+    
+    // Скидаємо масив точок до початкової
+    shapePoints = [{x: 400, y: 300, num: 1}];
+    
+    // Малюємо початкову точку
+    const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    startCircle.setAttribute('cx', '400');
+    startCircle.setAttribute('cy', '300');
+    startCircle.setAttribute('r', '5');
+    startCircle.setAttribute('fill', '#e53935');
+    svg.appendChild(startCircle);
+    
+    const startText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    startText.setAttribute('x', '410');
+    startText.setAttribute('y', '295');
+    startText.setAttribute('font-size', '16');
+    startText.setAttribute('fill', '#e53935');
+    startText.setAttribute('font-weight', 'bold');
+    startText.textContent = '1';
+    svg.appendChild(startText);
+    
+    // Малюємо всі лінії послідовно
+    let currentPointNum = 1;
+    const scale = 50;
+    
+    // ДОДАНО: Зберігаємо обчислені координати для free ліній
+    const calculatedPoints = {};
+    
+    figureLines.forEach((lineData, index) => {
+        const lastPoint = shapePoints[shapePoints.length - 1];
         
-        // Очищаємо весь SVG (крім viewBox)
-        while (svg.firstChild) {
-            svg.removeChild(svg.firstChild);
-        }
+        // Обчислення кінцевої точки
+        let endX, endY;
         
-        // Скидаємо масив точок до початкової
-        shapePoints = [{x: 400, y: 300, num: 1}];
-        
-        // Малюємо початкову точку
-        const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        startCircle.setAttribute('cx', '400');
-        startCircle.setAttribute('cy', '300');
-        startCircle.setAttribute('r', '5');
-        startCircle.setAttribute('fill', '#e53935');
-        svg.appendChild(startCircle);
-        
-        const startText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        startText.setAttribute('x', '410');
-        startText.setAttribute('y', '295');
-        startText.setAttribute('font-size', '16');
-        startText.setAttribute('fill', '#e53935');
-        startText.setAttribute('font-weight', 'bold');
-        startText.textContent = '1';
-        svg.appendChild(startText);
-        
-        // Малюємо всі лінії послідовно
-        let currentPointNum = 1;
-        const scale = 50;
-        
-        figureLines.forEach((lineData, index) => {
-            const lastPoint = shapePoints[shapePoints.length - 1];
-            
-            // Обчислення кінцевої точки
-            let endX, endY;
-            
-            // ВИПРАВЛЕННЯ: для замикаючої лінії завжди використовуємо першу точку
-            if (lineData.isClosing) {
-                endX = shapePoints[0].x;
-                endY = shapePoints[0].y;
-            } else {
-                // Для звичайної лінії обчислюємо відносно попередньої точки
-                endX = lastPoint.x;
-                endY = lastPoint.y;
-                
-                const lineLength = lineData.length;
-                const scaledLength = lineLength * scale;
-                
-                // Обчислюємо кінцеву точку в залежності від напрямку
-                switch(lineData.direction) {
-                    case 'top':
-                        endY = lastPoint.y - scaledLength;
-                        break;
-                    case 'bottom':
-                        endY = lastPoint.y + scaledLength;
-                        break;
-                    case 'left':
-                        endX = lastPoint.x - scaledLength;
-                        break;
-                    case 'right':
-                        endX = lastPoint.x + scaledLength;
-                        break;
-                }
-            }
-            
-            // Малюємо лінію
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', lastPoint.x);
-            line.setAttribute('y1', lastPoint.y);
-            line.setAttribute('x2', endX);
-            line.setAttribute('y2', endY);
-            line.setAttribute('stroke', '#2196F3');
-            line.setAttribute('stroke-width', '2');
-            line.setAttribute('id', `line-${lineData.id}`);
-            svg.appendChild(line);
-            
-            // Малюємо розмір лінії з налаштуваннями конкретної лінії
-            drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length, lineData);
-            
-            // Малюємо елементи на лінії
-            drawElementsOnLine(lineData, lastPoint.x, lastPoint.y, endX, endY, scale);
-            
-            // ВИПРАВЛЕННЯ: для замикаючої лінії НЕ створюємо нову точку
-            if (!lineData.isClosing) {
-                // Додаємо нову точку
+        // ВИПРАВЛЕННЯ: для замикаючої лінії завжди використовуємо першу точку
+        if (lineData.isClosing) {
+            endX = shapePoints[0].x;
+            endY = shapePoints[0].y;
+        } else if (lineData.direction === 'free') {
+            // ДОДАНО: Обробка free лінії
+            // Якщо лінія ще pending (не розрахована), пропускаємо малювання
+            if (lineData.isPending) {
+                // Додаємо тимчасову точку
                 currentPointNum++;
-                const newPoint = { x: endX, y: endY, num: currentPointNum };
-                shapePoints.push(newPoint);
+                const tempPoint = { x: lastPoint.x, y: lastPoint.y, num: currentPointNum, isTemp: true };
+                shapePoints.push(tempPoint);
                 
-                // Оновлюємо номери точок в даних лінії
+                // Оновлюємо номери
                 figureLines[index].from = lastPoint.num;
                 figureLines[index].to = currentPointNum;
                 
-                // Малюємо нову точку
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', endX);
-                circle.setAttribute('cy', endY);
-                circle.setAttribute('r', '5');
-                circle.setAttribute('fill', '#e53935');
-                svg.appendChild(circle);
-                
-                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', endX + 10);
-                text.setAttribute('y', endY - 5);
-                text.setAttribute('font-size', '16');
-                text.setAttribute('fill', '#e53935');
-                text.setAttribute('font-weight', 'bold');
-                text.textContent = currentPointNum;
-                svg.appendChild(text);
-            } else {
-                // Для замикаючої лінії просто оновлюємо номери
-                figureLines[index].from = lastPoint.num;
-                figureLines[index].to = 1; // Завжди повертаємось до точки 1
+                return; // Пропускаємо малювання
             }
-        });
-        
-        // Оновлюємо pointCounter
-        pointCounter = currentPointNum;
-        
-        // Перераховуємо площу після перемалювання
-        if (figureLines.some(line => line.isClosing)) {
-            calculateAndDisplayArea();
+            
+            // ДОДАНО: Якщо free лінія вже розрахована (isPending: false),
+            // беремо координати з calculatedPoints або обчислюємо
+            if (calculatedPoints[lineData.id]) {
+                endX = calculatedPoints[lineData.id].x;
+                endY = calculatedPoints[lineData.id].y;
+            } else {
+                // Це означає що координати вже були обчислені в calculateFreeAngleFigure
+                // Потрібно знайти наступну точку з shapePoints (після перерахунку)
+                // Але оскільки ми перемальовуємо з нуля, потрібно відновити розрахунок
+                
+                // Знаходимо наступну не-pending лінію або замикаючу
+                let nextNonPendingIndex = -1;
+                for (let i = index + 1; i < figureLines.length; i++) {
+                    if (!figureLines[i].isPending || figureLines[i].isClosing) {
+                        nextNonPendingIndex = i;
+                        break;
+                    }
+                }
+                
+                if (nextNonPendingIndex !== -1 && figureLines[nextNonPendingIndex].isClosing) {
+                    // Використовуємо теорему косинусів для відновлення позиції
+                    const pendingLength = lineData.length * scale;
+                    const closingLength = figureLines[nextNonPendingIndex].length * scale;
+                    
+                    const firstPoint = shapePoints[0];
+                    const dx = lastPoint.x - firstPoint.x;
+                    const dy = lastPoint.y - firstPoint.y;
+                    const thirdSide = Math.sqrt(dx * dx + dy * dy);
+                    
+                    const a = pendingLength;
+                    const b = thirdSide;
+                    const c = closingLength;
+                    
+                    const cosAngle = (a * a + b * b - c * c) / (2 * a * b);
+                    const angle = Math.acos(cosAngle);
+                    
+                    let baseAngle = Math.atan2(firstPoint.y - lastPoint.y, firstPoint.x - lastPoint.x);
+                    
+                    let finalAngle;
+                    switch(lineData.quadrant) {
+                        case 'top':
+                            finalAngle = baseAngle + angle;
+                            break;
+                        case 'bottom':
+                            finalAngle = baseAngle - angle;
+                            break;
+                        case 'left':
+                            finalAngle = baseAngle + angle;
+                            break;
+                        case 'right':
+                            finalAngle = baseAngle - angle;
+                            break;
+                        default:
+                            finalAngle = baseAngle + angle;
+                    }
+                    
+                    endX = lastPoint.x + Math.cos(finalAngle) * pendingLength;
+                    endY = lastPoint.y + Math.sin(finalAngle) * pendingLength;
+                    
+                    // Зберігаємо для наступних викликів
+                    calculatedPoints[lineData.id] = { x: endX, y: endY };
+                } else {
+                    // Помилка: не можемо відновити координати
+                    console.error('Cannot restore free line coordinates');
+                    return;
+                }
+            }
+        } else {
+            // Для звичайної лінії обчислюємо відносно попередньої точки
+            endX = lastPoint.x;
+            endY = lastPoint.y;
+            
+            const lineLength = lineData.length;
+            const scaledLength = lineLength * scale;
+            
+            // Обчислюємо кінцеву точку в залежності від напрямку
+            switch(lineData.direction) {
+                case 'top':
+                    endY = lastPoint.y - scaledLength;
+                    break;
+                case 'bottom':
+                    endY = lastPoint.y + scaledLength;
+                    break;
+                case 'left':
+                    endX = lastPoint.x - scaledLength;
+                    break;
+                case 'right':
+                    endX = lastPoint.x + scaledLength;
+                    break;
+            }
         }
         
-        // Оновлюємо список ліній
-        updateLinesList();
+        // Малюємо лінію
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', lastPoint.x);
+        line.setAttribute('y1', lastPoint.y);
+        line.setAttribute('x2', endX);
+        line.setAttribute('y2', endY);
+        line.setAttribute('stroke', '#2196F3');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('id', `line-${lineData.id}`);
+        svg.appendChild(line);
+        
+        // Малюємо розмір лінії з налаштуваннями конкретної лінії
+        drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length, lineData);
+        
+        // Малюємо елементи на лінії
+        drawElementsOnLine(lineData, lastPoint.x, lastPoint.y, endX, endY, scale);
+        
+        // ВИПРАВЛЕННЯ: для замикаючої лінії НЕ створюємо нову точку
+        if (!lineData.isClosing) {
+            // Додаємо нову точку
+            currentPointNum++;
+            const newPoint = { x: endX, y: endY, num: currentPointNum };
+            shapePoints.push(newPoint);
+            
+            // Оновлюємо номери точок в даних лінії
+            figureLines[index].from = lastPoint.num;
+            figureLines[index].to = currentPointNum;
+            
+            // Малюємо нову точку
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', endX);
+            circle.setAttribute('cy', endY);
+            circle.setAttribute('r', '5');
+            circle.setAttribute('fill', '#e53935');
+            svg.appendChild(circle);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', endX + 10);
+            text.setAttribute('y', endY - 5);
+            text.setAttribute('font-size', '16');
+            text.setAttribute('fill', '#e53935');
+            text.setAttribute('font-weight', 'bold');
+            text.textContent = currentPointNum;
+            svg.appendChild(text);
+        } else {
+            // Для замикаючої лінії просто оновлюємо номери
+            figureLines[index].from = lastPoint.num;
+            figureLines[index].to = 1; // Завжди повертаємось до точки 1
+        }
+    });
+    
+    // Оновлюємо pointCounter
+    pointCounter = currentPointNum;
+    
+    // Перераховуємо площу після перемалювання
+    if (figureLines.some(line => line.isClosing)) {
+        calculateAndDisplayArea();
     }
+    
+    // Оновлюємо список ліній
+    updateLinesList();
+}
+    
+    // Функція розрахунку фігури з невідомими кутами
+function calculateFreeAngleFigure(closingLineData) {
+    if (pendingFreeLines.length === 0) {
+        alert('Немає ліній з невідомим кутом для розрахунку');
+        return;
+    }
+    
+    const scale = 50;
+    
+    // Знаходимо довжину замикаючої лінії
+    let closingLength = 0;
+    for (let i = closingLineData.elements.length - 1; i >= 0; i--) {
+        if (closingLineData.elements[i].type === 'number') {
+            closingLength = closingLineData.elements[i].value;
+            break;
+        }
+    }
+    
+    // Беремо останню завершену точку (перед pending лініями)
+    let currentPoint = null;
+    for (let i = shapePoints.length - 1; i >= 0; i--) {
+        if (!shapePoints[i].isTemp) {
+            currentPoint = shapePoints[i];
+            break;
+        }
+    }
+    
+    if (!currentPoint) {
+        alert('Помилка: не знайдено початкову точку');
+        return;
+    }
+    
+    // Для простого трикутника: одна pending лінія
+    if (pendingFreeLines.length === 1) {
+        const pendingLine = pendingFreeLines[0];
+        const pendingLength = pendingLine.length * scale;
+        const closingLengthPx = closingLength * scale;
+        
+        // Знаходимо третю сторону (від початку до поточної точки)
+        const firstPoint = shapePoints[0];
+        const dx = currentPoint.x - firstPoint.x;
+        const dy = currentPoint.y - firstPoint.y;
+        const thirdSide = Math.sqrt(dx * dx + dy * dy);
+        
+        // Розраховуємо кут за теоремою косинусів
+        // c² = a² + b² - 2ab·cos(C)
+        // cos(C) = (a² + b² - c²) / (2ab)
+        
+        const a = pendingLength;
+        const b = thirdSide;
+        const c = closingLengthPx;
+        
+        const cosAngle = (a * a + b * b - c * c) / (2 * a * b);
+        const angle = Math.acos(cosAngle);
+        
+        // Визначаємо напрямок на основі квадранту
+        let baseAngle = Math.atan2(firstPoint.y - currentPoint.y, firstPoint.x - currentPoint.x);
+        
+        let finalAngle;
+        switch(pendingLine.quadrant) {
+            case 'top':
+                finalAngle = baseAngle + angle;
+                break;
+            case 'bottom':
+                finalAngle = baseAngle - angle;
+                break;
+            case 'left':
+                finalAngle = baseAngle + angle;
+                break;
+            case 'right':
+                finalAngle = baseAngle - angle;
+                break;
+            default:
+                // Автоматичне визначення за квадрантом
+                finalAngle = baseAngle + angle;
+        }
+        
+        // Обчислюємо кінцеву точку pending лінії
+        const endX = currentPoint.x + Math.cos(finalAngle) * pendingLength;
+        const endY = currentPoint.y + Math.sin(finalAngle) * pendingLength;
+        
+        // Оновлюємо точку
+        const tempPointIndex = shapePoints.findIndex(p => p.isTemp);
+        if (tempPointIndex !== -1) {
+            shapePoints[tempPointIndex].x = endX;
+            shapePoints[tempPointIndex].y = endY;
+            shapePoints[tempPointIndex].isTemp = false;
+        }
+        
+        // Оновлюємо pending лінію
+        pendingLine.isPending = false;
+        pendingLine.to = shapePoints[tempPointIndex].num;
+        
+        // Очищаємо pending
+        pendingFreeLines = [];
+        
+        // Додаємо замикаючу лінію
+        const lineData = {
+            id: lineIdCounter++,
+            from: shapePoints[tempPointIndex].num,
+            to: 1,
+            direction: closingLineData.direction,
+            lineType: closingLineData.lineType,
+            elements: closingLineData.elements,
+            code: document.getElementById('coordInput').value,
+            length: closingLength,
+            isClosing: true,
+            isPending: false,
+            dimensionVisible: true,
+            dimensionRotated: false
+        };
+        figureLines.push(lineData);
+        
+        window.isClosingLine = false;
+        
+        // Перемальовуємо всю фігуру
+        redrawEntireFigure();
+        
+        alert('Фігуру розраховано успішно!');
+        
+    } else {
+        alert('Розрахунок для більше ніж однієї free лінії поки не підтримується');
+    }
+}
     
 });
