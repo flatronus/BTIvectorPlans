@@ -587,24 +587,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const scale = 50;
         const distanceInMeters = (distanceInPixels / scale).toFixed(2);
         
-        // ВИПРАВЛЕННЯ: Якщо є pending free лінії, замикаюча ЗАВЖДИ free
-        let direction = 'free';
-        
-        if (pendingFreeLines.length === 0) {
-            // Тільки якщо немає pending free ліній, визначаємо прямий напрямок
-            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-            
-            // Визначаємо найближчий прямий напрямок (з толерантністю ±5°)
-            if (Math.abs(angle - 0) < 5 || Math.abs(angle - 360) < 5) {
-                direction = 'right';
-            } else if (Math.abs(angle - 180) < 5 || Math.abs(angle + 180) < 5) {
-                direction = 'left';
-            } else if (Math.abs(angle - 90) < 5) {
-                direction = 'bottom';
-            } else if (Math.abs(angle + 90) < 5) {
-                direction = 'top';
-            }
-        }
+        // ЗАМИКАЮЧА ЛІНІЯ ЗАВЖДИ FREE!
+        const direction = 'free';
         
         // Формуємо текст для поля вводу
         const coordText = `${direction}\nline\n${distanceInMeters}`;
@@ -941,25 +925,25 @@ function drawLineOnCanvas(parsedData) {
     // Перевіряємо чи це замикаюча лінія
     const isClosing = window.isClosingLine || false;
     
-    // ДОДАНО: Перевірка чи це free лінія
+    // ПЕРЕВІРКА FREE ЛІНІЇ (ПЕРЕВІРЯЄМО СПОЧАТКУ!)
     if (parsedData.direction === 'free') {
-        // Якщо це НЕ замикаюча лінія - зберігаємо як pending
+        // Знаходимо довжину лінії
+        const lineLength = parsedData.elements.find(el => el.type === 'number')?.value || 0;
+        
         if (!isClosing) {
-            // Зберігаємо лінію як pending (очікує розрахунку)
-            const lineLength = parsedData.elements.find(el => el.type === 'number')?.value || 0;
-            
+            // Звичайна free лінія - зберігаємо як pending
             const lineData = {
                 id: lineIdCounter,
                 from: lastPoint.num,
-                to: null, // Поки невідомо
+                to: null,
                 direction: parsedData.direction,
                 lineType: parsedData.lineType,
                 elements: parsedData.elements,
                 code: document.getElementById('coordInput').value,
                 length: lineLength,
                 isClosing: false,
-                isPending: true, // НОВЕ: позначка що лінія очікує
-                quadrant: parsedData.quadrant, // НОВЕ: квадрант напрямку
+                isPending: true,
+                quadrant: parsedData.quadrant,
                 dimensionVisible: true,
                 dimensionRotated: false
             };
@@ -968,7 +952,7 @@ function drawLineOnCanvas(parsedData) {
             figureLines.push(lineData);
             lineIdCounter++;
             
-            // Додаємо тимчасову точку (буде перерахована пізніше)
+            // Додаємо тимчасову точку
             pointCounter++;
             const tempPoint = { x: lastPoint.x, y: lastPoint.y, num: pointCounter, isTemp: true };
             shapePoints.push(tempPoint);
@@ -976,54 +960,58 @@ function drawLineOnCanvas(parsedData) {
             updateLinesList();
             alert('Лінія з невідомим кутом збережена. Додайте замикаючу лінію для розрахунку фігури.');
             
-            // Скидаємо квадрант
-            freeLineQuadrant = null;
-            
             return;
         }
         
-        // ДОДАНО: Якщо це замикаюча free лінія - також зберігаємо як pending
-        // але позначаємо як замикаючу
-        const lineLength = parsedData.elements.find(el => el.type === 'number')?.value || 0;
-        
-        const lineData = {
-            id: lineIdCounter,
-            from: lastPoint.num,
-            to: 1, // Замикаємо до першої точки
-            direction: parsedData.direction,
-            lineType: parsedData.lineType,
-            elements: parsedData.elements,
-            code: document.getElementById('coordInput').value,
-            length: lineLength,
-            isClosing: true,
-            isPending: true, // Також очікує розрахунку
-            quadrant: parsedData.quadrant,
-            dimensionVisible: true,
-            dimensionRotated: false
-        };
-        
-        pendingFreeLines.push(lineData);
-        figureLines.push(lineData);
-        lineIdCounter++;
-        
-        window.isClosingLine = false;
-        
-        // Тепер розраховуємо всю фігуру
-        calculateFreeAngleFigure();
-        return;
+        // ЗАМИКАЮЧА FREE ЛІНІЯ
+        if (pendingFreeLines.length === 0) {
+            // ПРЯМОКУТНИК/БАГАТОКУТНИК: немає pending ліній - просто малюємо звичайну замикаючу
+            // НЕ зберігаємо як pending, а малюємо відразу
+            window.isClosingLine = false;
+            
+            // Перенаправляємо на обробку звичайної замикаючої лінії
+            // Змінюємо direction на щось конкретне (буде ігноруватися, бо isClosing=true)
+            parsedData.direction = 'direct-closing';
+            // Продовжуємо виконання далі (не робимо return)
+        } else {
+            // ТРИКУТНИК: є pending лінії - зберігаємо і розраховуємо
+            const lineData = {
+                id: lineIdCounter,
+                from: lastPoint.num,
+                to: 1,
+                direction: parsedData.direction,
+                lineType: parsedData.lineType,
+                elements: parsedData.elements,
+                code: document.getElementById('coordInput').value,
+                length: lineLength,
+                isClosing: true,
+                isPending: true,
+                quadrant: parsedData.quadrant,
+                dimensionVisible: true,
+                dimensionRotated: false
+            };
+            
+            pendingFreeLines.push(lineData);
+            figureLines.push(lineData);
+            lineIdCounter++;
+            
+            window.isClosingLine = false;
+            calculateFreeAngleFigure();
+            
+            return;
+        }
     }
     
-    // Обчислення кінцевої точки в залежності від напрямку
+    // ОБРОБКА ЗВИЧАЙНИХ ЛІНІЙ (НЕ FREE)
     let endX, endY;
     let lineLength = 0;
     
     if (isClosing) {
-        
-        // Для замикаючої лінії - завжди перша точка
+        // Замикаюча НЕ-free лінія
         endX = shapePoints[0].x;
         endY = shapePoints[0].y;
         
-        // Знаходимо довжину з введених даних (останнє число)
+        // Знаходимо довжину з введених даних
         for (let i = parsedData.elements.length - 1; i >= 0; i--) {
             if (parsedData.elements[i].type === 'number') {
                 lineLength = parsedData.elements[i].value;
@@ -1031,10 +1019,11 @@ function drawLineOnCanvas(parsedData) {
             }
         }
     } else {
+        // Звичайна НЕ-free лінія
         endX = lastPoint.x;
         endY = lastPoint.y;
         
-        // Знаходимо загальну довжину лінії (останнє число в elements)
+        // Знаходимо загальну довжину лінії
         for (let i = parsedData.elements.length - 1; i >= 0; i--) {
             if (parsedData.elements[i].type === 'number') {
                 lineLength = parsedData.elements[i].value;
