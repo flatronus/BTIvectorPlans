@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Змінна для розміщення розмірів (true = zzовні, false = всередині)
     let dimensionsOutside = false;
+	
+	// ДОДАНО: Змінна для номера приміщення
+	let roomNumber = '';
     
     // Структура для зберігання ліній фігури
     let figureLines = []; // Масив об'єктів {id, from, to, direction, lineType, elements, code}
@@ -1316,87 +1319,130 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Функція оновлення списку ліній
-function updateLinesList() {
-    const linesList = document.getElementById('linesList');
-    linesList.innerHTML = '';
-    
-    // Якщо є обчислена площа, показуємо її
-    if (window.calculatedArea) {
-        // Розрахована площа S
-        const areaDisplay = document.createElement('div');
-        areaDisplay.style.cssText = 'padding: 8px; background: #e8f5e9; border: 1px solid #4CAF50; border-radius: 4px; margin-bottom: 10px; font-weight: bold; font-size: 12px; text-align: center;';
-        areaDisplay.textContent = `S = ${window.calculatedArea} м²`;
-        linesList.appendChild(areaDisplay);
-        
-        // Редагована площа S'
-        const areaInputContainer = document.createElement('div');
-        areaInputContainer.style.cssText = 'padding: 8px; background: #fff3e0; border: 1px solid #FF9800; border-radius: 4px; margin-bottom: 10px;';
-        
-        const areaLabel = document.createElement('div');
-        areaLabel.style.cssText = 'font-weight: bold; font-size: 10px; margin-bottom: 5px; text-align: center;';
-        areaLabel.textContent = "S' (редагована):";
-        areaInputContainer.appendChild(areaLabel);
-        
-        const areaInput = document.createElement('input');
-        areaInput.type = 'number';
-        areaInput.inputMode = 'decimal';
-        areaInput.step = '0.1';
-        areaInput.value = window.customArea || window.calculatedArea;
-        areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
-        areaInput.onchange = function() {
-            window.customArea = parseFloat(this.value).toFixed(1);
-        };
-        areaInputContainer.appendChild(areaInput);
-        
-        linesList.appendChild(areaInputContainer);
-    }
-    
-    // Список ліній з чекбоксами в одному рядку
-    figureLines.forEach(line => {
-        const lineContainer = document.createElement('div');
-        // ДОДАНО: Інший колір для pending ліній
-        const bgColor = line.isPending ? '#fff3e0' : '#f0f0f0';
-        lineContainer.style.cssText = `padding: 6px 8px; background: ${bgColor}; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;`;
-        
-        // Кнопка назви лінії
-        const lineButton = document.createElement('button');
-        lineButton.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
-        // ДОДАНО: Позначка для pending ліній
-        const pendingMark = line.isPending ? ' ⏳' : '';
-        lineButton.textContent = `${line.from}-${line.to || '?'}${pendingMark}`;
-        lineButton.onclick = () => editLine(line);
-        lineContainer.appendChild(lineButton);
-        
-        // Чекбокс видимості (іконка ока)
-        const visibilityCheckbox = document.createElement('input');
-        visibilityCheckbox.type = 'checkbox';
-        visibilityCheckbox.checked = line.dimensionVisible !== false;
-        visibilityCheckbox.title = 'Показати розмір';
-        visibilityCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
-        visibilityCheckbox.onchange = function(e) {
-            e.stopPropagation();
-            line.dimensionVisible = this.checked;
-            redrawEntireFigure();
-        };
-        lineContainer.appendChild(visibilityCheckbox);
-        
-        // Чекбокс розвороту (іконка обертання)
-        const rotateCheckbox = document.createElement('input');
-        rotateCheckbox.type = 'checkbox';
-        rotateCheckbox.checked = line.dimensionRotated === true;
-        rotateCheckbox.title = 'Розвернути на 180°';
-        rotateCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
-        rotateCheckbox.onchange = function(e) {
-            e.stopPropagation();
-            line.dimensionRotated = this.checked;
-            redrawEntireFigure();
-        };
-        lineContainer.appendChild(rotateCheckbox);
-        
-        linesList.appendChild(lineContainer);
-    });
-}
+    // Функція оновлення списку ліній (ЄДИНА ВЕРСІЯ!)
+	function updateLinesList() {
+		const linesList = document.getElementById('linesList');
+		linesList.innerHTML = '';
+		
+		// Чекбокс для розміщення розмірів
+		const dimensionCheckbox = document.createElement('div');
+		dimensionCheckbox.style.cssText = 'margin-bottom: 15px; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;';
+		
+		const dimLabel = document.createElement('label');
+		dimLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer; font-size: 12px;';
+		
+		const dimInput = document.createElement('input');
+		dimInput.type = 'checkbox';
+		dimInput.id = 'dimensionSideCheckbox';
+		dimInput.checked = dimensionsOutside;
+		dimInput.style.cssText = 'margin-right: 8px; width: 16px; height: 16px; cursor: pointer;';
+		dimInput.onchange = toggleDimensionSide;
+		
+		const dimSpan = document.createElement('span');
+		dimSpan.textContent = 'Розміри ззовні';
+		
+		dimLabel.appendChild(dimInput);
+		dimLabel.appendChild(dimSpan);
+		dimensionCheckbox.appendChild(dimLabel);
+		linesList.appendChild(dimensionCheckbox);
+		
+		// Поле для номера приміщення
+		const roomNumberDiv = document.createElement('div');
+		roomNumberDiv.style.cssText = 'margin-bottom: 15px; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;';
+		
+		const roomLabel = document.createElement('label');
+		roomLabel.style.cssText = 'display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;';
+		roomLabel.textContent = '№ приміщення:';
+		roomNumberDiv.appendChild(roomLabel);
+		
+		const roomInput = document.createElement('input');
+		roomInput.type = 'text';
+		roomInput.id = 'roomNumberInput';
+		roomInput.value = roomNumber;
+		roomInput.placeholder = '1-1';
+		roomInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;';
+		roomInput.oninput = function() {
+			roomNumber = this.value;
+			redrawEntireFigure();
+		};
+		roomNumberDiv.appendChild(roomInput);
+		
+		const roomHint = document.createElement('div');
+		roomHint.style.cssText = 'font-size: 10px; color: #666; margin-top: 3px;';
+		roomHint.textContent = 'Формат: 1-1';
+		roomNumberDiv.appendChild(roomHint);
+		
+		linesList.appendChild(roomNumberDiv);
+		
+		// Якщо є обчислена площа, показуємо її
+		if (window.calculatedArea) {
+			const areaDisplay = document.createElement('div');
+			areaDisplay.style.cssText = 'padding: 8px; background: #e8f5e9; border: 1px solid #4CAF50; border-radius: 4px; margin-bottom: 10px; font-weight: bold; font-size: 12px; text-align: center;';
+			areaDisplay.textContent = 'S = ' + window.calculatedArea + ' м²';
+			linesList.appendChild(areaDisplay);
+			
+			const areaInputContainer = document.createElement('div');
+			areaInputContainer.style.cssText = 'padding: 8px; background: #fff3e0; border: 1px solid #FF9800; border-radius: 4px; margin-bottom: 10px;';
+			
+			const areaLabel = document.createElement('div');
+			areaLabel.style.cssText = 'font-weight: bold; font-size: 10px; margin-bottom: 5px; text-align: center;';
+			areaLabel.textContent = "S' (редагована):";
+			areaInputContainer.appendChild(areaLabel);
+			
+			const areaInput = document.createElement('input');
+			areaInput.type = 'number';
+			areaInput.inputMode = 'decimal';
+			areaInput.step = '0.1';
+			areaInput.value = window.customArea || window.calculatedArea;
+			areaInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; text-align: center; border: 1px solid #ddd; border-radius: 4px;';
+			areaInput.onchange = function() {
+				window.customArea = parseFloat(this.value).toFixed(1);
+			};
+			areaInputContainer.appendChild(areaInput);
+			
+			linesList.appendChild(areaInputContainer);
+		}
+		
+		// Список ліній
+		figureLines.forEach(line => {
+			const lineContainer = document.createElement('div');
+			const bgColor = line.isPending ? '#fff3e0' : '#f0f0f0';
+			lineContainer.style.cssText = 'padding: 6px 8px; background: ' + bgColor + '; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
+			
+			const lineButton = document.createElement('button');
+			lineButton.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
+			const pendingMark = line.isPending ? ' ⏳' : '';
+			lineButton.textContent = line.from + '-' + (line.to || '?') + pendingMark;
+			lineButton.onclick = () => editLine(line);
+			lineContainer.appendChild(lineButton);
+			
+			const visibilityCheckbox = document.createElement('input');
+			visibilityCheckbox.type = 'checkbox';
+			visibilityCheckbox.checked = line.dimensionVisible !== false;
+			visibilityCheckbox.title = 'Показати розмір';
+			visibilityCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+			visibilityCheckbox.onchange = function(e) {
+				e.stopPropagation();
+				line.dimensionVisible = this.checked;
+				redrawEntireFigure();
+			};
+			lineContainer.appendChild(visibilityCheckbox);
+			
+			const rotateCheckbox = document.createElement('input');
+			rotateCheckbox.type = 'checkbox';
+			rotateCheckbox.checked = line.dimensionRotated === true;
+			rotateCheckbox.title = 'Розвернути на 180°';
+			rotateCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+			rotateCheckbox.onchange = function(e) {
+				e.stopPropagation();
+				line.dimensionRotated = this.checked;
+				redrawEntireFigure();
+			};
+			lineContainer.appendChild(rotateCheckbox);
+			
+			linesList.appendChild(lineContainer);
+		});
+	}
     
     // Функція редагування лінії
     function editLine(line) {
@@ -1764,19 +1810,14 @@ function updateLinesList() {
 			calculateAndDisplayArea();
 		}
 		
-		// Оновлюємо список ліній
-		updateLinesList();
-		
-		// Перераховуємо площу після перемалювання
-		if (figureLines.some(line => line.isClosing)) {
-			calculateAndDisplayArea();
-		}
-
-		// Оновлюємо список ліній
+		// Оновлюємо список ліній (ОДИН РАЗ!)
 		updateLinesList();
 
 		// ДОДАНО: Автоматичне масштабування та центрування
 		autoScaleAndCenterFigure();
+		
+		// ДОДАНО: Відображення номера приміщення
+		drawRoomNumber();
 	}
     
     // Функція розрахунку фігури з невідомими кутами
@@ -2032,6 +2073,72 @@ function updateLinesList() {
 			width: viewBoxWidth,
 			height: viewBoxHeight
 		});
+	}
+	
+	// Функція відображення номера приміщення в центрі фігури
+	function drawRoomNumber() {
+		if (!roomNumber || shapePoints.length < 3) return;
+		
+		const svg = document.getElementById('shapeCanvas');
+		
+		// Обчислюємо центр фігури (центроїд полігона)
+		let centerX = 0, centerY = 0;
+		let validPoints = shapePoints.filter(p => !p.isTemp);
+		
+		validPoints.forEach(point => {
+			centerX += point.x;
+			centerY += point.y;
+		});
+		centerX /= validPoints.length;
+		centerY /= validPoints.length;
+		
+		// Розділяємо номер на частини (формат: 1-1)
+		const parts = roomNumber.split('-');
+		
+		if (parts.length >= 2 && parts[0] && parts[1]) {
+			// Створюємо один текстовий елемент з tspan для кольорів
+			const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			text.setAttribute('id', 'room-number');
+			text.setAttribute('x', centerX);
+			text.setAttribute('y', centerY);
+			text.setAttribute('font-size', '12');
+			text.setAttribute('font-weight', 'bold');
+			text.setAttribute('text-anchor', 'middle');
+			text.setAttribute('dominant-baseline', 'middle');
+			
+			// Перша частина (червона)
+			const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+			tspan1.setAttribute('fill', '#e53935');
+			tspan1.textContent = parts[0];
+			text.appendChild(tspan1);
+			
+			// Дефіс (чорний)
+			const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+			tspan2.setAttribute('fill', 'black');
+			tspan2.textContent = '-';
+			text.appendChild(tspan2);
+			
+			// Друга частина (чорна)
+			const tspan3 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+			tspan3.setAttribute('fill', 'black');
+			tspan3.textContent = parts[1];
+			text.appendChild(tspan3);
+			
+			svg.appendChild(text);
+		} else {
+			// Якщо формат інший, просто показуємо як є (чорним)
+			const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			text.setAttribute('id', 'room-number');
+			text.setAttribute('x', centerX);
+			text.setAttribute('y', centerY);
+			text.setAttribute('font-size', '12');
+			text.setAttribute('font-weight', 'bold');
+			text.setAttribute('text-anchor', 'middle');
+			text.setAttribute('dominant-baseline', 'middle');
+			text.setAttribute('fill', 'black');
+			text.textContent = roomNumber;
+			svg.appendChild(text);
+		}
 	}
     
 });
