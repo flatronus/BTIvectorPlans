@@ -12,6 +12,12 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	// ДОДАНО: Змінна для номера приміщення
 	let roomNumber = '';
+	
+	// Збереження стану поля номера приміщення
+	let roomNumberInputValue = '';
+	let roomNumberInputFocused = false;
+	let roomNumberInputSelectionStart = 0;
+	let roomNumberInputSelectionEnd = 0;
     
     // Структура для зберігання ліній фігури
     let figureLines = []; // Масив об'єктів {id, from, to, direction, lineType, elements, code}
@@ -432,6 +438,14 @@ document.addEventListener('DOMContentLoaded', function() {
     window.canvasManager = canvasManager;
     // Initialize first canvas
     canvasManager.createCanvas();
+	
+	// Відновлюємо значення поля № приміщення при першому завантаженні
+	setTimeout(() => {
+		const input = document.getElementById('roomNumberInput');
+		if (input) {
+			input.value = roomNumber;
+		}
+	}, 100);
 
     // Zoom functions
     window.zoomIn = function() {
@@ -1204,15 +1218,10 @@ document.addEventListener('DOMContentLoaded', function() {
 		// ВИПРАВЛЕННЯ: Переконуємося що lengthInMeters - це число
 		const numericLength = typeof lengthInMeters === 'number' ? lengthInMeters : parseFloat(lengthInMeters);
 		
-		// Форматуємо довжину: якщо має десяткові, показуємо 2 знаки, інакше без знаків
+		// Форматуємо довжину: завжди 2 знаки після коми
 		let formattedLength;
-		if (numericLength % 1 === 0) {
-			// Ціле число
-			formattedLength = numericLength.toFixed(0);
-		} else {
-			// Десяткове число - показуємо 2 знаки після коми
-			formattedLength = numericLength.toFixed(2);
-		}
+		const rounded = Math.round(numericLength * 100) / 100; // Округлюємо до 2 знаків
+		formattedLength = rounded.toFixed(2);
 		
 		// Створюємо текст розміру
 		const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1363,33 +1372,58 @@ document.addEventListener('DOMContentLoaded', function() {
 		dimensionCheckbox.appendChild(dimLabel);
 		linesList.appendChild(dimensionCheckbox);
 		
+		// === ЗБЕРІГАЄМО СТАН ПОЛЯ ПЕРЕД ВИДАЛЕННЯМ ===
+		const existingRoomInput = document.getElementById('roomNumberInput');
+		if (existingRoomInput) {
+			roomNumberInputValue = existingRoomInput.value;
+			roomNumberInputFocused = document.activeElement === existingRoomInput;
+			roomNumberInputSelectionStart = existingRoomInput.selectionStart;
+			roomNumberInputSelectionEnd = existingRoomInput.selectionEnd;
+		}
+
 		// Поле для номера приміщення
 		const roomNumberDiv = document.createElement('div');
 		roomNumberDiv.style.cssText = 'margin-bottom: 15px; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;';
-		
+
 		const roomLabel = document.createElement('label');
 		roomLabel.style.cssText = 'display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;';
 		roomLabel.textContent = '№ приміщення:';
 		roomNumberDiv.appendChild(roomLabel);
-		
+
 		const roomInput = document.createElement('input');
 		roomInput.type = 'text';
 		roomInput.id = 'roomNumberInput';
-		roomInput.value = roomNumber;
 		roomInput.placeholder = '1-1';
 		roomInput.style.cssText = 'width: 100%; padding: 4px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;';
-		roomInput.oninput = function() {
-			roomNumber = this.value;
+		roomInput.value = roomNumberInputValue;
+
+		// КРИТИЧНО: onchange, а НЕ oninput!
+		roomInput.onchange = function() {
+			roomNumber = this.value.trim();
 			redrawEntireFigure();
 		};
+
 		roomNumberDiv.appendChild(roomInput);
-		
+
 		const roomHint = document.createElement('div');
 		roomHint.style.cssText = 'font-size: 10px; color: #666; margin-top: 3px;';
 		roomHint.textContent = 'Формат: 1-1';
 		roomNumberDiv.appendChild(roomHint);
-		
+
 		linesList.appendChild(roomNumberDiv);
+
+		// === ВІДНОВЛЮЄМО ФОКУС ТА КУРСОР ===
+		setTimeout(() => {
+			const input = document.getElementById('roomNumberInput');
+			if (roomNumberInputFocused && input) {
+				input.focus();
+				try {
+					input.setSelectionRange(roomNumberInputSelectionStart, roomNumberInputSelectionEnd);
+				} catch (e) {
+					input.setSelectionRange(input.value.length, input.value.length);
+				}
+			}
+		}, 0);
 		
 		// Якщо є обчислена площа, показуємо її
 		if (window.calculatedArea) {
@@ -1425,14 +1459,14 @@ document.addEventListener('DOMContentLoaded', function() {
 			const lineContainer = document.createElement('div');
 			const bgColor = line.isPending ? '#fff3e0' : '#f0f0f0';
 			lineContainer.style.cssText = 'padding: 6px 8px; background: ' + bgColor + '; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
-			
+
 			const lineButton = document.createElement('button');
 			lineButton.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
-			const pendingMark = line.isPending ? ' ⏳' : '';
+			const pendingMark = line.isPending ? ' (очікування)' : '';
 			lineButton.textContent = line.from + '-' + (line.to || '?') + pendingMark;
 			lineButton.onclick = () => editLine(line);
 			lineContainer.appendChild(lineButton);
-			
+
 			const visibilityCheckbox = document.createElement('input');
 			visibilityCheckbox.type = 'checkbox';
 			visibilityCheckbox.checked = line.dimensionVisible !== false;
@@ -1444,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				redrawEntireFigure();
 			};
 			lineContainer.appendChild(visibilityCheckbox);
-			
+
 			const rotateCheckbox = document.createElement('input');
 			rotateCheckbox.type = 'checkbox';
 			rotateCheckbox.checked = line.dimensionRotated === true;
@@ -1456,7 +1490,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				redrawEntireFigure();
 			};
 			lineContainer.appendChild(rotateCheckbox);
-			
+
 			linesList.appendChild(lineContainer);
 		});
 	}
@@ -2554,8 +2588,11 @@ document.addEventListener('DOMContentLoaded', function() {
 		line.setAttribute('stroke-width', '2');
 		svg.appendChild(line);
 		
-		// Малюємо розмір (передаємо точне значення length)
-		drawLineDimension(x1, y1, x2, y2, parseFloat(length), lineData);
+		// ВИПРАВЛЕННЯ: переконуємось що length - це число
+		const numericLength = typeof length === 'number' ? length : parseFloat(length);
+		
+		// Малюємо розмір (передаємо числове значення)
+		drawLineDimension(x1, y1, x2, y2, numericLength, lineData);
 		
 		// Малюємо точку (якщо не замикаюча)
 		if (!isClosing) {
