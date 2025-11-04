@@ -577,10 +577,316 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('shapeModal').style.display = 'block';
     };
     
-    // Функція закриття модалки фігур
-    window.closeShapeModal = function() {
-        document.getElementById('shapeModal').style.display = 'none';
-    };
+    // Функція закриття модалки фігур та переносу фігури на головне полотно
+	window.closeShapeModal = function() {
+		if (figureLines.length === 0) {
+			alert('Спочатку створіть фігуру');
+			return;
+		}
+    
+		// Переносимо фігуру на головне полотно
+		transferFigureToMainCanvas();
+		
+		// Закриваємо модалку
+		document.getElementById('shapeModal').style.display = 'none';
+		
+		// Очищаємо дані фігури для наступного створення
+		resetShapeData();
+	};
+	
+	// Функція переносу фігури на головне полотно
+	function transferFigureToMainCanvas() {
+		if (!window.canvasManager || !window.canvasManager.activeCanvasId) {
+			alert('Немає активного полотна');
+			return;
+		}
+		
+		const canvas = window.canvasManager.canvases.find(c => c.id === window.canvasManager.activeCanvasId);
+		if (!canvas) return;
+		
+		const mainSvg = document.querySelector(`[data-canvas-id="${canvas.id}"] svg`);
+		if (!mainSvg) return;
+		
+		// Знаходимо межі фігури
+		let minX = Infinity, minY = Infinity;
+		let maxX = -Infinity, maxY = -Infinity;
+		
+		shapePoints.forEach(point => {
+			if (point.x < minX) minX = point.x;
+			if (point.y < minY) minY = point.y;
+			if (point.x > maxX) maxX = point.x;
+			if (point.y > maxY) maxY = point.y;
+		});
+		
+		// Розміри фігури
+		const figureWidth = maxX - minX;
+		const figureHeight = maxY - minY;
+		
+		// Центр рамки на головному полотні (рамка: x=50, y=50, width=794, height=1123)
+		const frameCenterX = 50 + 794 / 2;
+		const frameCenterY = 50 + 1123 / 2;
+		
+		// Центр фігури
+		const figureCenterX = minX + figureWidth / 2;
+		const figureCenterY = minY + figureHeight / 2;
+		
+		// Зміщення для центрування
+		const offsetX = frameCenterX - figureCenterX;
+		const offsetY = frameCenterY - figureCenterY;
+		
+		// Створюємо групу для фігури
+		const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+		
+		const scale = 50; // 1 метр = 50 пікселів
+		
+		// Малюємо всі лінії фігури
+		figureLines.forEach((lineData, index) => {
+			const fromPoint = shapePoints.find(p => p.num === lineData.from);
+			const toPoint = lineData.isClosing ? shapePoints[0] : shapePoints.find(p => p.num === lineData.to);
+			
+			if (!fromPoint || !toPoint) return;
+			
+			// Координати зі зміщенням
+			const x1 = fromPoint.x + offsetX;
+			const y1 = fromPoint.y + offsetY;
+			const x2 = toPoint.x + offsetX;
+			const y2 = toPoint.y + offsetY;
+			
+			// Малюємо лінію
+			const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+			line.setAttribute('x1', x1);
+			line.setAttribute('y1', y1);
+			line.setAttribute('x2', x2);
+			line.setAttribute('y2', y2);
+			line.setAttribute('stroke', 'black');
+			line.setAttribute('stroke-width', '1');
+			line.setAttribute('vector-effect', 'non-scaling-stroke');
+			group.appendChild(line);
+			
+			// Малюємо розмір лінії
+			drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData);
+			
+			// Малюємо елементи на лінії
+			drawMainCanvasElements(group, lineData, x1, y1, x2, y2, scale);
+		});
+		
+		// Малюємо номер приміщення (якщо є)
+		if (roomNumber && shapePoints.length >= 3) {
+			let centerX = 0, centerY = 0;
+			let validPoints = shapePoints.filter(p => !p.isTemp);
+			
+			validPoints.forEach(point => {
+				centerX += point.x + offsetX;
+				centerY += point.y + offsetY;
+			});
+			centerX /= validPoints.length;
+			centerY /= validPoints.length;
+			
+			const parts = roomNumber.split('-');
+			
+			if (parts.length >= 2 && parts[0] && parts[1]) {
+				const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+				text.setAttribute('x', centerX);
+				text.setAttribute('y', centerY);
+				text.setAttribute('font-size', '12');
+				text.setAttribute('font-weight', 'bold');
+				text.setAttribute('text-anchor', 'middle');
+				text.setAttribute('dominant-baseline', 'middle');
+				
+				const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+				tspan1.setAttribute('fill', '#e53935');
+				tspan1.textContent = parts[0];
+				text.appendChild(tspan1);
+				
+				const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+				tspan2.setAttribute('fill', 'black');
+				tspan2.textContent = '-';
+				text.appendChild(tspan2);
+				
+				const tspan3 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+				tspan3.setAttribute('fill', 'black');
+				tspan3.textContent = parts[1];
+				text.appendChild(tspan3);
+				
+				group.appendChild(text);
+			} else {
+				const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+				text.setAttribute('x', centerX);
+				text.setAttribute('y', centerY);
+				text.setAttribute('font-size', '12');
+				text.setAttribute('font-weight', 'bold');
+				text.setAttribute('text-anchor', 'middle');
+				text.setAttribute('dominant-baseline', 'middle');
+				text.setAttribute('fill', 'black');
+				text.textContent = roomNumber;
+				group.appendChild(text);
+			}
+		}
+		
+		mainSvg.appendChild(group);
+		
+		alert('Фігуру перенесено на головне полотно');
+	}
+	
+	// Функція малювання розміру на головному полотні
+	function drawMainCanvasDimension(group, x1, y1, x2, y2, lengthInMeters, lineData) {
+		if (lineData && lineData.dimensionVisible === false) return;
+		
+		const centerX = (x1 + x2) / 2;
+		const centerY = (y1 + y2) / 2;
+		
+		const dx = x2 - x1;
+		const dy = y2 - y1;
+		const length = Math.sqrt(dx * dx + dy * dy);
+		
+		if (length === 0) return;
+		
+		const ux = dx / length;
+		const uy = dy / length;
+		
+		const px = uy;
+		const py = -ux;
+		
+		const offset = 7.5;
+		const direction = dimensionsOutside ? 1 : -1;
+		
+		const textX = centerX + px * offset * direction;
+		const textY = centerY + py * offset * direction;
+		
+		let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+		
+		if (angle > 90) angle -= 180;
+		if (angle < -90) angle += 180;
+		
+		if (lineData && lineData.dimensionRotated === true) {
+			angle += 180;
+		}
+		
+		const numericLength = typeof lengthInMeters === 'number' ? lengthInMeters : parseFloat(lengthInMeters);
+		const formattedLength = numericLength.toFixed(2);
+		
+		const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+		text.setAttribute('x', textX);
+		text.setAttribute('y', textY);
+		text.setAttribute('font-size', '12');
+		text.setAttribute('fill', 'black');
+		text.setAttribute('font-weight', 'bold');
+		text.setAttribute('text-anchor', 'middle');
+		text.setAttribute('dominant-baseline', 'middle');
+		text.setAttribute('transform', `rotate(${angle}, ${textX}, ${textY})`);
+		text.textContent = formattedLength;
+		group.appendChild(text);
+	}
+	
+	// Функція малювання елементів на головному полотні
+	function drawMainCanvasElements(group, parsedData, x1, y1, x2, y2, scale) {
+		const thickness = 0.20 * scale;
+		
+		const dx = x2 - x1;
+		const dy = y2 - y1;
+		const length = Math.sqrt(dx * dx + dy * dy);
+		const ux = dx / length;
+		const uy = dy / length;
+		
+		const px = uy;
+		const py = -ux;
+		
+		for (let i = 0; i < parsedData.elements.length; i++) {
+			if (parsedData.elements[i].type === 'number' && 
+				i + 1 < parsedData.elements.length && 
+				parsedData.elements[i + 1].type === 'number' &&
+				i + 2 < parsedData.elements.length &&
+				parsedData.elements[i + 2].type === 'element') {
+				
+				const start = parsedData.elements[i].value * scale;
+				const end = parsedData.elements[i + 1].value * scale;
+				let elementCode = parsedData.elements[i + 2].value;
+				
+				let side = 1;
+				if (elementCode.startsWith('-')) {
+					side = -1;
+					elementCode = elementCode.substring(1);
+				}
+				
+				const startX = x1 + ux * start;
+				const startY = y1 + uy * start;
+				const elementLength = end - start;
+				
+				if (elementCode === 'WI1') {
+					const corner1X = startX;
+					const corner1Y = startY;
+					const corner2X = startX + ux * elementLength;
+					const corner2Y = startY + uy * elementLength;
+					const corner3X = startX + ux * elementLength + px * thickness * side;
+					const corner3Y = startY + uy * elementLength + py * thickness * side;
+					const corner4X = startX + px * thickness * side;
+					const corner4Y = startY + py * thickness * side;
+					
+					const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+					rect.setAttribute('points', `${corner1X},${corner1Y} ${corner2X},${corner2Y} ${corner3X},${corner3Y} ${corner4X},${corner4Y}`);
+					rect.setAttribute('fill', 'none');
+					rect.setAttribute('stroke', 'black');
+					rect.setAttribute('stroke-width', '1');
+					rect.setAttribute('vector-effect', 'non-scaling-stroke');
+					group.appendChild(rect);
+					
+					const midStartX = startX + px * (thickness / 2) * side;
+					const midStartY = startY + py * (thickness / 2) * side;
+					const midEndX = startX + ux * elementLength + px * (thickness / 2) * side;
+					const midEndY = startY + uy * elementLength + py * (thickness / 2) * side;
+					
+					const midLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+					midLine.setAttribute('x1', midStartX);
+					midLine.setAttribute('y1', midStartY);
+					midLine.setAttribute('x2', midEndX);
+					midLine.setAttribute('y2', midEndY);
+					midLine.setAttribute('stroke', 'black');
+					midLine.setAttribute('stroke-width', '1');
+					midLine.setAttribute('vector-effect', 'non-scaling-stroke');
+					group.appendChild(midLine);
+				}
+				
+				i += 2;
+			}
+		}
+	}
+	
+	// Функція скидання даних фігури
+	function resetShapeData() {
+		figureLines = [];
+		pendingFreeLines = [];
+		lineIdCounter = 1;
+		pointCounter = 1;
+		window.calculatedArea = null;
+		window.customArea = null;
+		roomNumber = '';
+		roomNumberInputValue = '';
+		
+		const svg = document.getElementById('shapeCanvas');
+		while (svg.firstChild) {
+			svg.removeChild(svg.firstChild);
+		}
+		
+		shapePoints = [{x: 400, y: 300, num: 1}];
+		
+		const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+		startCircle.setAttribute('cx', '400');
+		startCircle.setAttribute('cy', '300');
+		startCircle.setAttribute('r', '5');
+		startCircle.setAttribute('fill', '#e53935');
+		svg.appendChild(startCircle);
+		
+		const startText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+		startText.setAttribute('x', '410');
+		startText.setAttribute('y', '295');
+		startText.setAttribute('font-size', '16');
+		startText.setAttribute('fill', '#e53935');
+		startText.setAttribute('font-weight', 'bold');
+		startText.textContent = '1';
+		svg.appendChild(startText);
+		
+		updateLinesList();
+	}
     
     // Змінні для створення фігур
     let shapePoints = [{x: 400, y: 300, num: 1}]; // Початкова точка
