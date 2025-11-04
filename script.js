@@ -657,8 +657,8 @@ document.addEventListener('DOMContentLoaded', function() {
             lineEl.setAttribute('y1', line.y1);
             lineEl.setAttribute('x2', line.x2);
             lineEl.setAttribute('y2', line.y2);
-            lineEl.setAttribute('stroke', '#2196F3');
-            lineEl.setAttribute('stroke-width', '2');
+            lineEl.setAttribute('stroke', 'black');
+            lineEl.setAttribute('stroke-width', '1');
             svg.appendChild(lineEl);
         });
         
@@ -1076,8 +1076,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		line.setAttribute('y1', lastPoint.y);
 		line.setAttribute('x2', endX);
 		line.setAttribute('y2', endY);
-		line.setAttribute('stroke', '#2196F3');
-		line.setAttribute('stroke-width', '2');
+		line.setAttribute('stroke', 'black');
+		line.setAttribute('stroke-width', '1');
 		line.setAttribute('id', `line-${lineIdCounter}`);
 		svg.appendChild(line);
 		
@@ -1193,8 +1193,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		const px = uy;
 		const py = -ux;
 		
-		// Відстань тексту від лінії (фіксована відстань 15 пікселів)
-		const offset = 15;
+		// Відстань тексту від лінії (фіксована відстань 10 пікселів)
+		const offset = 10;
 		
 		// Визначаємо напрямок зміщення в залежності від налаштування
 		const direction = dimensionsOutside ? 1 : -1;
@@ -1309,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     rect.setAttribute('points', `${corner1X},${corner1Y} ${corner2X},${corner2Y} ${corner3X},${corner3Y} ${corner4X},${corner4Y}`);
                     rect.setAttribute('fill', 'none');
                     rect.setAttribute('stroke', 'black');
-                    rect.setAttribute('stroke-width', '2');
+                    rect.setAttribute('stroke-width', '1');
                     group.appendChild(rect);
                     
                     // Середня лінія (ділить прямокутник навпіл вздовж лінії, на половині товщини від лінії)
@@ -1808,8 +1808,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			line.setAttribute('y1', lastPoint.y);
 			line.setAttribute('x2', endX);
 			line.setAttribute('y2', endY);
-			line.setAttribute('stroke', '#2196F3');
-			line.setAttribute('stroke-width', '2');
+			line.setAttribute('stroke', 'black');
+			line.setAttribute('stroke-width', '1');
 			line.setAttribute('id', `line-${lineData.id}`);
 			svg.appendChild(line);
 			
@@ -2584,8 +2584,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		line.setAttribute('y1', y1);
 		line.setAttribute('x2', x2);
 		line.setAttribute('y2', y2);
-		line.setAttribute('stroke', '#2196F3');
-		line.setAttribute('stroke-width', '2');
+		line.setAttribute('stroke', 'black');
+		line.setAttribute('stroke-width', '1');
 		svg.appendChild(line);
 		
 		// ВИПРАВЛЕННЯ: переконуємось що length - це число
