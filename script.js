@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Змінна для розміщення розмірів (true = zzовні, false = всередині)
     let dimensionsOutside = false;
 	
+	// ДОДАНО: Змінна для типу фігури (true = будівля, false = кімната)
+	let isBuilding = false;
+	
 	// ДОДАНО: Змінна для номера приміщення
 	let roomNumber = '';
 	
@@ -36,6 +39,16 @@ document.addEventListener('DOMContentLoaded', function() {
             redrawEntireFigure();
         }
     };
+	
+	// Функція перемикання типу фігури
+	window.toggleBuildingType = function() {
+		isBuilding = document.getElementById('buildingTypeCheckbox').checked;
+		
+		// Перемальовуємо фігуру з новим типом
+		if (figureLines.length > 0) {
+			redrawEntireFigure();
+		}
+	};
     
     // Canvas Management System
     const canvasManager = {
@@ -433,6 +446,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     };
+	
+	
     
     // Make canvasManager globally accessible
     window.canvasManager = canvasManager;
@@ -1350,23 +1365,45 @@ document.addEventListener('DOMContentLoaded', function() {
 		const linesList = document.getElementById('linesList');
 		linesList.innerHTML = '';
 		
+		// Чекбокс для типу фігури (Будівля)
+		const buildingCheckbox = document.createElement('div');
+		buildingCheckbox.style.cssText = 'margin-bottom: 10px; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;';
+
+		const buildLabel = document.createElement('label');
+		buildLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer; font-size: 12px;';
+
+		const buildInput = document.createElement('input');
+		buildInput.type = 'checkbox';
+		buildInput.id = 'buildingTypeCheckbox';
+		buildInput.checked = isBuilding;
+		buildInput.style.cssText = 'margin-right: 8px; width: 16px; height: 16px; cursor: pointer;';
+		buildInput.onchange = toggleBuildingType;
+
+		const buildSpan = document.createElement('span');
+		buildSpan.textContent = 'Будівля';
+
+		buildLabel.appendChild(buildInput);
+		buildLabel.appendChild(buildSpan);
+		buildingCheckbox.appendChild(buildLabel);
+		linesList.appendChild(buildingCheckbox);
+
 		// Чекбокс для розміщення розмірів
 		const dimensionCheckbox = document.createElement('div');
 		dimensionCheckbox.style.cssText = 'margin-bottom: 15px; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;';
-		
+
 		const dimLabel = document.createElement('label');
 		dimLabel.style.cssText = 'display: flex; align-items: center; cursor: pointer; font-size: 12px;';
-		
+
 		const dimInput = document.createElement('input');
 		dimInput.type = 'checkbox';
 		dimInput.id = 'dimensionSideCheckbox';
 		dimInput.checked = dimensionsOutside;
 		dimInput.style.cssText = 'margin-right: 8px; width: 16px; height: 16px; cursor: pointer;';
 		dimInput.onchange = toggleDimensionSide;
-		
+
 		const dimSpan = document.createElement('span');
 		dimSpan.textContent = 'Розміри ззовні';
-		
+
 		dimLabel.appendChild(dimInput);
 		dimLabel.appendChild(dimSpan);
 		dimensionCheckbox.appendChild(dimLabel);
