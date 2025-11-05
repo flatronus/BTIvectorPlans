@@ -149,9 +149,21 @@
         </div>
     </div>
     
-    <div id="canvas-container" class="flex-1 overflow-auto p-4">
-        <!-- Canvases will be added here dynamically -->
-    </div>
+    <!-- Замінити рядок з canvas-container на: -->
+	<div class="flex flex-1 overflow-hidden">
+		<!-- Canvas area -->
+		<div id="canvas-container" class="flex-1 overflow-auto p-4">
+			<!-- Canvases will be added here dynamically -->
+		</div>
+		
+		<!-- Hierarchy panel -->
+		<div id="hierarchy-panel" class="w-64 bg-white border-l border-gray-200 overflow-y-auto p-4">
+			<h3 class="font-bold text-sm mb-3 text-gray-700">Ієрархія елементів</h3>
+			<div id="hierarchy-tree" class="text-sm">
+				<!-- Hierarchy will be rendered here -->
+			</div>
+		</div>
+	</div>
 
     <style>
         .paper-frame {
@@ -220,6 +232,49 @@
             background-color: #f44336;
             color: white;
         }
+		/* Стилі для ієрархії */
+		.hierarchy-item {
+			padding: 6px 8px;
+			margin-bottom: 2px;
+			border-radius: 4px;
+			cursor: pointer;
+			transition: background-color 0.2s;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			user-select: none;
+		}
+		.hierarchy-item:hover {
+			background-color: #f0f0f0;
+		}
+		.hierarchy-item.selected {
+			background-color: #e3f2fd;
+			border-left: 3px solid #2196F3;
+		}
+		.hierarchy-item .icon {
+			width: 16px;
+			height: 16px;
+			flex-shrink: 0;
+			color: #666;
+		}
+		.hierarchy-children {
+			margin-left: 20px;
+			border-left: 1px solid #ddd;
+			padding-left: 8px;
+		}
+		.hierarchy-toggle {
+			width: 14px;
+			height: 14px;
+			cursor: pointer;
+			flex-shrink: 0;
+			font-size: 10px;
+			text-align: center;
+			user-select: none;
+			color: #999;
+		}
+		.hierarchy-toggle:hover {
+			color: #333;
+		}
     </style>
     
     <!-- Модалка для копіювання -->

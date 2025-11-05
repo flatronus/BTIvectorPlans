@@ -30,6 +30,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let pendingFreeLines = []; // Масив ліній з невідомим кутом, які очікують розрахунку
     let freeLineQuadrant = null; // Поточний квадрант для free лінії ('top-right', 'top-left', 'bottom-right', 'bottom-left')
     
+	// ДОДАНО: Система управління ієрархією елементів
+	let hierarchyData = []; // Масив всіх елементів у ієрархії
+	let hierarchyIdCounter = 1;
+	let selectedHierarchyItem = null;
+	
     // Функція перемикання розміщення розмірів
     window.toggleDimensionSide = function() {
         dimensionsOutside = document.getElementById('dimensionSideCheckbox').checked;
@@ -454,6 +459,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize first canvas
     canvasManager.createCanvas();
 	
+	// В кінці функції DOMContentLoaded, після canvasManager.createCanvas():
+	renderHierarchy();
+	
 	// Відновлюємо значення поля № приміщення при першому завантаженні
 	setTimeout(() => {
 		const input = document.getElementById('roomNumberInput');
@@ -583,9 +591,16 @@ document.addEventListener('DOMContentLoaded', function() {
 			alert('Спочатку створіть фігуру');
 			return;
 		}
-    
-		// Переносимо фігуру на головне полотно
-		transferFigureToMainCanvas();
+
+		// ВИПРАВЛЕННЯ: Перевіряємо чи редагуємо існуючу фігуру
+		if (window.editingHierarchyItemId) {
+			// Оновлюємо існуючу фігуру
+			updateExistingHierarchyItem(window.editingHierarchyItemId);
+			window.editingHierarchyItemId = null;
+		} else {
+			// Переносимо нову фігуру на головне полотно
+			transferFigureToMainCanvas();
+		}
 		
 		// Закриваємо модалку
 		document.getElementById('shapeModal').style.display = 'none';
@@ -593,6 +608,225 @@ document.addEventListener('DOMContentLoaded', function() {
 		// Очищаємо дані фігури для наступного створення
 		resetShapeData();
 	};
+	
+	// Функція оновлення дочірніх елементів в ієрархії (вікна, двері тощо)
+	function updateHierarchyChildren(parentItem) {
+		// Очищаємо старі дочірні елементи
+		parentItem.children = [];
+		
+		// Проходимо по всіх лініях фігури та шукаємо елементи
+		parentItem.figureLines.forEach((lineData, lineIndex) => {
+			if (!lineData.elements || lineData.elements.length === 0) return;
+			
+			// Парсимо елементи: очікуємо формат число1, число2, код_елемента
+			for (let i = 0; i < lineData.elements.length; i++) {
+				if (lineData.elements[i].type === 'number' && 
+					i + 1 < lineData.elements.length && 
+					lineData.elements[i + 1].type === 'number' &&
+					i + 2 < lineData.elements.length &&
+					lineData.elements[i + 2].type === 'element') {
+					
+					const start = lineData.elements[i].value;
+					const end = lineData.elements[i + 1].value;
+					let elementCode = lineData.elements[i + 2].value;
+					
+					// Видаляємо мінус якщо є
+					if (elementCode.startsWith('-')) {
+						elementCode = elementCode.substring(1);
+					}
+					
+					// Визначаємо тип елемента
+					let elementType = 'element';
+					let elementName = elementCode;
+					
+					if (elementCode.startsWith('WI')) {
+						elementType = 'window';
+						elementName = `Вікно ${elementCode}`;
+					} else if (elementCode.startsWith('DV')) {
+						elementType = 'door';
+						elementName = `Двері ${elementCode}`;
+					} else if (elementCode.startsWith('OT')) {
+						elementType = 'opening';
+						elementName = `Отвір ${elementCode}`;
+					}
+					
+					// Додаємо дочірній елемент
+					const childElement = {
+						id: hierarchyIdCounter++,
+						type: elementType,
+						name: elementName,
+						code: elementCode,
+						lineIndex: lineIndex,
+						start: start,
+						end: end,
+						length: end - start,
+						children: [],
+						expanded: false,
+						parentId: parentItem.id
+					};
+					
+					parentItem.children.push(childElement);
+					
+					i += 2; // Пропускаємо оброблені елементи
+				}
+			}
+		});
+	}
+	
+	// Функція оновлення існуючої фігури в ієрархії
+	function updateExistingHierarchyItem(itemId) {
+		const item = findHierarchyItemById(itemId);
+		if (!item) {
+			alert('Помилка: елемент не знайдено в ієрархії');
+			return;
+		}
+		
+		// Видаляємо стару SVG групу
+		if (item.svgGroup && item.svgGroup.parentNode) {
+			item.svgGroup.parentNode.removeChild(item.svgGroup);
+		}
+		
+		// Оновлюємо дані елемента
+		item.figureLines = JSON.parse(JSON.stringify(figureLines));
+		item.shapePoints = JSON.parse(JSON.stringify(shapePoints));
+		item.roomNumber = roomNumber;
+		item.type = isBuilding ? 'building' : 'room';
+		item.name = isBuilding ? 'Будівля' : 'Кімната';
+		item.area = window.customArea || window.calculatedArea;
+		
+		// Створюємо нову SVG групу з оновленими даними
+		if (!window.canvasManager || !window.canvasManager.activeCanvasId) {
+			alert('Немає активного полотна');
+			return;
+		}
+		
+		const canvas = window.canvasManager.canvases.find(c => c.id === window.canvasManager.activeCanvasId);
+		if (!canvas) return;
+		
+		const mainSvg = document.querySelector(`[data-canvas-id="${canvas.id}"] svg`);
+		if (!mainSvg) return;
+		
+		// Знаходимо межі фігури для центрування
+		let minX = Infinity, minY = Infinity;
+		let maxX = -Infinity, maxY = -Infinity;
+		
+		shapePoints.forEach(point => {
+			if (point.x < minX) minX = point.x;
+			if (point.y < minY) minY = point.y;
+			if (point.x > maxX) maxX = point.x;
+			if (point.y > maxY) maxY = point.y;
+		});
+		
+		const figureWidth = maxX - minX;
+		const figureHeight = maxY - minY;
+		
+		const frameCenterX = 50 + 794 / 2;
+		const frameCenterY = 50 + 1123 / 2;
+		
+		const figureCenterX = minX + figureWidth / 2;
+		const figureCenterY = minY + figureHeight / 2;
+		
+		const offsetX = frameCenterX - figureCenterX;
+		const offsetY = frameCenterY - figureCenterY;
+		
+		// Створюємо нову групу
+		const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+		group.setAttribute('data-hierarchy-id', itemId);
+		
+		const scale = 50;
+		
+		// Малюємо всі лінії фігури
+		figureLines.forEach((lineData, index) => {
+			const fromPoint = shapePoints.find(p => p.num === lineData.from);
+			const toPoint = lineData.isClosing ? shapePoints[0] : shapePoints.find(p => p.num === lineData.to);
+			
+			if (!fromPoint || !toPoint) return;
+			
+			const x1 = fromPoint.x + offsetX;
+			const y1 = fromPoint.y + offsetY;
+			const x2 = toPoint.x + offsetX;
+			const y2 = toPoint.y + offsetY;
+			
+			const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+			line.setAttribute('x1', x1);
+			line.setAttribute('y1', y1);
+			line.setAttribute('x2', x2);
+			line.setAttribute('y2', y2);
+			line.setAttribute('stroke', 'black');
+			line.setAttribute('stroke-width', '1');
+			line.setAttribute('vector-effect', 'non-scaling-stroke');
+			group.appendChild(line);
+			
+			drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData);
+			
+			if (lineData.elements && lineData.elements.length > 0) {
+				drawMainCanvasElementsFixed(group, lineData, x1, y1, x2, y2, scale);
+			}
+		});
+		
+		// Малюємо номер приміщення
+		if (roomNumber && shapePoints.length >= 3) {
+			let centerX = 0, centerY = 0;
+			let validPoints = shapePoints.filter(p => !p.isTemp);
+			
+			validPoints.forEach(point => {
+				centerX += point.x + offsetX;
+				centerY += point.y + offsetY;
+			});
+			centerX /= validPoints.length;
+			centerY /= validPoints.length;
+			
+			const parts = roomNumber.split('-');
+			
+			if (parts.length >= 2 && parts[0] && parts[1]) {
+				const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+				text.setAttribute('x', centerX);
+				text.setAttribute('y', centerY);
+				text.setAttribute('font-size', '12');
+				text.setAttribute('font-weight', 'bold');
+				text.setAttribute('text-anchor', 'middle');
+				text.setAttribute('dominant-baseline', 'middle');
+				
+				const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+				tspan1.setAttribute('fill', '#e53935');
+				tspan1.textContent = parts[0];
+				text.appendChild(tspan1);
+				
+				const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+				tspan2.setAttribute('fill', 'black');
+				tspan2.textContent = '-';
+				text.appendChild(tspan2);
+				
+				const tspan3 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+				tspan3.setAttribute('fill', 'black');
+				tspan3.textContent = parts[1];
+				text.appendChild(tspan3);
+				
+				group.appendChild(text);
+			} else {
+				const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+				text.setAttribute('x', centerX);
+				text.setAttribute('y', centerY);
+				text.setAttribute('font-size', '12');
+				text.setAttribute('font-weight', 'bold');
+				text.setAttribute('text-anchor', 'middle');
+				text.setAttribute('dominant-baseline', 'middle');
+				text.setAttribute('fill', 'black');
+				text.textContent = roomNumber;
+				group.appendChild(text);
+			}
+		}
+		
+		mainSvg.appendChild(group);
+		item.svgGroup = group;
+		
+		// Оновлюємо ієрархію (додаємо дочірні елементи для вікон/дверей)
+		updateHierarchyChildren(item);
+		
+		renderHierarchy();
+		
+		alert('Фігуру оновлено');
+	}
 	
 	// Функція переносу фігури на головне полотно
 	function transferFigureToMainCanvas() {
@@ -622,7 +856,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		const figureWidth = maxX - minX;
 		const figureHeight = maxY - minY;
 		
-		// Центр рамки на головному полотні (рамка: x=50, y=50, width=794, height=1123)
+		// Центр рамки на головному полотні
 		const frameCenterX = 50 + 794 / 2;
 		const frameCenterY = 50 + 1123 / 2;
 		
@@ -636,8 +870,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		// Створюємо групу для фігури
 		const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+		group.setAttribute('data-hierarchy-id', hierarchyIdCounter);
 		
-		const scale = 50; // 1 метр = 50 пікселів
+		const scale = 50;
 		
 		// Малюємо всі лінії фігури
 		figureLines.forEach((lineData, index) => {
@@ -646,13 +881,11 @@ document.addEventListener('DOMContentLoaded', function() {
 			
 			if (!fromPoint || !toPoint) return;
 			
-			// Координати зі зміщенням
 			const x1 = fromPoint.x + offsetX;
 			const y1 = fromPoint.y + offsetY;
 			const x2 = toPoint.x + offsetX;
 			const y2 = toPoint.y + offsetY;
 			
-			// Малюємо лінію
 			const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
 			line.setAttribute('x1', x1);
 			line.setAttribute('y1', y1);
@@ -663,14 +896,15 @@ document.addEventListener('DOMContentLoaded', function() {
 			line.setAttribute('vector-effect', 'non-scaling-stroke');
 			group.appendChild(line);
 			
-			// Малюємо розмір лінії
 			drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData);
 			
-			// Малюємо елементи на лінії
-			drawMainCanvasElements(group, lineData, x1, y1, x2, y2, scale);
+			// ВИПРАВЛЕНО: Малюємо елементи, передаючи правильні параметри
+			if (lineData.elements && lineData.elements.length > 0) {
+				drawMainCanvasElementsFixed(group, lineData, x1, y1, x2, y2, scale);
+			}
 		});
 		
-		// Малюємо номер приміщення (якщо є)
+		// Малюємо номер приміщення
 		if (roomNumber && shapePoints.length >= 3) {
 			let centerX = 0, centerY = 0;
 			let validPoints = shapePoints.filter(p => !p.isTemp);
@@ -725,6 +959,18 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		mainSvg.appendChild(group);
 		
+		// Додаємо в ієрархію
+		const hierarchyItem = addToHierarchy({
+			isBuilding: isBuilding,
+			name: isBuilding ? 'Будівля' : 'Кімната',
+			roomNumber: roomNumber,
+			area: window.customArea || window.calculatedArea,
+			figureLines: figureLines,
+			shapePoints: shapePoints,
+			svgGroup: group,
+			parentId: selectedHierarchyItem
+		});
+		
 		alert('Фігуру перенесено на головне полотно');
 	}
 	
@@ -778,6 +1024,85 @@ document.addEventListener('DOMContentLoaded', function() {
 		group.appendChild(text);
 	}
 	
+	// Функція малювання елементів на головному полотні (виправлена)
+	function drawMainCanvasElementsFixed(group, lineData, x1, y1, x2, y2, scale) {
+		const thickness = 0.20 * scale;
+		
+		const dx = x2 - x1;
+		const dy = y2 - y1;
+		const length = Math.sqrt(dx * dx + dy * dy);
+		
+		if (length === 0) return;
+		
+		const ux = dx / length;
+		const uy = dy / length;
+		
+		const px = uy;
+		const py = -ux;
+		
+		for (let i = 0; i < lineData.elements.length; i++) {
+			if (lineData.elements[i].type === 'number' && 
+				i + 1 < lineData.elements.length && 
+				lineData.elements[i + 1].type === 'number' &&
+				i + 2 < lineData.elements.length &&
+				lineData.elements[i + 2].type === 'element') {
+				
+				const start = lineData.elements[i].value * scale;
+				const end = lineData.elements[i + 1].value * scale;
+				let elementCode = lineData.elements[i + 2].value;
+				
+				let side = 1;
+				if (elementCode.startsWith('-')) {
+					side = -1;
+					elementCode = elementCode.substring(1);
+				}
+				
+				const startX = x1 + ux * start;
+				const startY = y1 + uy * start;
+				const elementLength = end - start;
+				
+				if (elementCode === 'WI1') {
+					// Вікно: прямокутник з поділом посередині
+					const corner1X = startX;
+					const corner1Y = startY;
+					const corner2X = startX + ux * elementLength;
+					const corner2Y = startY + uy * elementLength;
+					const corner3X = startX + ux * elementLength + px * thickness * side;
+					const corner3Y = startY + uy * elementLength + py * thickness * side;
+					const corner4X = startX + px * thickness * side;
+					const corner4Y = startY + py * thickness * side;
+					
+					// Основний прямокутник
+					const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+					rect.setAttribute('points', `${corner1X},${corner1Y} ${corner2X},${corner2Y} ${corner3X},${corner3Y} ${corner4X},${corner4Y}`);
+					rect.setAttribute('fill', 'none');
+					rect.setAttribute('stroke', 'black');
+					rect.setAttribute('stroke-width', '1');
+					rect.setAttribute('vector-effect', 'non-scaling-stroke');
+					group.appendChild(rect);
+					
+					// Середня лінія (ділить вікно навпіл)
+					const midStartX = startX + px * (thickness / 2) * side;
+					const midStartY = startY + py * (thickness / 2) * side;
+					const midEndX = startX + ux * elementLength + px * (thickness / 2) * side;
+					const midEndY = startY + uy * elementLength + py * (thickness / 2) * side;
+					
+					const midLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+					midLine.setAttribute('x1', midStartX);
+					midLine.setAttribute('y1', midStartY);
+					midLine.setAttribute('x2', midEndX);
+					midLine.setAttribute('y2', midEndY);
+					midLine.setAttribute('stroke', 'black');
+					midLine.setAttribute('stroke-width', '1');
+					midLine.setAttribute('vector-effect', 'non-scaling-stroke');
+					group.appendChild(midLine);
+				}
+				
+				i += 2;
+			}
+		}
+	}
+	
 	// Функція малювання елементів на головному полотні
 	function drawMainCanvasElements(group, parsedData, x1, y1, x2, y2, scale) {
 		const thickness = 0.20 * scale;
@@ -785,6 +1110,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		const dx = x2 - x1;
 		const dy = y2 - y1;
 		const length = Math.sqrt(dx * dx + dy * dy);
+		
+		if (length === 0) return;
+		
 		const ux = dx / length;
 		const uy = dy / length;
 		
@@ -813,6 +1141,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				const elementLength = end - start;
 				
 				if (elementCode === 'WI1') {
+					// Вікно: прямокутник з поділом посередині
 					const corner1X = startX;
 					const corner1Y = startY;
 					const corner2X = startX + ux * elementLength;
@@ -822,6 +1151,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					const corner4X = startX + px * thickness * side;
 					const corner4Y = startY + py * thickness * side;
 					
+					// Основний прямокутник
 					const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
 					rect.setAttribute('points', `${corner1X},${corner1Y} ${corner2X},${corner2Y} ${corner3X},${corner3Y} ${corner4X},${corner4Y}`);
 					rect.setAttribute('fill', 'none');
@@ -830,6 +1160,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					rect.setAttribute('vector-effect', 'non-scaling-stroke');
 					group.appendChild(rect);
 					
+					// Середня лінія (ділить вікно навпіл)
 					const midStartX = startX + px * (thickness / 2) * side;
 					const midStartY = startY + py * (thickness / 2) * side;
 					const midEndX = startX + ux * elementLength + px * (thickness / 2) * side;
@@ -886,6 +1217,190 @@ document.addEventListener('DOMContentLoaded', function() {
 		svg.appendChild(startText);
 		
 		updateLinesList();
+	}
+	
+	// Функція додавання фігури в ієрархію
+	function addToHierarchy(shapeData) {
+		const hierarchyItem = {
+			id: hierarchyIdCounter++,
+			type: shapeData.isBuilding ? 'building' : 'room',
+			name: shapeData.name || (shapeData.isBuilding ? `Будівля ${hierarchyIdCounter}` : `Кімната ${hierarchyIdCounter}`),
+			roomNumber: shapeData.roomNumber || '',
+			area: shapeData.area || '',
+			figureLines: JSON.parse(JSON.stringify(shapeData.figureLines)), // Deep copy
+			shapePoints: JSON.parse(JSON.stringify(shapeData.shapePoints)), // Deep copy
+			svgGroup: shapeData.svgGroup, // Посилання на SVG групу
+			children: [],
+			expanded: true,
+			parentId: shapeData.parentId || null
+		};
+		
+		if (shapeData.parentId) {
+			// Додаємо як дочірній елемент
+			const parent = findHierarchyItemById(shapeData.parentId);
+			if (parent) {
+				parent.children.push(hierarchyItem);
+			}
+		} else {
+			// Додаємо як кореневий елемент
+			hierarchyData.push(hierarchyItem);
+		}
+		
+		renderHierarchy();
+		return hierarchyItem;
+	}
+
+	// Функція пошуку елемента в ієрархії
+	function findHierarchyItemById(id, items = hierarchyData) {
+		for (let item of items) {
+			if (item.id === id) return item;
+			if (item.children.length > 0) {
+				const found = findHierarchyItemById(id, item.children);
+				if (found) return found;
+			}
+		}
+		return null;
+	}
+	
+	// Функція рендерингу ієрархії
+	function renderHierarchy() {
+		const treeContainer = document.getElementById('hierarchy-tree');
+		treeContainer.innerHTML = '';
+		
+		if (hierarchyData.length === 0) {
+			treeContainer.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Немає елементів</div>';
+			return;
+		}
+		
+		hierarchyData.forEach(item => {
+			treeContainer.appendChild(createHierarchyItemElement(item));
+		});
+	}
+	
+	// Функція вибору елемента в ієрархії
+	function selectHierarchyItem(item) {
+		selectedHierarchyItem = item.id;
+		renderHierarchy();
+		
+		// Відкриваємо модалку створення фігур з даними вибраного елемента
+		openShapeModalForEdit(item);
+	}
+
+	// Функція відкриття модалки для редагування існуючої фігури
+	function openShapeModalForEdit(item) {
+		// Відкриваємо модалку
+		document.getElementById('coordModal').style.display = 'none'; // Закриваємо coordModal якщо відкрита
+		document.getElementById('shapeModal').style.display = 'block';
+		
+		// Відновлюємо дані фігури
+		figureLines = JSON.parse(JSON.stringify(item.figureLines));
+		shapePoints = JSON.parse(JSON.stringify(item.shapePoints));
+		roomNumber = item.roomNumber || '';
+		isBuilding = item.type === 'building';
+		
+		// ВИПРАВЛЕННЯ: Відновлюємо лічильники
+		pointCounter = Math.max(...shapePoints.map(p => p.num));
+		lineIdCounter = Math.max(...figureLines.map(l => l.id)) + 1;
+		
+		// Відновлюємо значення у чекбоксах
+		document.getElementById('buildingTypeCheckbox').checked = isBuilding;
+		document.getElementById('dimensionSideCheckbox').checked = dimensionsOutside;
+		
+		// ВИПРАВЛЕННЯ: Відновлюємо customArea якщо є
+		window.customArea = item.area;
+		window.calculatedArea = item.area;
+		
+		// Встановлюємо режим редагування
+		window.editingHierarchyItemId = item.id;
+		
+		// Перемальовуємо фігуру
+		redrawEntireFigure();
+	}
+
+	// Функція створення елемента ієрархії
+	function createHierarchyItemElement(item) {
+		const container = document.createElement('div');
+		
+		// Основний елемент
+		const itemDiv = document.createElement('div');
+		itemDiv.className = 'hierarchy-item' + (selectedHierarchyItem === item.id ? ' selected' : '');
+		
+		// Кнопка розгортання (якщо є діти)
+		if (item.children.length > 0) {
+			const toggle = document.createElement('span');
+			toggle.className = 'hierarchy-toggle';
+			toggle.textContent = item.expanded ? '▼' : '▶';
+			toggle.onclick = (e) => {
+				e.stopPropagation();
+				item.expanded = !item.expanded;
+				renderHierarchy();
+			};
+			itemDiv.appendChild(toggle);
+		} else {
+			// Пробіл замість кнопки
+			const spacer = document.createElement('span');
+			spacer.style.width = '14px';
+			itemDiv.appendChild(spacer);
+		}
+		
+		// В функції createHierarchyItemElement, замініть блок "Іконка типу":
+		// Іконка типу
+		const icon = document.createElement('i');
+		icon.className = 'fas icon';
+		if (item.type === 'building') {
+			icon.classList.add('fa-building');
+			icon.style.color = '#2196F3';
+		} else if (item.type === 'room') {
+			icon.classList.add('fa-door-open');
+			icon.style.color = '#4CAF50';
+		} else if (item.type === 'window') {
+			icon.classList.add('fa-window-maximize');
+			icon.style.color = '#00BCD4';
+		} else if (item.type === 'door') {
+			icon.classList.add('fa-door-closed');
+			icon.style.color = '#FF9800';
+		} else if (item.type === 'opening') {
+			icon.classList.add('fa-square');
+			icon.style.color = '#9C27B0';
+		} else {
+			icon.classList.add('fa-cube');
+			icon.style.color = '#666';
+		}
+		itemDiv.appendChild(icon);
+		
+		// Назва/номер
+		const label = document.createElement('span');
+		label.style.flex = '1';
+		label.textContent = item.roomNumber || item.name;
+		itemDiv.appendChild(label);
+		
+		// Площа (якщо є)
+		if (item.area) {
+			const areaLabel = document.createElement('span');
+			areaLabel.style.fontSize = '10px';
+			areaLabel.style.color = '#999';
+			areaLabel.textContent = `${item.area}м²`;
+			itemDiv.appendChild(areaLabel);
+		}
+		
+		// Подія кліку
+		itemDiv.onclick = () => {
+			selectHierarchyItem(item);
+		};
+		
+		container.appendChild(itemDiv);
+		
+		// Дочірні елементи
+		if (item.children.length > 0 && item.expanded) {
+			const childrenContainer = document.createElement('div');
+			childrenContainer.className = 'hierarchy-children';
+			item.children.forEach(child => {
+				childrenContainer.appendChild(createHierarchyItemElement(child));
+			});
+			container.appendChild(childrenContainer);
+		}
+		
+		return container;
 	}
     
     // Змінні для створення фігур
