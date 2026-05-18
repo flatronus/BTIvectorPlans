@@ -1,0 +1,168 @@
+/* ===== Загальний layout ===== */
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===== Тултіпи ===== */
+.toolbar-button:hover .tooltip {
+    display: block;
+}
+
+/* ===== Рамка аркуша ===== */
+.paper-frame {
+    filter: drop-shadow(0 0 2px rgba(30, 136, 229, 0.5));
+}
+
+/* ===== Модальні вікна ===== */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 10% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 90%;
+    max-width: 600px;
+    border-radius: 8px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal textarea {
+    width: 100%;
+    height: 400px;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+.modal-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-copy {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-close {
+    background-color: #f44336;
+    color: white;
+}
+
+/* ===== Ієрархія елементів ===== */
+.hierarchy-item {
+    padding: 6px 8px;
+    margin-bottom: 2px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.hierarchy-item:hover {
+    background-color: #f0f0f0;
+}
+
+.hierarchy-item.selected {
+    background-color: #e3f2fd;
+    border-left: 3px solid #2196F3;
+}
+
+.hierarchy-item .icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #666;
+}
+
+.hierarchy-children {
+    margin-left: 20px;
+    border-left: 1px solid #ddd;
+    padding-left: 8px;
+}
+
+.hierarchy-toggle {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 10px;
+    text-align: center;
+    user-select: none;
+    color: #999;
+}
+
+.hierarchy-toggle:hover {
+    color: #333;
+}
+
+/* ===== Toast-повідомлення ===== */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.toast {
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    max-width: 360px;
+    text-align: center;
+}
+
+.toast.show {
+    opacity: 1;
+}
+
+.toast.toast-info    { background-color: #2196F3; }
+.toast.toast-success { background-color: #4CAF50; }
+.toast.toast-warning { background-color: #FF9800; }
+.toast.toast-error   { background-color: #f44336; }

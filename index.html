@@ -1,301 +1,181 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Responsive Toolbar</title>
+    <title>BTI Vector Plans</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        .toolbar-button:hover .tooltip {
-            display: block;
-        }
-    </style>
+    <link rel="stylesheet" href="app.css">
 </head>
 <body class="bg-gray-100">
+
+    <!-- Верхня панель інструментів -->
     <div class="bg-white shadow-md">
         <div class="container mx-auto px-4">
             <div class="flex items-center justify-between py-2">
-                <!-- Logo/Brand -->
+                <!-- Логотип -->
                 <div class="flex items-center">
                     <i class="fas fa-paint-brush text-blue-600 text-2xl mr-2"></i>
-                    <span class="font-bold text-xl hidden md:block">Design Tool</span>
+                    <span class="font-bold text-xl hidden md:block">BTI Vector Plans</span>
                 </div>
-                
-                <!-- Main Toolbar -->
+
+                <!-- Панель інструментів -->
                 <div class="flex items-center space-x-1 md:space-x-3 overflow-x-auto py-2">
-                    <!-- File Operations -->
+                    <!-- Файлові операції -->
                     <div class="flex items-center space-x-1 md:space-x-3">
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.canvasManager && window.canvasManager.createCanvas()">
                             <i class="fas fa-plus text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Create</span>
+                            <span class="hidden md:inline ml-1 text-sm">Новий</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Create New (Ctrl+N)
+                                Новий (Ctrl+N)
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.canvasManager && window.canvasManager.openCanvas()">
                             <i class="fas fa-folder-open text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Open</span>
+                            <span class="hidden md:inline ml-1 text-sm">Відкрити</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Open File (Ctrl+O)
+                                Відкрити (Ctrl+O)
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.saveActiveCanvas && window.saveActiveCanvas()">
                             <i class="fas fa-save text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Save</span>
+                            <span class="hidden md:inline ml-1 text-sm">Зберегти</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Save (Ctrl+S)
+                                Зберегти (Ctrl+S)
                             </div>
                         </button>
                     </div>
-                    
+
                     <div class="h-6 w-px bg-gray-300"></div>
-                    
-                    <!-- Tools -->
+
+                    <!-- Інструменти -->
                     <div class="flex items-center space-x-1 md:space-x-3">
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
                             <i class="fas fa-hand-paper text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Hand</span>
+                            <span class="hidden md:inline ml-1 text-sm">Рука</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Hand Tool (H)
+                                Інструмент «Рука» (H)
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
                             <i class="fas fa-search text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Zoom</span>
+                            <span class="hidden md:inline ml-1 text-sm">Зум</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Zoom Tool (Z)
+                                Інструмент «Зум» (Z)
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="openShapeModal()">
                             <i class="fas fa-shapes text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Shapes</span>
+                            <span class="hidden md:inline ml-1 text-sm">Фігури</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Add Shapes (S)
+                                Додати фігуру (S)
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
                             <i class="fas fa-sync-alt text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Orientation</span>
+                            <span class="hidden md:inline ml-1 text-sm">Орієнтація</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Change Orientation
+                                Змінити орієнтацію
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
                             <i class="fas fa-square text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Frame</span>
+                            <span class="hidden md:inline ml-1 text-sm">Рамка</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Frame Tool (F)
+                                Інструмент «Рамка» (F)
                             </div>
                         </button>
                     </div>
-                    
+
                     <div class="h-6 w-px bg-gray-300"></div>
-                    
-                    <!-- Zoom Controls -->
+
+                    <!-- Масштаб -->
                     <div class="flex items-center space-x-1 md:space-x-3">
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomIn()">
                             <i class="fas fa-search-plus text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Zoom In</span>
+                            <span class="hidden md:inline ml-1 text-sm">Збільшити</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Zoom In (Ctrl+=)
+                                Збільшити (Ctrl+=)
                             </div>
                         </button>
-                        
+
                         <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomOut()">
                             <i class="fas fa-search-minus text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Zoom Out</span>
+                            <span class="hidden md:inline ml-1 text-sm">Зменшити</span>
                             <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Zoom Out (Ctrl+-)
+                                Зменшити (Ctrl+-)
                             </div>
                         </button>
                     </div>
-                    
+
                     <div class="h-6 w-px bg-gray-300"></div>
-                    
-                    <!-- Exit -->
+
+                    <!-- Вихід -->
                     <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
                         <i class="fas fa-sign-out-alt text-gray-700"></i>
-                        <span class="hidden md:inline ml-1 text-sm">Exit</span>
+                        <span class="hidden md:inline ml-1 text-sm">Вихід</span>
                         <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                            Exit Application (Alt+F4)
+                            Вийти (Alt+F4)
                         </div>
                     </button>
                 </div>
-                
-                <!-- User/Actions -->
+
+                <!-- Публікація -->
                 <div class="hidden md:flex items-center space-x-3">
                     <button class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                         <i class="fas fa-cloud-upload-alt mr-1"></i>
-                        <span>Publish</span>
+                        <span>Публікувати</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Tabs Section - вставити після </div> toolbar'а -->
+    <!-- Вкладки -->
     <div class="bg-gray-50 border-b border-gray-200">
         <div class="container mx-auto px-4">
-            <div id="tabs-container" class="flex items-center space-x-2 overflow-x-auto py-2">
-                <!-- Tabs will be added here dynamically -->
-            </div>
+            <div id="tabs-container" class="flex items-center space-x-2 overflow-x-auto py-2"></div>
         </div>
     </div>
-    
-    <!-- Замінити рядок з canvas-container на: -->
-	<div class="flex flex-1 overflow-hidden">
-		<!-- Canvas area -->
-		<div id="canvas-container" class="flex-1 overflow-auto p-4">
-			<!-- Canvases will be added here dynamically -->
-		</div>
-		
-		<!-- Hierarchy panel -->
-		<div id="hierarchy-panel" class="w-64 bg-white border-l border-gray-200 overflow-y-auto p-4">
-			<h3 class="font-bold text-sm mb-3 text-gray-700">Ієрархія елементів</h3>
-			<div id="hierarchy-tree" class="text-sm">
-				<!-- Hierarchy will be rendered here -->
-			</div>
-		</div>
-	</div>
 
-    <style>
-        .paper-frame {
-            filter: drop-shadow(0 0 2px rgba(30, 136, 229, 0.5));
-        }
-        html, body {
-            height: 100%;
-            margin: 0;
-        }
-        body {
-            display: flex;
-            flex-direction: column;
-        }
-        /* Стилі для модалки */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.5);
-        }
-        .modal-content {
-            background-color: #fefefe;
-            margin: 10% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 90%;
-            max-width: 600px;
-            border-radius: 8px;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        .modal textarea {
-            width: 100%;
-            height: 400px;
-            font-family: monospace;
-            font-size: 12px;
-            line-height: 1.4;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            padding: 10px;
-            resize: vertical;
-            box-sizing: border-box;
-        }
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 15px;
-        }
-        .modal-buttons button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .btn-copy {
-            background-color: #4CAF50;
-            color: white;
-        }
-        .btn-close {
-            background-color: #f44336;
-            color: white;
-        }
-		/* Стилі для ієрархії */
-		.hierarchy-item {
-			padding: 6px 8px;
-			margin-bottom: 2px;
-			border-radius: 4px;
-			cursor: pointer;
-			transition: background-color 0.2s;
-			display: flex;
-			align-items: center;
-			gap: 6px;
-			user-select: none;
-		}
-		.hierarchy-item:hover {
-			background-color: #f0f0f0;
-		}
-		.hierarchy-item.selected {
-			background-color: #e3f2fd;
-			border-left: 3px solid #2196F3;
-		}
-		.hierarchy-item .icon {
-			width: 16px;
-			height: 16px;
-			flex-shrink: 0;
-			color: #666;
-		}
-		.hierarchy-children {
-			margin-left: 20px;
-			border-left: 1px solid #ddd;
-			padding-left: 8px;
-		}
-		.hierarchy-toggle {
-			width: 14px;
-			height: 14px;
-			cursor: pointer;
-			flex-shrink: 0;
-			font-size: 10px;
-			text-align: center;
-			user-select: none;
-			color: #999;
-		}
-		.hierarchy-toggle:hover {
-			color: #333;
-		}
-    </style>
-    
-    <!-- Модалка для копіювання -->
+    <!-- Основна область -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Полотно -->
+        <div id="canvas-container" class="flex-1 overflow-auto p-4"></div>
+
+        <!-- Панель ієрархії -->
+        <div id="hierarchy-panel" class="w-64 bg-white border-l border-gray-200 overflow-y-auto p-4">
+            <h3 class="font-bold text-sm mb-3 text-gray-700">Ієрархія елементів</h3>
+            <div id="hierarchy-tree" class="text-sm"></div>
+        </div>
+    </div>
+
+    <!-- Модалка копіювання SVG -->
     <div id="copyModal" class="modal">
         <div class="modal-content">
-            <h3 id="modalTitle" style="margin-top: 0;">Copy SVG Code</h3>
-            <p>Copy the code below and paste it into a new file in your editor (e.g., save as "design.svg").</p>
+            <h3 id="modalTitle" style="margin-top: 0;">Скопіювати SVG-код</h3>
+            <p>Скопіюйте код нижче та вставте в новий файл (наприклад, збережіть як "design.svg").</p>
             <textarea id="svgCode" readonly></textarea>
             <div class="modal-buttons">
-                <button class="btn-copy" onclick="copySvgCode()">Copy</button>
-                <button class="btn-close" onclick="closeModal()">Close</button>
+                <button class="btn-copy" onclick="copySvgCode()">Копіювати</button>
+                <button class="btn-close" onclick="closeModal()">Закрити</button>
             </div>
         </div>
     </div>
-    
-    <!-- Модалка для створення фігур -->
+
+    <!-- Модалка редактора фігур -->
     <div id="shapeModal" class="modal">
         <div class="modal-content" style="max-width: 100vw; max-height: 100vh; width: 100%; height: 100%; margin: 0; border-radius: 0; padding: 0; display: flex; flex-direction: column;">
-            <!-- Панель інструментів -->
+            <!-- Панель інструментів модалки -->
             <div style="background: white; border-bottom: 2px solid #ddd; padding: 15px; display: flex; gap: 10px; align-items: center;">
-                <h3 style="margin: 0; flex: 1;">Create Shapes</h3>
+                <h3 style="margin: 0; flex: 1;">Редактор фігур</h3>
                 <button style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="addPoint()">
                     <i class="fas fa-plus"></i> Додати
                 </button>
@@ -305,80 +185,64 @@
                 <button style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="addDiagonal()">
                     <i class="fas fa-slash"></i> Діагональ
                 </button>
-				<button style="padding: 10px 20px; background: #00BCD4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="openQuickShapeModal()">
-					<i class="fas fa-bolt"></i> Швидко
-				</button>
+                <button style="padding: 10px 20px; background: #00BCD4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="openQuickShapeModal()">
+                    <i class="fas fa-bolt"></i> Швидко
+                </button>
                 <button style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeShapeModal()">
                     <i class="fas fa-check"></i> OK
                 </button>
             </div>
-            
-            <!-- SVG полотно -->
+
+            <!-- SVG полотно + список ліній -->
             <div id="shapeCanvasContainer" style="flex: 1; background: #f0f0f0; overflow: hidden; position: relative; display: flex; gap: 10px;">
                 <svg id="shapeCanvas" width="100%" height="100%" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" style="background: white; flex: 1;">
-                    <!-- Початкова точка -->
                     <circle cx="400" cy="300" r="5" fill="#e53935" />
                     <text x="410" y="295" font-size="16" fill="#e53935" font-weight="bold">1</text>
                 </svg>
-                
+
                 <!-- Список ліній -->
                 <div style="width: 150px; background: white; border-left: 2px solid #ddd; padding: 10px; overflow-y: auto;">
                     <h4 style="margin: 0 0 10px 0; font-weight: bold; font-size: 14px;">Лінії фігури</h4>
-                    
-                    
-                    
-                    <div id="linesList" style="display: flex; flex-direction: column; gap: 5px;">
-                        <!-- Тут будуть з'являтися лінії -->
-                    </div>
+                    <div id="linesList" style="display: flex; flex-direction: column; gap: 5px;"></div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Модалка для введення координат -->
+
+    <!-- Модалка введення координат -->
     <div id="coordModal" class="modal">
         <div class="modal-content" style="max-width: 100vw; max-height: 100vh; width: 100%; height: 100%; margin: 0; border-radius: 0; padding: 0; display: flex; flex-direction: column;">
             <!-- Заголовок -->
             <div style="background: white; border-bottom: 2px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
                 <h3 style="margin: 0;">Введіть координати</h3>
-                <button style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="console.log('OK button clicked'); closeCoordModal();">
+                <button style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeCoordModal()">
                     <i class="fas fa-check"></i> OK
                 </button>
             </div>
-            
+
             <!-- Контент -->
             <div style="flex: 1; padding: 20px; background: #f9f9f9; overflow-y: auto; display: flex; gap: 30px;">
-                <!-- Ліва частина - поле вводу -->
+                <!-- Поле вводу -->
                 <div style="width: 133px;">
                     <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 16px;">Введіть числа (по одному в рядку):</label>
                     <textarea id="coordInput" inputmode="decimal" style="width: 100%; height: 400px; font-size: 18px; padding: 15px; border: 2px solid #ddd; border-radius: 4px; font-family: monospace; resize: vertical;" placeholder="100&#10;200&#10;150"></textarea>
                 </div>
-                
-                <!-- Права частина - кнопки -->
+
+                <!-- Кнопки налаштувань -->
                 <div style="display: flex; flex-direction: column; gap: 20px;">
-                    <!-- Група 1: Напрямок кутів -->
+                    <!-- Напрямок -->
                     <div style="border: 2px solid #2196F3; border-radius: 8px; padding: 15px; background: white;">
                         <div style="font-weight: bold; margin-bottom: 10px; color: #2196F3; font-size: 14px;">Напрямок кутів</div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button onclick="setAngle('up')" style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вверх (90°)">
-                                <i class="fas fa-arrow-up"></i>
-                            </button>
-                            <button onclick="setAngle('down')" style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вниз (90°)">
-                                <i class="fas fa-arrow-down"></i>
-                            </button>
-                            <button onclick="setAngle('right')" style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вправо (90°)">
-                                <i class="fas fa-arrow-right"></i>
-                            </button>
-                            <button onclick="setAngle('left')" style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вліво (90°)">
-                                <i class="fas fa-arrow-left"></i>
-                            </button>
-                            <button onclick="setAngle('free')" style="padding: 6px 8px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вільний кут">
-                                В
-                            </button>
+                            <button onclick="setAngle('up')"    style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вверх"><i class="fas fa-arrow-up"></i></button>
+                            <button onclick="setAngle('down')"  style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вниз"><i class="fas fa-arrow-down"></i></button>
+                            <button onclick="setAngle('right')" style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вправо"><i class="fas fa-arrow-right"></i></button>
+                            <button onclick="setAngle('left')"  style="padding: 6px 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вліво"><i class="fas fa-arrow-left"></i></button>
+                            <button onclick="setAngle('free')"  style="padding: 6px 8px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; min-width: 35px;" title="Вільний кут">В</button>
                         </div>
                     </div>
-                    
-                    <!-- Група 2: Тип лінії -->
+
+                    <!-- Тип лінії -->
                     <div style="border: 2px solid #4CAF50; border-radius: 8px; padding: 15px; background: white;">
                         <div style="font-weight: bold; margin-bottom: 10px; color: #4CAF50; font-size: 14px;">Тип лінії</div>
                         <div style="display: flex; gap: 8px;">
@@ -390,114 +254,112 @@
                             </button>
                         </div>
                     </div>
-                   <!-- Група 3: Елементи -->
-              <div style="border: 2px solid #9C27B0; border-radius: 8px; padding: 15px; background: white; max-width: 300px;">
-                <div style="font-weight: bold; margin-bottom: 10px; color: #9C27B0; font-size: 14px;">Елементи</div>
-                <div style="display: grid; grid-template-columns: auto auto; gap: 8px; font-size: 12px; max-height: 200px; overflow-y: auto;">
-                    
-                    <!-- Вікно 1 -->
-                    <div style="padding: 4px 0; display: flex; align-items: center; justify-content: flex-start;">
-                        <svg width="60" height="10" viewBox="0 0 60 10" style="border: 1px solid #999;">
-                            <rect x="1" y="1" width="58" height="8" fill="none" stroke="black" stroke-width="1"/>
-                            <line x1="1" y1="5" x2="59" y2="5" stroke="black" stroke-width="1"/>
-                        </svg>
+
+                    <!-- Елементи -->
+                    <div style="border: 2px solid #9C27B0; border-radius: 8px; padding: 15px; background: white; max-width: 300px;">
+                        <div style="font-weight: bold; margin-bottom: 10px; color: #9C27B0; font-size: 14px;">Елементи</div>
+                        <div style="display: grid; grid-template-columns: auto auto; gap: 8px; font-size: 12px; max-height: 200px; overflow-y: auto;">
+                            <div style="padding: 4px 0; display: flex; align-items: center;">
+                                <svg width="60" height="10" viewBox="0 0 60 10" style="border: 1px solid #999;">
+                                    <rect x="1" y="1" width="58" height="8" fill="none" stroke="black" stroke-width="1"/>
+                                    <line x1="1" y1="5" x2="59" y2="5" stroke="black" stroke-width="1"/>
+                                </svg>
+                            </div>
+                            <button onclick="selectElement('WI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">WI1</button>
+
+                            <span style="padding: 4px 0;">Двері 1</span>
+                            <button onclick="selectElement('DV1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">DV1</button>
+
+                            <span style="padding: 4px 0;">Отвір 1</span>
+                            <button onclick="selectElement('OT1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">OT1</button>
+
+                            <span style="padding: 4px 0;">Комин 1</span>
+                            <button onclick="selectElement('KO1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KO1</button>
+
+                            <span style="padding: 4px 0;">Комин 2</span>
+                            <button onclick="selectElement('KO2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KO2</button>
+
+                            <span style="padding: 4px 0;">Піч 1</span>
+                            <button onclick="selectElement('PI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">PI1</button>
+
+                            <span style="padding: 4px 0;">Піч 2</span>
+                            <button onclick="selectElement('PI2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">PI2</button>
+
+                            <span style="padding: 4px 0;">Кухня 1</span>
+                            <button onclick="selectElement('KU1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KU1</button>
+
+                            <span style="padding: 4px 0;">Кухня 2</span>
+                            <button onclick="selectElement('KU2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KU2</button>
+
+                            <span style="padding: 4px 0;">Кухня 3</span>
+                            <button onclick="selectElement('KU3')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KU3</button>
+
+                            <span style="padding: 4px 0;">Колона 1</span>
+                            <button onclick="selectElement('KL1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KL1</button>
+
+                            <span style="padding: 4px 0;">Колона 2</span>
+                            <button onclick="selectElement('KL2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KL2</button>
+
+                            <span style="padding: 4px 0;">Ніша 1</span>
+                            <button onclick="selectElement('NI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">NI1</button>
+                        </div>
                     </div>
-                    <button onclick="selectElement('WI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">WI1</button>                    
-                    
-                    <span style="padding: 4px 0;">Двері 1</span>
-                    <button onclick="selectElement('DV1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">DV1</button>
-                    
-                    <span style="padding: 4px 0;">Отвір 1</span>
-                    <button onclick="selectElement('OT1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">OT1</button>
-                    
-                    <span style="padding: 4px 0;">Комин 1</span>
-                    <button onclick="selectElement('KO1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KO1</button>
-                    
-                    <span style="padding: 4px 0;">Комин 2</span>
-                    <button onclick="selectElement('KO2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KO2</button>
-                    
-                    <span style="padding: 4px 0;">Піч 1</span>
-                    <button onclick="selectElement('PI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">PI1</button>
-                    
-                    <span style="padding: 4px 0;">Піч 2</span>
-                    <button onclick="selectElement('PI2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">PI2</button>
-                    
-                    <span style="padding: 4px 0;">Кухня 1</span>
-                    <button onclick="selectElement('KU1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KU1</button>
-                    
-                    <span style="padding: 4px 0;">Кухня 2</span>
-                    <button onclick="selectElement('KU2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KU2</button>
-                    
-                    <span style="padding: 4px 0;">Кухня 3</span>
-                    <button onclick="selectElement('KU3')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KU3</button>
-                    
-                    <span style="padding: 4px 0;">Колона 1</span>
-                    <button onclick="selectElement('KL1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KL1</button>
-                    
-                    <span style="padding: 4px 0;">Колона 2</span>
-                    <button onclick="selectElement('KL2')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">KL2</button>
-                    
-                    <span style="padding: 4px 0;">Ніша 1</span>
-                    <button onclick="selectElement('NI1')" style="padding: 4px 10px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">NI1</button>
-                </div>
-            </div>
-    </div>
-</div>
-                    
                 </div>
             </div>
         </div>
     </div>
-	<!-- Модалка "Швидко" -->
-	<div id="quickShapeModal" class="modal">
-		<div class="modal-content" style="max-width: 400px;">
-			<h3 style="margin-top: 0;">Швидке створення фігури</h3>
-			
-			<!-- Вибір типу фігури -->
-			<div style="margin-bottom: 20px;">
-				<label style="display: block; margin-bottom: 10px; font-weight: bold;">Тип фігури:</label>
-				<div style="display: flex; gap: 15px;">
-					<label style="display: flex; align-items: center; cursor: pointer;">
-						<input type="radio" name="shapeType" value="rectangle" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
-						<span>Прямокутник</span>
-					</label>
-					<label style="display: flex; align-items: center; cursor: pointer;">
-						<input type="radio" name="shapeType" value="triangle" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
-						<span>Трикутник</span>
-					</label>
-				</div>
-			</div>
-			
-			<!-- Поле для розмірів -->
-			<div style="margin-bottom: 20px;">
-				<label style="display: block; margin-bottom: 10px; font-weight: bold;" id="quickDimensionsLabel">
-					Розміри (ширина висота через пробіл):
-				</label>
-				<input 
-					type="text" 
-					id="quickDimensionsInput" 
-					inputmode="decimal"
-					placeholder="3.5 4.2"
-					style="width: 100%; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
-				>
-				<div style="font-size: 12px; color: #666; margin-top: 5px;">
-					Приклад для прямокутника: 3.5 4.2<br>
-					Приклад для трикутника: 3.5 4.2 5.0
-				</div>
-			</div>
-			
-			<!-- Кнопки -->
-			<div class="modal-buttons">
-				<button class="btn-copy" style="background-color: #4CAF50;" onclick="createQuickShape()">
-					<i class="fas fa-check"></i> OK
-				</button>
-				<button class="btn-close" onclick="closeQuickShapeModal()">
-					<i class="fas fa-times"></i> Скасувати
-				</button>
-			</div>
-		</div>
-	</div>
-    
+
+    <!-- Модалка швидкого створення -->
+    <div id="quickShapeModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 style="margin-top: 0;">Швидке створення фігури</h3>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: bold;">Тип фігури:</label>
+                <div style="display: flex; gap: 15px;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="shapeType" value="rectangle" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>Прямокутник</span>
+                    </label>
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="shapeType" value="triangle" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                        <span>Трикутник</span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: bold;" id="quickDimensionsLabel">
+                    Розміри (ширина висота через пробіл):
+                </label>
+                <input
+                    type="text"
+                    id="quickDimensionsInput"
+                    inputmode="decimal"
+                    placeholder="3.5 4.2"
+                    style="width: 100%; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
+                >
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Приклад для прямокутника: 3.5 4.2<br>
+                    Приклад для трикутника: 3.5 4.2 5.0
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-copy" style="background-color: #4CAF50;" onclick="createQuickShape()">
+                    <i class="fas fa-check"></i> OK
+                </button>
+                <button class="btn-close" onclick="closeQuickShapeModal()">
+                    <i class="fas fa-times"></i> Скасувати
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрипти -->
+    <script src="constants.js"></script>
+    <script src="state.js"></script>
+    <script src="toast.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
