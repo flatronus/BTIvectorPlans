@@ -91,6 +91,14 @@
                         <i class="fas fa-sign-out-alt text-gray-700"></i>
                         <span class="toolbar-label ml-1 text-sm">Вихід</span>
                     </button>
+
+                    <div class="h-6 w-px bg-gray-300"></div>
+
+                    <!-- Ієрархія -->
+                    <button id="hierarchy-toggle-btn" class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="toggleHierarchyPanel()" title="Ієрархія елементів">
+                        <i class="fas fa-sitemap text-gray-700"></i>
+                        <span class="toolbar-label ml-1 text-sm">Ієрархія</span>
+                    </button>
                 </div>
 
 
@@ -106,12 +114,12 @@
     </div>
 
     <!-- Основна область -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden" style="position: relative;">
         <!-- Полотно -->
-        <div id="canvas-container" class="flex-1 overflow-auto p-4"></div>
+        <div id="canvas-container" class="flex-1 overflow-auto"></div>
 
         <!-- Панель ієрархії -->
-        <div id="hierarchy-panel" class="w-64 bg-white border-l border-gray-200 overflow-y-auto p-4">
+        <div id="hierarchy-panel" class="hierarchy-panel bg-white border-l border-gray-200 p-4">
             <h3 class="font-bold text-sm mb-3 text-gray-700">Ієрархія елементів</h3>
             <div id="hierarchy-tree" class="text-sm"></div>
         </div>
@@ -134,22 +142,25 @@
     <div id="shapeModal" class="modal">
         <div class="modal-content" style="max-width: 100vw; max-height: 100vh; width: 100%; height: 100%; margin: 0; border-radius: 0; padding: 0; display: flex; flex-direction: column;">
             <!-- Панель інструментів модалки -->
-            <div style="background: white; border-bottom: 2px solid #ddd; padding: 15px; display: flex; gap: 10px; align-items: center;">
-                <h3 style="margin: 0; flex: 1;">Редактор фігур</h3>
-                <button style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="addPoint()">
-                    <i class="fas fa-plus"></i> Додати
+            <div class="shape-modal-toolbar">
+                <span class="shape-modal-title">Редактор фігур</span>
+                <button class="shape-btn shape-btn-blue" onclick="addPoint()" title="Додати точку">
+                    <i class="fas fa-plus"></i><span class="shape-btn-label"> Додати</span>
                 </button>
-                <button style="padding: 10px 20px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeShape()">
-                    <i class="fas fa-link"></i> Замкнути
+                <button class="shape-btn shape-btn-purple" onclick="closeShape()" title="Замкнути фігуру">
+                    <i class="fas fa-link"></i><span class="shape-btn-label"> Замкнути</span>
                 </button>
-                <button style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="addDiagonal()">
-                    <i class="fas fa-slash"></i> Діагональ
+                <button class="shape-btn shape-btn-orange" onclick="addDiagonal()" title="Діагональ">
+                    <i class="fas fa-slash"></i><span class="shape-btn-label"> Діагональ</span>
                 </button>
-                <button style="padding: 10px 20px; background: #00BCD4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="openQuickShapeModal()">
-                    <i class="fas fa-bolt"></i> Швидко
+                <button class="shape-btn shape-btn-cyan" onclick="openQuickShapeModal()" title="Швидке створення">
+                    <i class="fas fa-bolt"></i><span class="shape-btn-label"> Швидко</span>
                 </button>
-                <button style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeShapeModal()">
-                    <i class="fas fa-check"></i> OK
+                <button class="shape-btn shape-btn-green" onclick="closeShapeModal()" title="Зберегти і закрити">
+                    <i class="fas fa-check"></i><span class="shape-btn-label"> OK</span>
+                </button>
+                <button class="shape-btn shape-btn-red" onclick="cancelShapeModal()" title="Відміна — закрити без збереження">
+                    <i class="fas fa-times"></i><span class="shape-btn-label"> Відміна</span>
                 </button>
             </div>
 

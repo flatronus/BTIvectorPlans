@@ -24,6 +24,21 @@ document.addEventListener('DOMContentLoaded', function () {
         resetShapeData();
     };
 
+    /** Закрити редактор фігур без збереження змін */
+    window.cancelShapeModal = function () {
+        document.getElementById('shapeModal').style.display = 'none';
+        resetShapeData();
+    };
+
+    /** Відкрити / приховати панель ієрархії */
+    window.toggleHierarchyPanel = function () {
+        const panel = document.getElementById('hierarchy-panel');
+        const btn   = document.getElementById('hierarchy-toggle-btn');
+        const isHidden = panel.classList.contains('hierarchy-panel--hidden');
+        panel.classList.toggle('hierarchy-panel--hidden', !isHidden);
+        if (btn) btn.classList.toggle('bg-blue-100', isHidden);
+    };
+
     /* ── Клавіатурні скорочення ── */
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {

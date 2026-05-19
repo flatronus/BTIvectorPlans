@@ -25,6 +25,103 @@ body {
     }
 }
 
+/* ===== Панель ієрархії ===== */
+.hierarchy-panel {
+    width: 256px;          /* w-64 */
+    flex-shrink: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: width 0.2s ease, padding 0.2s ease;
+}
+
+/* Вузька прокрутка для панелі ієрархії */
+.hierarchy-panel::-webkit-scrollbar        { width: 4px; }
+.hierarchy-panel::-webkit-scrollbar-track  { background: transparent; }
+.hierarchy-panel::-webkit-scrollbar-thumb  { background: #bbb; border-radius: 2px; }
+.hierarchy-panel::-webkit-scrollbar-thumb:hover { background: #888; }
+.hierarchy-panel                           { scrollbar-width: thin; scrollbar-color: #bbb transparent; }
+
+/* Прихована панель */
+.hierarchy-panel--hidden {
+    width: 0;
+    padding: 0;
+    border: none;
+    overflow: hidden;
+}
+
+/* На мобільних — не ширше 2/3 екрану */
+@media (max-width: 767px) {
+    .hierarchy-panel {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 200;
+        max-width: 66.666vw;
+        width: 220px;
+        box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+    }
+    .hierarchy-panel--hidden {
+        width: 0;
+        box-shadow: none;
+    }
+}
+
+/* ===== Панель кнопок редактора фігур ===== */
+.shape-modal-toolbar {
+    background: white;
+    border-bottom: 2px solid #ddd;
+    padding: 8px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.shape-modal-title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+    .shape-modal-title { display: none; }
+    .shape-modal-toolbar { padding: 6px 8px; gap: 4px; }
+}
+
+/* Кнопки редактора фігур */
+.shape-btn {
+    padding: 8px 12px;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+}
+
+/* Написи всередині кнопок редактора — ховаються на мобільних */
+.shape-btn-label { display: inline; }
+@media (max-width: 767px) {
+    .shape-btn-label { display: none; }
+    .shape-btn { padding: 8px 10px; font-size: 14px; }
+}
+
+.shape-btn-blue   { background: #2196F3; }
+.shape-btn-purple { background: #9C27B0; }
+.shape-btn-orange { background: #FF9800; }
+.shape-btn-cyan   { background: #00BCD4; }
+.shape-btn-green  { background: #4CAF50; }
+.shape-btn-red    { background: #f44336; }
+
+.shape-btn:hover { opacity: 0.88; }
+
 /* ===== Рамка аркуша ===== */
 .paper-frame {
     filter: drop-shadow(0 0 2px rgba(30, 136, 229, 0.5));
