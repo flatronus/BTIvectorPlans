@@ -356,10 +356,20 @@
         </div>
     </div>
 
-    <!-- Скрипти -->
-    <script src="constants.js"></script>
-    <script src="state.js"></script>
-    <script src="toast.js"></script>
-    <script src="script.js"></script>
+    <!-- Скрипти: порядок підключення важливий -->
+    <script src="constants.js"></script>       <!-- 1. Константи -->
+    <script src="state.js"></script>           <!-- 2. appState -->
+    <script src="g.js"></script>               <!-- 3. G — змінний стан -->
+    <script src="toast.js"></script>           <!-- 4. showToast() -->
+    <script src="svg-primitives.js"></script>  <!-- 5. SVG-хелпери -->
+    <script src="elements-on-line.js"></script><!-- 6. WI1 та ін. -->
+    <script src="canvas-manager.js"></script>  <!-- 7. canvasManager, zoom, save -->
+    <script src="hierarchy.js"></script>       <!-- 8. Дерево елементів -->
+    <script src="shape-editor.js"></script>    <!-- 9. Малювання фігур -->
+    <script src="shape-transfer.js"></script>  <!-- 10. Перенос на головне полотно -->
+    <script src="coord-modal.js"></script>     <!-- 11. Модалка координат -->
+    <script src="lines-panel.js"></script>     <!-- 12. Панель ліній -->
+    <script src="quick-shape.js"></script>     <!-- 13. Швидке створення фігур -->
+    <script src="main.js"></script>            <!-- 14. Ініціалізація (останній) -->
 </body>
 </html>
