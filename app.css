@@ -14,6 +14,17 @@ body {
     display: block;
 }
 
+/* ===== Написи кнопок панелі інструментів ===== */
+/* На мобільних — тільки іконки; на планшетах та десктопі — з написами */
+.toolbar-label {
+    display: none;
+}
+@media (min-width: 768px) {
+    .toolbar-label {
+        display: inline;
+    }
+}
+
 /* ===== Рамка аркуша ===== */
 .paper-frame {
     filter: drop-shadow(0 0 2px rgba(30, 136, 229, 0.5));

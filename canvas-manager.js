@@ -196,9 +196,8 @@ window.canvasManager = {
         const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const isDesktop = !isMobile && 'showSaveFilePicker' in window;
 
-        if (isDesktop)                          this.saveWithFilePicker(canvas, blob);
-        else if (isMobile || G.isWebCodeApp)    this.showCopyModal(svgData, canvas.savedPath || `${canvas.name}.svg`);
-        else                                    this.saveWithDownload(canvas, blob);
+        if (isDesktop)          this.saveWithFilePicker(canvas, blob);
+        else                    this.saveWithDownload(canvas, blob);
     },
 
     async saveWithFilePicker(canvas, blob) {

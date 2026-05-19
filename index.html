@@ -16,124 +16,84 @@
             <div class="flex items-center justify-between py-2">
                 <!-- Логотип -->
                 <div class="flex items-center">
-                    <i class="fas fa-paint-brush text-blue-600 text-2xl mr-2"></i>
-                    <span class="font-bold text-xl hidden md:block">BTI Vector Plans</span>
+                    <i class="fas fa-paint-brush text-blue-600 text-2xl"></i>
                 </div>
 
                 <!-- Панель інструментів -->
-                <div class="flex items-center space-x-1 md:space-x-3 overflow-x-auto py-2">
+                <div class="flex items-center flex-wrap gap-x-1 gap-y-1 md:gap-x-3 py-1">
                     <!-- Файлові операції -->
-                    <div class="flex items-center space-x-1 md:space-x-3">
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.canvasManager && window.canvasManager.createCanvas()">
+                    <div class="flex items-center gap-x-1 md:gap-x-2">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.canvasManager && window.canvasManager.createCanvas()" title="Новий (Ctrl+N)">
                             <i class="fas fa-plus text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Новий</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Новий (Ctrl+N)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Новий</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.canvasManager && window.canvasManager.openCanvas()">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.canvasManager && window.canvasManager.openCanvas()" title="Відкрити (Ctrl+O)">
                             <i class="fas fa-folder-open text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Відкрити</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Відкрити (Ctrl+O)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Відкрити</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.saveActiveCanvas && window.saveActiveCanvas()">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.saveActiveCanvas && window.saveActiveCanvas()" title="Зберегти (Ctrl+S)">
                             <i class="fas fa-save text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Зберегти</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Зберегти (Ctrl+S)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Зберегти</span>
                         </button>
                     </div>
 
                     <div class="h-6 w-px bg-gray-300"></div>
 
                     <!-- Інструменти -->
-                    <div class="flex items-center space-x-1 md:space-x-3">
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                    <div class="flex items-center gap-x-1 md:gap-x-2">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Інструмент «Рука» (H)">
                             <i class="fas fa-hand-paper text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Рука</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Інструмент «Рука» (H)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Рука</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Інструмент «Зум» (Z)">
                             <i class="fas fa-search text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Зум</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Інструмент «Зум» (Z)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Зум</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="openShapeModal()">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="openShapeModal()" title="Додати фігуру (S)">
                             <i class="fas fa-shapes text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Фігури</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Додати фігуру (S)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Фігури</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Змінити орієнтацію">
                             <i class="fas fa-sync-alt text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Орієнтація</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Змінити орієнтацію
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Орієнтація</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Інструмент «Рамка» (F)">
                             <i class="fas fa-square text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Рамка</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Інструмент «Рамка» (F)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Рамка</span>
                         </button>
                     </div>
 
                     <div class="h-6 w-px bg-gray-300"></div>
 
                     <!-- Масштаб -->
-                    <div class="flex items-center space-x-1 md:space-x-3">
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomIn()">
+                    <div class="flex items-center gap-x-1 md:gap-x-2">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomIn()" title="Збільшити (Ctrl+=)">
                             <i class="fas fa-search-plus text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Збільшити</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Збільшити (Ctrl+=)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Збільшити</span>
                         </button>
 
-                        <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomOut()">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="event.preventDefault(); zoomOut()" title="Зменшити (Ctrl+-)">
                             <i class="fas fa-search-minus text-gray-700"></i>
-                            <span class="hidden md:inline ml-1 text-sm">Зменшити</span>
-                            <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                                Зменшити (Ctrl+-)
-                            </div>
+                            <span class="toolbar-label ml-1 text-sm">Зменшити</span>
                         </button>
                     </div>
 
                     <div class="h-6 w-px bg-gray-300"></div>
 
                     <!-- Вихід -->
-                    <button class="toolbar-button relative px-2 py-1 rounded hover:bg-gray-100 transition">
+                    <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Вийти (Alt+F4)">
                         <i class="fas fa-sign-out-alt text-gray-700"></i>
-                        <span class="hidden md:inline ml-1 text-sm">Вихід</span>
-                        <div class="tooltip absolute hidden -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                            Вийти (Alt+F4)
-                        </div>
+                        <span class="toolbar-label ml-1 text-sm">Вихід</span>
                     </button>
                 </div>
 
-                <!-- Публікація -->
-                <div class="hidden md:flex items-center space-x-3">
-                    <button class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
-                        <i class="fas fa-cloud-upload-alt mr-1"></i>
-                        <span>Публікувати</span>
-                    </button>
-                </div>
+
             </div>
         </div>
     </div>
