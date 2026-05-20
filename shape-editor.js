@@ -554,9 +554,7 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
         lineType:        'line',
         length:          diagDist,
         elements:        [{ type: 'number', value: diagDist }],
-        code:            'diagonal
-line
-' + diagDist,
+        code:            'diagonal\nline\n' + diagDist,
         dimensionVisible: true,
         dimensionRotated: false,
         _cachedEnd:      null
