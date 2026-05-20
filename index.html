@@ -186,9 +186,14 @@
             <!-- Заголовок -->
             <div style="background: white; border-bottom: 2px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
                 <h3 style="margin: 0;">Введіть координати</h3>
-                <button style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeCoordModal()">
-                    <i class="fas fa-check"></i> OK
-                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeCoordModal()">
+                        <i class="fas fa-check"></i> OK
+                    </button>
+                    <button style="padding: 10px 20px; background: #9E9E9E; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="cancelCoordModal()">
+                        <i class="fas fa-times"></i> Відмінити
+                    </button>
+                </div>
             </div>
 
             <!-- Контент -->

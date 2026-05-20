@@ -264,21 +264,40 @@ window.deleteLineAndFollowing = function (lineId) {
     const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
-    // Визначаємо номер першої точки що буде видалена
-    // Це точка «to» лінії з idx (або from наступної)
     const deletedLine = G.figureLines[idx];
-    const firstDeletedPointNum = deletedLine.isDiagonal ? null : deletedLine.to;
 
-    // Видаляємо лінію і всі після неї (за позицією в масиві)
-    G.figureLines.splice(idx);
+    // Визначаємо першу точку що зникне — «to» видаленої лінії
+    // (для замикаючої — точка 1 не видаляється, просто прибираємо замикання)
+    const firstDeletedPointNum = (!deletedLine.isDiagonal && !deletedLine.isClosing)
+        ? deletedLine.to
+        : null;
 
-    // Видаляємо також діагоналі що посилаються на видалені точки
+    // Збираємо id ліній що треба видалити:
+    // 1) Сама лінія
+    // 2) Всі не-діагональні лінії у яких from >= firstDeletedPointNum
+    //    (тобто починаються з видаленої або пізнішої точки)
+    // 3) Діагоналі у яких хоча б одна точка (from або to) >= firstDeletedPointNum
+    const toDelete = new Set();
+    toDelete.add(lineId);
+
     if (firstDeletedPointNum !== null) {
-        G.figureLines = G.figureLines.filter(function(l) {
-            if (!l.isDiagonal) return true;
-            return l.from < firstDeletedPointNum && l.to < firstDeletedPointNum;
+        G.figureLines.forEach(function(l) {
+            if (l.id === lineId) return;
+            if (!l.isDiagonal) {
+                // Звичайна лінія: видаляємо якщо її початок >= firstDeletedPointNum
+                if (l.from >= firstDeletedPointNum || l.to >= firstDeletedPointNum) {
+                    toDelete.add(l.id);
+                }
+            } else {
+                // Діагональ: видаляємо тільки якщо хоча б одна точка зникає
+                if (l.from >= firstDeletedPointNum || l.to >= firstDeletedPointNum) {
+                    toDelete.add(l.id);
+                }
+            }
         });
     }
+
+    G.figureLines = G.figureLines.filter(function(l) { return !toDelete.has(l.id); });
 
     // Скидаємо pointCounter
     let maxPt = 1;
@@ -291,7 +310,6 @@ window.deleteLineAndFollowing = function (lineId) {
     appState.customArea     = null;
 
     if (G.figureLines.length === 0) {
-        // Скидаємо все до початкового стану
         const svg = document.getElementById('shapeCanvas');
         resetSvgCanvas(svg);
         updateLinesList();

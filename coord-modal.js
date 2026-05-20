@@ -128,6 +128,14 @@ window.closeCoordModal = function () {
     }
 };
 
+/* ── Відмінити — закрити без змін ── */
+window.cancelCoordModal = function () {
+    appState.editingLineId = null;
+    appState.isClosingLine = false;
+    document.getElementById('coordModal').style.display = 'none';
+    document.getElementById('coordInput').value = '';
+};
+
 /* Застаріла функція (залишена для сумісності) */
 window.submitCoords = function () { closeCoordModal(); };
 

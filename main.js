@@ -60,12 +60,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /* ── Закриття модалок кліком на тлі ── */
     document.addEventListener('click', (event) => {
-        const copyModal  = document.getElementById('copyModal');
-        const quickModal = document.getElementById('quickShapeModal');
-        if (event.target === copyModal)  copyModal.style.display  = 'none';
-        if (event.target === quickModal) closeQuickShapeModal();
+        const copyModal     = document.getElementById('copyModal');
+        const quickModal    = document.getElementById('quickShapeModal');
+        const coordModal    = document.getElementById('coordModal');
         const diagonalModal = document.getElementById('diagonalModal');
+        if (event.target === copyModal)     copyModal.style.display = 'none';
+        if (event.target === quickModal)    closeQuickShapeModal();
+        if (event.target === coordModal)    cancelCoordModal();
         if (event.target === diagonalModal) closeDiagonalModal();
+    });
+
+    /* ── Escape закриває модалки без змін ── */
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (document.getElementById('coordModal').style.display    === 'block') cancelCoordModal();
+            if (document.getElementById('diagonalModal').style.display === 'block') closeDiagonalModal();
+        }
     });
 
     /* ── Ініціалізація поля номера приміщення ── */
