@@ -212,6 +212,11 @@ window.updateExistingLine = function (lineId, parsedData) {
         if (parsedData.elements[i].type === 'number') { newLength = parsedData.elements[i].value; break; }
     }
 
+    if (newLength <= 0) {
+        showToast('Довжина лінії не може бути нульовою або від\'ємною', 'warning');
+        return;
+    }
+
     G.figureLines[idx].direction = parsedData.direction;
     G.figureLines[idx].lineType  = parsedData.lineType;
     G.figureLines[idx].elements  = parsedData.elements;
@@ -443,6 +448,137 @@ window.calculateFreeAngleFigure = function () {
     } else {
         showToast('Розрахунок для більше ніж двох free-ліній поки не підтримується', 'warning');
     }
+};
+
+
+/* ── Застосування діагонального обмеження ── */
+window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
+    // Знаходимо лінії між pt1 і pt2
+    // Шукаємо шлях pt1 -> ... -> pt2 у G.figureLines
+    // Підтримуємо найпростіший випадок: pt1 -> mid -> pt2 (одна проміжна точка)
+
+    const p1 = G.shapePoints.find(function(p) { return p.num === pt1Num; });
+    const p2 = G.shapePoints.find(function(p) { return p.num === pt2Num; });
+    if (!p1 || !p2) { showToast('Точки не знайдено', 'error'); return; }
+
+    // Знаходимо лінію від pt1 до наступної точки
+    const lineFromPt1 = G.figureLines.find(function(l) { return l.from === pt1Num && !l.isClosing; });
+    if (!lineFromPt1) { showToast('Немає лінії від точки ' + pt1Num, 'error'); return; }
+
+    const midNum = lineFromPt1.to;
+    if (midNum === pt2Num) {
+        showToast('Точки ' + pt1Num + ' і ' + pt2Num + ' є сусідніми — діагональ не потрібна', 'warning');
+        return;
+    }
+
+    // Перевіряємо, що є лінія від mid до pt2
+    const lineToCheck = G.figureLines.find(function(l) {
+        return l.from === midNum && (l.to === pt2Num || (l.isClosing && pt2Num === 1));
+    });
+    if (!lineToCheck) {
+        showToast('Діагональ підтримується тільки через одну проміжну точку', 'warning');
+        return;
+    }
+
+    const a = lineFromPt1.length * SCALE;  // pt1 -> mid
+    const b = lineToCheck.length  * SCALE; // mid -> pt2
+    const c = diagDist            * SCALE; // pt1 -> pt2 (діагональ)
+
+    // Перевірка нерівності трикутника
+    if (a + b <= c || a + c <= b || b + c <= a) {
+        showToast('Неможливо побудувати трикутник з такою діагоналлю (порушена нерівність)', 'error');
+        return;
+    }
+
+    // Теорема косинусів: знаходимо кут при pt1
+    // c² = a² + b² - 2ab·cos(C)  — але нам потрібен кут при pt1 між pt1->p2_direction і pt1->mid
+    // Замість цього: розміщуємо mid через теорему косинусів
+    // Знаємо: |pt1->mid| = a, |mid->pt2| = b, |pt1->pt2| = c
+    // Кут при pt1: cos(α) = (a² + c² - b²) / (2ac)
+    const cosAlpha = (a * a + c * c - b * b) / (2 * a * c);
+    const alpha    = Math.acos(Math.max(-1, Math.min(1, cosAlpha)));
+
+    // Вектор від pt1 до pt2 (задана діагональ — це напрямок pt2)
+    const dx2 = p2.x - p1.x;
+    const dy2 = p2.y - p1.y;
+    const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+    if (len2 === 0) { showToast('Точки збігаються', 'error'); return; }
+
+    const baseAngle = Math.atan2(dy2, dx2);
+
+    // Визначаємо, з якого боку розташована проміжна точка
+    // Пробуємо обидва варіанти і вибираємо ближчий до поточного положення mid
+    const midPt = G.shapePoints.find(function(p) { return p.num === midNum; });
+    const tryAngle1 = baseAngle + alpha;
+    const tryAngle2 = baseAngle - alpha;
+
+    const mid1x = p1.x + Math.cos(tryAngle1) * a;
+    const mid1y = p1.y + Math.sin(tryAngle1) * a;
+    const mid2x = p1.x + Math.cos(tryAngle2) * a;
+    const mid2y = p1.y + Math.sin(tryAngle2) * a;
+
+    let newMidX, newMidY;
+    if (midPt) {
+        const d1 = Math.hypot(mid1x - midPt.x, mid1y - midPt.y);
+        const d2 = Math.hypot(mid2x - midPt.x, mid2y - midPt.y);
+        if (d1 <= d2) { newMidX = mid1x; newMidY = mid1y; }
+        else          { newMidX = mid2x; newMidY = mid2y; }
+    } else {
+        newMidX = mid1x; newMidY = mid1y;
+    }
+
+    // Оновлюємо координату mid-точки в G.shapePoints
+    const midIdx = G.shapePoints.findIndex(function(p) { return p.num === midNum; });
+    if (midIdx !== -1) {
+        G.shapePoints[midIdx].x = newMidX;
+        G.shapePoints[midIdx].y = newMidY;
+    }
+
+    // Перемалювати
+    redrawEntireFigureFromPoints();
+    showToast('Діагональ застосовано: ' + pt1Num + '-' + pt2Num + ' = ' + diagDist + ' м', 'success');
+};
+
+/**
+ * Перемалювання фігури БЕЗ перерахунку координат (використовує вже обчислені G.shapePoints).
+ * Використовується після корекції точок (наприклад, діагоналлю).
+ */
+window.redrawEntireFigureFromPoints = function () {
+    const svg = document.getElementById('shapeCanvas');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    renderStartPoint(svg);
+
+    G.figureLines.forEach(function(lineData, index) {
+        const fromPt = G.shapePoints.find(function(p) { return p.num === lineData.from; });
+        const toPt   = lineData.isClosing
+            ? G.shapePoints[0]
+            : G.shapePoints.find(function(p) { return p.num === lineData.to; });
+        if (!fromPt || !toPt) return;
+
+        _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+        drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
+        drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
+
+        if (!lineData.isClosing) {
+            _renderSvgPoint(svg, toPt.x, toPt.y, toPt.num);
+        }
+    });
+
+    if (G.figureLines.some(function(l) { return l.isClosing; })) {
+        // Перерахувати площу з оновленими точками
+        let area = 0;
+        for (let i = 0; i < G.shapePoints.length; i++) {
+            const j = (i + 1) % G.shapePoints.length;
+            area += G.shapePoints[i].x * G.shapePoints[j].y;
+            area -= G.shapePoints[j].x * G.shapePoints[i].y;
+        }
+        area = Math.abs(area) / 2;
+        appState.calculatedArea = (area / (SCALE * SCALE)).toFixed(1);
+    }
+
+    updateLinesList();
+    autoScaleAndCenterFigure();
+    drawRoomNumber();
 };
 
 /* ── Допоміжна: намалювати лінію + розмір + точку на shapeCanvas ── */

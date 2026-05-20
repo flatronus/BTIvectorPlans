@@ -53,12 +53,19 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    /* ── Enter у модалці діагоналі ── */
+    document.getElementById('diagonalInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyDiagonal(); }
+    });
+
     /* ── Закриття модалок кліком на тлі ── */
     document.addEventListener('click', (event) => {
         const copyModal  = document.getElementById('copyModal');
         const quickModal = document.getElementById('quickShapeModal');
         if (event.target === copyModal)  copyModal.style.display  = 'none';
         if (event.target === quickModal) closeQuickShapeModal();
+        const diagonalModal = document.getElementById('diagonalModal');
+        if (event.target === diagonalModal) closeDiagonalModal();
     });
 
     /* ── Ініціалізація поля номера приміщення ── */

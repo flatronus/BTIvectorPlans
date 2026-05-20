@@ -32,9 +32,62 @@ window.closeShape = function () {
     }, 100);
 };
 
-/* ── Діагональ (заглушка) ── */
+/* ── Діагональ ── */
 window.addDiagonal = function () {
-    showToast('Функція «Діагональ» буде реалізована пізніше', 'info');
+    if (G.shapePoints.length < 2) {
+        showToast('Для діагоналі потрібно мінімум 2 точки', 'warning');
+        return;
+    }
+    document.getElementById('diagonalModal').style.display = 'block';
+    document.getElementById('diagonalInput').value = '';
+    const pts = G.shapePoints.map(function(p) { return p.num; }).join(', ');
+    document.getElementById('diagonalPointsHint').textContent = 'Наявні точки: ' + pts;
+    setTimeout(function() { document.getElementById('diagonalInput').focus(); }, 100);
+};
+
+window.closeDiagonalModal = function () {
+    document.getElementById('diagonalModal').style.display = 'none';
+    document.getElementById('diagonalInput').value = '';
+};
+
+window.applyDiagonal = function () {
+    const raw   = document.getElementById('diagonalInput').value.trim();
+    const parts = raw.split(/[\s,;]+/);
+    if (parts.length < 3) {
+        showToast('Формат: <точка1> <точка2> <відстань>  наприклад: 1 3 4,52', 'warning');
+        return;
+    }
+    const pt1Num = parseInt(parts[0]);
+    const pt2Num = parseInt(parts[1]);
+    const dist   = parseFloat(parts[2].replace(',', '.'));
+
+    if (isNaN(pt1Num) || isNaN(pt2Num) || isNaN(dist) || dist <= 0) {
+        showToast('Невірний формат. Приклад: 1 3 4,52', 'error');
+        return;
+    }
+    if (pt1Num === pt2Num) {
+        showToast('Точки мають бути різними', 'warning');
+        return;
+    }
+
+    const p1 = G.shapePoints.find(function(p) { return p.num === pt1Num; });
+    const p2 = G.shapePoints.find(function(p) { return p.num === pt2Num; });
+    if (!p1 || !p2) {
+        showToast('Точки ' + pt1Num + ' або ' + pt2Num + ' не знайдено', 'error');
+        return;
+    }
+
+    if (!G.diagonals) G.diagonals = [];
+    const existIdx = G.diagonals.findIndex(function(d) {
+        return (d.pt1 === pt1Num && d.pt2 === pt2Num) ||
+               (d.pt1 === pt2Num && d.pt2 === pt1Num);
+    });
+    const diagEntry = { pt1: pt1Num, pt2: pt2Num, dist: dist };
+    if (existIdx !== -1) G.diagonals[existIdx] = diagEntry;
+    else                 G.diagonals.push(diagEntry);
+
+    _applyDiagonalConstraint(pt1Num, pt2Num, dist);
+    closeDiagonalModal();
 };
 
 /* ── Закрити модалку координат та обробити введення ── */
@@ -51,6 +104,11 @@ window.closeCoordModal = function () {
                 drawLineOnCanvas(parsedData);
             }
         }
+        /* parsedData === null: помилка парсингу — не змінюємо нічого, не скидаємо editingLineId */
+    } else {
+        /* Порожнє поле — просто закриваємо без будь-яких змін */
+        appState.editingLineId = null;
+        appState.isClosingLine = false;
     }
 
     document.getElementById('coordModal').style.display = 'none';
