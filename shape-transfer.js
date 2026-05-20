@@ -13,6 +13,9 @@ window._fillSvgGroup = function (group, offsetX, offsetY) {
         const x1 = fromPoint.x + offsetX, y1 = fromPoint.y + offsetY;
         const x2 = toPoint.x   + offsetX, y2 = toPoint.y   + offsetY;
 
+        // Діагоналі на головному полотні невидимі
+        if (lineData.isDiagonal) return;
+
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', x1); line.setAttribute('y1', y1);
         line.setAttribute('x2', x2); line.setAttribute('y2', y2);

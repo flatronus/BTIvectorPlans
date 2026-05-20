@@ -25,6 +25,7 @@ window.resetShapeData = function () {
     appState.editingHierarchyItemId = null;
     G.roomNumber          = '';
     G.roomNumberInputValue = '';
+    G.diagonals           = [];
 
     const svg = document.getElementById('shapeCanvas');
     resetSvgCanvas(svg);
@@ -204,7 +205,7 @@ window.editLine = function (line) {
 };
 
 window.updateExistingLine = function (lineId, parsedData) {
-    const idx = G.figureLines.findIndex(l => l.id === lineId);
+    const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
     let newLength = 0;
@@ -212,7 +213,7 @@ window.updateExistingLine = function (lineId, parsedData) {
         if (parsedData.elements[i].type === 'number') { newLength = parsedData.elements[i].value; break; }
     }
 
-    if (newLength <= 0) {
+    if (!G.figureLines[idx].isDiagonal && newLength <= 0) {
         showToast('Довжина лінії не може бути нульовою або від\'ємною', 'warning');
         return;
     }
@@ -223,132 +224,126 @@ window.updateExistingLine = function (lineId, parsedData) {
     G.figureLines[idx].code      = document.getElementById('coordInput').value;
     G.figureLines[idx].length    = newLength;
 
-    const closingIdx = G.figureLines.findIndex(l => l.isClosing);
-    if (closingIdx !== -1 && idx < closingIdx) recalculateClosingLine();
+    // Якщо це діагональ — оновлюємо позицію кінцевої точки
+    if (G.figureLines[idx].isDiagonal && newLength > 0) {
+        _applyDiagonalConstraint(G.figureLines[idx].from, G.figureLines[idx].to, newLength);
+        return;
+    }
 
     redrawEntireFigure();
 };
 
-window.recalculateClosingLine = function () {
-    const closingIdx = G.figureLines.findIndex(l => l.isClosing);
-    if (closingIdx === -1) return;
-
-    const closingLine = G.figureLines.splice(closingIdx, 1)[0];
-
-    const svg = document.getElementById('shapeCanvas');
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-    G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
-    renderStartPoint(svg);
-
-    let currentPointNum = 1;
-    G.figureLines.forEach(lineData => {
-        const last = G.shapePoints[G.shapePoints.length - 1];
-        let endX = last.x, endY = last.y;
-        const scaledLen = lineData.length * SCALE;
-        switch (lineData.direction) {
-            case 'top':    endY = last.y - scaledLen; break;
-            case 'bottom': endY = last.y + scaledLen; break;
-            case 'left':   endX = last.x - scaledLen; break;
-            case 'right':  endX = last.x + scaledLen; break;
-        }
-        currentPointNum++;
-        G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
-    });
-
-    const last  = G.shapePoints[G.shapePoints.length - 1];
-    const first = G.shapePoints[0];
-    const newLen = (Math.sqrt((first.x - last.x) ** 2 + (first.y - last.y) ** 2) / SCALE).toFixed(2);
-
-    closingLine.length = parseFloat(newLen);
-    for (let i = closingLine.elements.length - 1; i >= 0; i--) {
-        if (closingLine.elements[i].type === 'number') {
-            closingLine.elements[i].value = parseFloat(newLen); break;
-        }
-    }
-    const codeLines = closingLine.code.split('\n');
-    for (let i = codeLines.length - 1; i >= 0; i--) {
-        if (!isNaN(parseFloat(codeLines[i]))) { codeLines[i] = newLen; break; }
-    }
-    closingLine.code = codeLines.join('\n');
-    G.figureLines.push(closingLine);
-};
 
 /* ── Перемалювання всієї фігури ── */
 window.redrawEntireFigure = function () {
     const svg = document.getElementById('shapeCanvas');
     while (svg.firstChild) svg.removeChild(svg.firstChild);
-    G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
+
+    _rebuildChainPoints();
     renderStartPoint(svg);
 
-    let currentPointNum = 1;
-    const calculatedPoints = {};
+    G.figureLines.forEach(function(lineData) {
+        const fromPt = G.shapePoints.find(function(p) { return p.num === lineData.from; });
+        const toPt   = lineData.isClosing
+            ? G.shapePoints[0]
+            : G.shapePoints.find(function(p) { return p.num === lineData.to; });
+        if (!fromPt || !toPt) return;
 
-    G.figureLines.forEach((lineData, index) => {
-        const lastPoint = G.shapePoints[G.shapePoints.length - 1];
-        let endX, endY;
-
-        if (lineData.isClosing) {
-            endX = G.shapePoints[0].x; endY = G.shapePoints[0].y;
-        } else if (lineData.direction === 'free') {
-            if (lineData.isPending) {
-                currentPointNum++;
-                G.shapePoints.push({ x: lastPoint.x, y: lastPoint.y, num: currentPointNum, isTemp: true });
-                G.figureLines[index].from = lastPoint.num;
-                G.figureLines[index].to   = currentPointNum;
-                return;
-            }
-
-            if (calculatedPoints[lineData.id]) {
-                endX = calculatedPoints[lineData.id].x;
-                endY = calculatedPoints[lineData.id].y;
-            } else {
-                let nextClosingIdx = -1;
-                for (let i = index + 1; i < G.figureLines.length; i++) {
-                    if (!G.figureLines[i].isPending || G.figureLines[i].isClosing) {
-                        nextClosingIdx = i; break;
-                    }
-                }
-                if (nextClosingIdx !== -1 && G.figureLines[nextClosingIdx].isClosing) {
-                    const coords = _calcFreeLineEnd(lastPoint, G.shapePoints[0], lineData, G.figureLines[nextClosingIdx]);
-                    endX = coords.x; endY = coords.y;
-                    calculatedPoints[lineData.id] = { x: endX, y: endY };
-                } else { return; }
-            }
+        if (lineData.isDiagonal) {
+            _renderSvgDashedLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
         } else {
-            endX = lastPoint.x; endY = lastPoint.y;
-            const scaledLen = lineData.length * SCALE;
-            switch (lineData.direction) {
-                case 'top':    endY = lastPoint.y - scaledLen; break;
-                case 'bottom': endY = lastPoint.y + scaledLen; break;
-                case 'left':   endX = lastPoint.x - scaledLen; break;
-                case 'right':  endX = lastPoint.x + scaledLen; break;
+            _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
+            drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
+            if (!lineData.isClosing) {
+                _renderSvgPoint(svg, toPt.x, toPt.y, toPt.num);
             }
-        }
-
-        _renderSvgLine(svg, lastPoint.x, lastPoint.y, endX, endY, lineData.id);
-        drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineData.length, lineData);
-        drawElementsOnLine(lineData, lastPoint.x, lastPoint.y, endX, endY, SCALE);
-
-        if (!lineData.isClosing) {
-            currentPointNum++;
-            G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
-            G.figureLines[index].from = lastPoint.num;
-            G.figureLines[index].to   = currentPointNum;
-            _renderSvgPoint(svg, endX, endY, currentPointNum);
-        } else {
-            G.figureLines[index].from = lastPoint.num;
-            G.figureLines[index].to   = 1;
         }
     });
 
-    G.pointCounter = currentPointNum;
-
-    if (G.figureLines.some(l => l.isClosing)) calculateAndDisplayArea();
+    G.pointCounter = G.shapePoints.length;
+    if (G.figureLines.some(function(l) { return l.isClosing && !l.isDiagonal; })) {
+        calculateAndDisplayArea();
+    }
     updateLinesList();
     autoScaleAndCenterFigure();
     drawRoomNumber();
 };
 
+/**
+ * Перебудовує G.shapePoints ланцюговим методом.
+ * Точка 1 = START_X/START_Y. Кожна наступна = кінець попередньої не-діагональної лінії.
+ * Замикаюча лінія завжди йде до точки 1.
+ * Діагоналі пов'язують наявні точки — нових не додають.
+ */
+window._rebuildChainPoints = function () {
+    G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
+    let currentPointNum = 1;
+
+    G.figureLines.forEach(function(lineData, index) {
+        if (lineData.isDiagonal) return;
+        if (lineData.isClosing)  return;
+
+        const lastPt    = G.shapePoints[G.shapePoints.length - 1];
+        let endX = lastPt.x, endY = lastPt.y;
+        const scaledLen = lineData.length * SCALE;
+
+        if (lineData.direction === 'free' && lineData.isPending) {
+            currentPointNum++;
+            G.shapePoints.push({ x: lastPt.x, y: lastPt.y, num: currentPointNum, isTemp: true });
+            G.figureLines[index].from = lastPt.num;
+            G.figureLines[index].to   = currentPointNum;
+            return;
+        }
+
+        if (lineData.direction === 'free' && lineData._cachedEnd) {
+            endX = lineData._cachedEnd.x;
+            endY = lineData._cachedEnd.y;
+        } else {
+            switch (lineData.direction) {
+                case 'top':    endY = lastPt.y - scaledLen; break;
+                case 'bottom': endY = lastPt.y + scaledLen; break;
+                case 'left':   endX = lastPt.x - scaledLen; break;
+                case 'right':  endX = lastPt.x + scaledLen; break;
+            }
+        }
+
+        currentPointNum++;
+        G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
+        G.figureLines[index].from = lastPt.num;
+        G.figureLines[index].to   = currentPointNum;
+    });
+
+    G.pointCounter = currentPointNum;
+
+    // Прив'язуємо замикаючі лінії та оновлюємо їх довжину
+    G.figureLines.forEach(function(lineData, index) {
+        if (!lineData.isClosing || lineData.isDiagonal) return;
+        const lastNonDiag = G.shapePoints[G.shapePoints.length - 1];
+        G.figureLines[index].from = lastNonDiag.num;
+        G.figureLines[index].to   = 1;
+        _updateClosingLineLength(index);
+    });
+};
+
+/** Оновлює довжину замикаючої лінії за реальними координатами */
+window._updateClosingLineLength = function (closingIdx) {
+    const cl     = G.figureLines[closingIdx];
+    const fromPt = G.shapePoints.find(function(p) { return p.num === cl.from; });
+    if (!fromPt) return;
+    const toPt   = G.shapePoints[0];
+    const realLen = parseFloat(
+        (Math.sqrt(Math.pow(toPt.x - fromPt.x, 2) + Math.pow(toPt.y - fromPt.y, 2)) / SCALE).toFixed(3)
+    );
+    G.figureLines[closingIdx].length = realLen;
+    for (let i = G.figureLines[closingIdx].elements.length - 1; i >= 0; i--) {
+        if (G.figureLines[closingIdx].elements[i].type === 'number') {
+            G.figureLines[closingIdx].elements[i].value = realLen;
+            break;
+        }
+    }
+};
 /* ── Розрахунок free-ліній (теорема косинусів) ── */
 window._calcFreeLineEnd = function (currentPoint, firstPoint, lineData, closingLine) {
     const a = lineData.length    * SCALE;
@@ -452,134 +447,126 @@ window.calculateFreeAngleFigure = function () {
 
 
 /* ── Застосування діагонального обмеження ── */
-window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
-    // Знаходимо лінії між pt1 і pt2
-    // Шукаємо шлях pt1 -> ... -> pt2 у G.figureLines
-    // Підтримуємо найпростіший випадок: pt1 -> mid -> pt2 (одна проміжна точка)
-
-    const p1 = G.shapePoints.find(function(p) { return p.num === pt1Num; });
-    const p2 = G.shapePoints.find(function(p) { return p.num === pt2Num; });
-    if (!p1 || !p2) { showToast('Точки не знайдено', 'error'); return; }
-
-    // Знаходимо лінію від pt1 до наступної точки
-    const lineFromPt1 = G.figureLines.find(function(l) { return l.from === pt1Num && !l.isClosing; });
-    if (!lineFromPt1) { showToast('Немає лінії від точки ' + pt1Num, 'error'); return; }
-
-    const midNum = lineFromPt1.to;
-    if (midNum === pt2Num) {
-        showToast('Точки ' + pt1Num + ' і ' + pt2Num + ' є сусідніми — діагональ не потрібна', 'warning');
-        return;
-    }
-
-    // Перевіряємо, що є лінія від mid до pt2
-    const lineToCheck = G.figureLines.find(function(l) {
-        return l.from === midNum && (l.to === pt2Num || (l.isClosing && pt2Num === 1));
-    });
-    if (!lineToCheck) {
-        showToast('Діагональ підтримується тільки через одну проміжну точку', 'warning');
-        return;
-    }
-
-    const a = lineFromPt1.length * SCALE;  // pt1 -> mid
-    const b = lineToCheck.length  * SCALE; // mid -> pt2
-    const c = diagDist            * SCALE; // pt1 -> pt2 (діагональ)
-
-    // Перевірка нерівності трикутника
-    if (a + b <= c || a + c <= b || b + c <= a) {
-        showToast('Неможливо побудувати трикутник з такою діагоналлю (порушена нерівність)', 'error');
-        return;
-    }
-
-    // Теорема косинусів: знаходимо кут при pt1
-    // c² = a² + b² - 2ab·cos(C)  — але нам потрібен кут при pt1 між pt1->p2_direction і pt1->mid
-    // Замість цього: розміщуємо mid через теорему косинусів
-    // Знаємо: |pt1->mid| = a, |mid->pt2| = b, |pt1->pt2| = c
-    // Кут при pt1: cos(α) = (a² + c² - b²) / (2ac)
-    const cosAlpha = (a * a + c * c - b * b) / (2 * a * c);
-    const alpha    = Math.acos(Math.max(-1, Math.min(1, cosAlpha)));
-
-    // Вектор від pt1 до pt2 (задана діагональ — це напрямок pt2)
-    const dx2 = p2.x - p1.x;
-    const dy2 = p2.y - p1.y;
-    const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-    if (len2 === 0) { showToast('Точки збігаються', 'error'); return; }
-
-    const baseAngle = Math.atan2(dy2, dx2);
-
-    // Визначаємо, з якого боку розташована проміжна точка
-    // Пробуємо обидва варіанти і вибираємо ближчий до поточного положення mid
-    const midPt = G.shapePoints.find(function(p) { return p.num === midNum; });
-    const tryAngle1 = baseAngle + alpha;
-    const tryAngle2 = baseAngle - alpha;
-
-    const mid1x = p1.x + Math.cos(tryAngle1) * a;
-    const mid1y = p1.y + Math.sin(tryAngle1) * a;
-    const mid2x = p1.x + Math.cos(tryAngle2) * a;
-    const mid2y = p1.y + Math.sin(tryAngle2) * a;
-
-    let newMidX, newMidY;
-    if (midPt) {
-        const d1 = Math.hypot(mid1x - midPt.x, mid1y - midPt.y);
-        const d2 = Math.hypot(mid2x - midPt.x, mid2y - midPt.y);
-        if (d1 <= d2) { newMidX = mid1x; newMidY = mid1y; }
-        else          { newMidX = mid2x; newMidY = mid2y; }
-    } else {
-        newMidX = mid1x; newMidY = mid1y;
-    }
-
-    // Оновлюємо координату mid-точки в G.shapePoints
-    const midIdx = G.shapePoints.findIndex(function(p) { return p.num === midNum; });
-    if (midIdx !== -1) {
-        G.shapePoints[midIdx].x = newMidX;
-        G.shapePoints[midIdx].y = newMidY;
-    }
-
-    // Перемалювати
-    redrawEntireFigureFromPoints();
-    showToast('Діагональ застосовано: ' + pt1Num + '-' + pt2Num + ' = ' + diagDist + ' м', 'success');
-};
-
 /**
- * Перемалювання фігури БЕЗ перерахунку координат (використовує вже обчислені G.shapePoints).
- * Використовується після корекції точок (наприклад, діагоналлю).
+ * Фіксує pt1 (і всі лінії до неї).
+ * Переміщує pt2 — кінець лінії pt1→pt2 — так, щоб відстань pt1→pt2 = diagDist.
+ * Лінія pt1→pt2 отримує direction='free', length=diagDist, _cachedEnd={x,y}.
+ * Діагональ (штрихова лінія між pt1Num і pt2Num) зберігається/оновлюється в G.figureLines.
  */
-window.redrawEntireFigureFromPoints = function () {
-    const svg = document.getElementById('shapeCanvas');
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-    renderStartPoint(svg);
-
-    G.figureLines.forEach(function(lineData, index) {
-        const fromPt = G.shapePoints.find(function(p) { return p.num === lineData.from; });
-        const toPt   = lineData.isClosing
-            ? G.shapePoints[0]
-            : G.shapePoints.find(function(p) { return p.num === lineData.to; });
-        if (!fromPt || !toPt) return;
-
-        _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-        drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
-        drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
-
-        if (!lineData.isClosing) {
-            _renderSvgPoint(svg, toPt.x, toPt.y, toPt.num);
-        }
+window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
+    // Знаходимо лінію pt1 → pt2 (безпосередню, не діагональну)
+    const lineIdx = G.figureLines.findIndex(function(l) {
+        return !l.isDiagonal && l.from === pt1Num && l.to === pt2Num;
     });
-
-    if (G.figureLines.some(function(l) { return l.isClosing; })) {
-        // Перерахувати площу з оновленими точками
-        let area = 0;
-        for (let i = 0; i < G.shapePoints.length; i++) {
-            const j = (i + 1) % G.shapePoints.length;
-            area += G.shapePoints[i].x * G.shapePoints[j].y;
-            area -= G.shapePoints[j].x * G.shapePoints[i].y;
-        }
-        area = Math.abs(area) / 2;
-        appState.calculatedArea = (area / (SCALE * SCALE)).toFixed(1);
+    if (lineIdx === -1) {
+        showToast('Лінія ' + pt1Num + '→' + pt2Num + ' не знайдена', 'error');
+        return;
     }
 
-    updateLinesList();
-    autoScaleAndCenterFigure();
-    drawRoomNumber();
+    // Координата pt1 (фіксована)
+    const p1 = G.shapePoints.find(function(p) { return p.num === pt1Num; });
+    if (!p1) { showToast('Точку ' + pt1Num + ' не знайдено', 'error'); return; }
+
+    // Знаходимо "партнерську" точку для діагоналі.
+    // Діагональ введена як pt1Num + pt2Num, але pt2 — це кінець лінії pt1→pt2.
+    // Нам потрібно знати, де зараз знаходиться pt1Num у ланцюгу, і куди повинна потрапити pt2Num.
+    // Знаходимо точку, від якої виходить діагональ (anchor = pt1Num в ланцюгу),
+    // і куди вона повинна вказувати.
+
+    // Визначаємо: pt2Num — це точка, до якої йде ДІАГОНАЛЬ (вхідний параметр з modals).
+    // pt2Num в нашій системі — це точка-якір (вже є в ланцюгу).
+    // Шукаємо anchor-точку pt2Num:
+    const anchor = G.shapePoints.find(function(p) { return p.num === pt2Num; });
+    if (!anchor) { showToast('Точку ' + pt2Num + ' не знайдено', 'error'); return; }
+
+    // Лінія pt1→pt2 у ланцюгу — це lineIdx.
+    // Її довжина залишається такою ж (НЕ змінюємо), але КУТ змінюється.
+    // Нова позиція pt2 = pt1 + вектор довжиною lineData.length,
+    //   такий що відстань pt2_new → anchor = diagDist.
+    const lineLen = G.figureLines[lineIdx].length * SCALE;  // довжина лінії pt1→pt2 в px
+    const diagPx  = diagDist * SCALE;
+
+    // Відстань від p1 до anchor
+    const dx_anch = anchor.x - p1.x;
+    const dy_anch = anchor.y - p1.y;
+    const distToAnchor = Math.sqrt(dx_anch * dx_anch + dy_anch * dy_anch);
+
+    if (distToAnchor === 0) { showToast('Точки збігаються', 'error'); return; }
+
+    // Перевірка трикутника: lineLen, diagPx, distToAnchor
+    if (lineLen + diagPx <= distToAnchor ||
+        lineLen + distToAnchor <= diagPx ||
+        diagPx + distToAnchor <= lineLen) {
+        showToast('Неможливо побудувати трикутник з такою діагоналлю (порушена нерівність трикутника)', 'error');
+        return;
+    }
+
+    // Теорема косинусів: кут при p1 між (p1→anchor) і (p1→pt2_new)
+    // lineLen² = distToAnchor² + diagPx² - 2*distToAnchor*diagPx*cos(angle_at_anchor)  — НЕ те
+    // Нам: знаємо |p1→pt2_new|=lineLen, |pt2_new→anchor|=diagPx, |p1→anchor|=distToAnchor
+    // Кут при p1: cos(α) = (lineLen² + distToAnchor² - diagPx²) / (2*lineLen*distToAnchor)
+    const cosAlpha = (lineLen * lineLen + distToAnchor * distToAnchor - diagPx * diagPx) /
+                     (2 * lineLen * distToAnchor);
+    const alpha = Math.acos(Math.max(-1, Math.min(1, cosAlpha)));
+
+    // Базовий кут p1 → anchor
+    const baseAngle = Math.atan2(dy_anch, dx_anch);
+
+    // Два варіанти положення pt2_new
+    const angle1 = baseAngle + alpha;
+    const angle2 = baseAngle - alpha;
+    const pt2a = { x: p1.x + Math.cos(angle1) * lineLen, y: p1.y + Math.sin(angle1) * lineLen };
+    const pt2b = { x: p1.x + Math.cos(angle2) * lineLen, y: p1.y + Math.sin(angle2) * lineLen };
+
+    // Поточна позиція pt2 (до зміни)
+    const currentPt2 = G.shapePoints.find(function(p) { return p.num === pt2Num; });
+    let newPt2;
+    if (currentPt2) {
+        const da = Math.hypot(pt2a.x - currentPt2.x, pt2a.y - currentPt2.y);
+        const db = Math.hypot(pt2b.x - currentPt2.x, pt2b.y - currentPt2.y);
+        newPt2 = da <= db ? pt2a : pt2b;
+    } else {
+        newPt2 = pt2a;
+    }
+
+    // Оновлюємо лінію pt1→pt2: direction=free, зберігаємо length, запам'ятовуємо кінцеву точку
+    G.figureLines[lineIdx].direction  = 'free';
+    G.figureLines[lineIdx]._cachedEnd = { x: newPt2.x, y: newPt2.y };
+
+    // Зберігаємо/оновлюємо діагональну лінію в G.figureLines
+    const existDiagIdx = G.figureLines.findIndex(function(l) {
+        return l.isDiagonal &&
+               ((l.from === pt1Num && l.to === pt2Num) ||
+                (l.from === pt2Num && l.to === pt1Num));
+    });
+    const diagLineData = {
+        id:              existDiagIdx !== -1 ? G.figureLines[existDiagIdx].id : G.lineIdCounter++,
+        from:            pt1Num,
+        to:              pt2Num,
+        isDiagonal:      true,
+        isClosing:       false,
+        isPending:       false,
+        direction:       'free',
+        lineType:        'line',
+        length:          diagDist,
+        elements:        [{ type: 'number', value: diagDist }],
+        code:            'diagonal
+line
+' + diagDist,
+        dimensionVisible: true,
+        dimensionRotated: false,
+        _cachedEnd:      null
+    };
+    if (existDiagIdx !== -1) {
+        G.figureLines[existDiagIdx] = diagLineData;
+    } else {
+        G.figureLines.push(diagLineData);
+    }
+
+    redrawEntireFigure();
+    showToast('Діагональ ' + pt1Num + '-' + pt2Num + ' = ' + diagDist + ' м застосовано', 'success');
 };
+
 
 /* ── Допоміжна: намалювати лінію + розмір + точку на shapeCanvas ── */
 window._drawShapeLine = function (x1, y1, x2, y2, length, isClosing, lineData) {

@@ -40,6 +40,9 @@ window.G = {
     currentLineType: 'line',
     selectedElement: null,
 
+    /* Діагоналі */
+    diagonals: [],
+
     /* Точки фігури */
     shapePoints: [{ x: START_X, y: START_Y, num: 1 }],
 };

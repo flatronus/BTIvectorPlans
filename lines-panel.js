@@ -64,13 +64,16 @@ window.updateLinesList = function () {
     // Список ліній
     G.figureLines.forEach(line => {
         const lineContainer = document.createElement('div');
-        const bgColor = line.isPending ? '#fff3e0' : '#f0f0f0';
+        const bgColor = line.isDiagonal ? '#f5f5f5' : (line.isPending ? '#fff3e0' : '#f0f0f0');
         lineContainer.style.cssText = `padding: 6px 8px; background: ${bgColor}; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;`;
 
         const lineBtn = document.createElement('button');
         lineBtn.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
-        lineBtn.textContent = `${line.from}-${line.to ?? '?'}${line.isPending ? ' (очікування)' : ''}`;
-        lineBtn.onclick = () => editLine(line);
+        const diagMark = line.isDiagonal ? ' ╌╌ діаг.' : '';
+        const pendMark = line.isPending  ? ' (очікування)' : '';
+        lineBtn.textContent = (line.from || '?') + '-' + (line.to !== undefined ? line.to : '?') + diagMark + pendMark;
+        if (line.isDiagonal) lineBtn.style.color = '#888';
+        lineBtn.onclick = function() { editLine(line); };
         lineContainer.appendChild(lineBtn);
 
         const visChk = _makeSmallCheckbox(

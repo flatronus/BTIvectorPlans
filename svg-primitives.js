@@ -9,7 +9,20 @@ window._renderSvgLine = function (svg, x1, y1, x2, y2, id) {
     line.setAttribute('x2', x2); line.setAttribute('y2', y2);
     line.setAttribute('stroke', 'black');
     line.setAttribute('stroke-width', '1');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
     if (id !== undefined) line.setAttribute('id', `line-${id}`);
+    svg.appendChild(line);
+};
+
+window._renderSvgDashedLine = function (svg, x1, y1, x2, y2, id) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('stroke', '#888');
+    line.setAttribute('stroke-width', '1');
+    line.setAttribute('stroke-dasharray', '6 4');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    if (id !== undefined) line.setAttribute('id', 'diag-' + id);
     svg.appendChild(line);
 };
 
