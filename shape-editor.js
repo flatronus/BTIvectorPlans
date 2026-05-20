@@ -141,10 +141,8 @@ window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
 
     let vx, vy;
     switch (direction) {
-        case 'top':    vx =  ux; vy =  uy; break; // вперед
-        case 'right':  vx = -uy; vy =  ux; break; // вправо (перпендикуляр за год.)
-        case 'bottom': vx = -ux; vy = -uy; break; // назад
-        case 'left':   vx =  uy; vy = -ux; break; // вліво (перпендикуляр проти год.)
+        case 'right':  vx =  uy; vy = -ux; break; // поворот за год. (-90°)
+        case 'left':   vx = -uy; vy =  ux; break; // поворот проти год. (+90°)
         default:       vx =  ux; vy =  uy; break;
     }
 
@@ -248,8 +246,65 @@ window._makeLineData = function (id, from, to, parsedData, length, isClosing, is
     };
 };
 
+/* ── Видалення лінії та всіх наступних ── */
+/**
+ * Видаляє лінію з даним id і всі лінії, що були створені після неї
+ * (тобто всі лінії з більшим id, включно з діагоналями що посилаються на видалені точки).
+ */
+window.deleteLineAndFollowing = function (lineId) {
+    const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
+    if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
+
+    // Визначаємо номер першої точки що буде видалена
+    // Це точка «to» лінії з idx (або from наступної)
+    const deletedLine = G.figureLines[idx];
+    const firstDeletedPointNum = deletedLine.isDiagonal ? null : deletedLine.to;
+
+    // Видаляємо лінію і всі після неї (за позицією в масиві)
+    G.figureLines.splice(idx);
+
+    // Видаляємо також діагоналі що посилаються на видалені точки
+    if (firstDeletedPointNum !== null) {
+        G.figureLines = G.figureLines.filter(function(l) {
+            if (!l.isDiagonal) return true;
+            return l.from < firstDeletedPointNum && l.to < firstDeletedPointNum;
+        });
+    }
+
+    // Скидаємо pointCounter
+    let maxPt = 1;
+    G.figureLines.forEach(function(l) {
+        if (!l.isDiagonal && !l.isClosing && l.to) maxPt = Math.max(maxPt, l.to);
+    });
+    G.pointCounter = maxPt;
+
+    appState.calculatedArea = null;
+    appState.customArea     = null;
+
+    if (G.figureLines.length === 0) {
+        // Скидаємо все до початкового стану
+        const svg = document.getElementById('shapeCanvas');
+        resetSvgCanvas(svg);
+        updateLinesList();
+        return;
+    }
+
+    redrawEntireFigure();
+    showToast('Лінію видалено', 'info');
+};
+
 /* ── Редагування лінії ── */
 window.editLine = function (line) {
+    // Діагональ — відкриваємо модалку діагоналі з поточною довжиною
+    if (line.isDiagonal) {
+        document.getElementById('diagonalModal').style.display = 'block';
+        document.getElementById('diagonalInput').value = line.from + ' ' + line.to + ' ' + line.length;
+        const pts = G.shapePoints.map(function(p) { return p.num; }).join(', ');
+        document.getElementById('diagonalPointsHint').textContent = 'Наявні точки: ' + pts;
+        setTimeout(function() { document.getElementById('diagonalInput').focus(); }, 100);
+        return;
+    }
+
     document.getElementById('coordModal').style.display = 'block';
     document.getElementById('coordInput').value = line.code;
     appState.editingLineId = line.id;
@@ -364,10 +419,8 @@ window._rebuildChainPoints = function () {
             // Відносний напрямок — відносно вектора попередньої лінії
             let vx, vy;
             switch (lineData.direction) {
-                case 'top':    vx =  prevUx; vy =  prevUy; break;
-                case 'right':  vx = -prevUy; vy =  prevUx; break;
-                case 'bottom': vx = -prevUx; vy = -prevUy; break;
-                case 'left':   vx =  prevUy; vy = -prevUx; break;
+                case 'right':  vx =  prevUy; vy = -prevUx; break; // за год.
+                case 'left':   vx = -prevUy; vy =  prevUx; break; // проти год.
                 default:       vx =  prevUx; vy =  prevUy; break;
             }
             endX = lastPt.x + vx * scaledLen;

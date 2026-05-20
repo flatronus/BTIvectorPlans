@@ -92,13 +92,13 @@ window.applyDiagonal = function () {
 
 /* ── Закрити модалку координат та обробити введення ── */
 window.closeCoordModal = function () {
-    /* Модалка закривається в будь-якому випадку */
-    const modal     = document.getElementById('coordModal');
-    const inputEl   = document.getElementById('coordInput');
+    const modal   = document.getElementById('coordModal');
+    const inputEl = document.getElementById('coordInput');
     const inputText = inputEl ? inputEl.value.trim() : '';
 
     try {
         if (inputText) {
+            /* Є текст — парсимо і малюємо або оновлюємо */
             const parsedData = parseCoordinateInput(inputText);
             if (parsedData) {
                 if (appState.editingLineId) {
@@ -108,15 +108,18 @@ window.closeCoordModal = function () {
                     drawLineOnCanvas(parsedData);
                 }
             }
-            /* parsedData === null: помилка парсингу — showToast вже показано, нічого не міняємо */
-        } else {
-            /* Порожнє поле — закрити без змін */
+        } else if (appState.editingLineId) {
+            /* Порожнє поле при редагуванні → видалити цю лінію і всі наступні */
+            deleteLineAndFollowing(appState.editingLineId);
             appState.editingLineId = null;
+            appState.isClosingLine = false;
+        } else {
+            /* Порожнє поле без редагування — просто закрити */
             appState.isClosingLine = false;
         }
     } catch (err) {
         console.error('closeCoordModal error:', err);
-        showToast('Помилка обробки координат: ' + err.message, 'error');
+        showToast('Помилка: ' + err.message, 'error');
         appState.editingLineId = null;
         appState.isClosingLine = false;
     } finally {
@@ -131,9 +134,8 @@ window.submitCoords = function () { closeCoordModal(); };
 /* ── Кнопки напрямку ── */
 window.setAngle = function (direction) {
     G.currentAngle = direction;
-    const codeMap = { up: 'top', down: 'bottom', right: 'right', left: 'left', free: 'free' };
-    if (direction === 'free') G.freeLineQuadrant = null;
-    _insertIntoCoordInput(codeMap[direction]);
+    // right і left — відносні напрямки від попередньої лінії
+    _insertIntoCoordInput(direction);
 };
 
 /* ── Кнопки типу лінії ── */
@@ -178,21 +180,11 @@ window.parseCoordinateInput = function (inputText) {
     }
 
     const direction = lines[0].toLowerCase();
-    if (!['top', 'bottom', 'left', 'right', 'free'].includes(direction)) {
-        showToast('Невірний напрямок. Використовуйте: top, bottom, left, right, free', 'error'); return null;
+    if (!['left', 'right', 'free', 'diagonal'].includes(direction)) {
+        showToast('Невірний напрямок. Використовуйте: right, left', 'error'); return null;
     }
 
-    let quadrant   = null;
-    let startIndex = 1;
-
-    if (direction === 'free') {
-        if (lines.length > 1 && ['top', 'bottom', 'left', 'right'].includes(lines[1].toLowerCase())) {
-            quadrant   = lines[1].toLowerCase();
-            startIndex = 2;
-        } else if (G.freeLineQuadrant) {
-            quadrant = G.freeLineQuadrant;
-        }
-    }
+    const startIndex = 1;
 
     if (lines.length < startIndex + 1) {
         showToast('Введіть тип лінії', 'warning'); return null;
@@ -213,5 +205,5 @@ window.parseCoordinateInput = function (inputText) {
         }
     }
 
-    return { direction, lineType, elements, quadrant };
+    return { direction, lineType, elements };
 };
