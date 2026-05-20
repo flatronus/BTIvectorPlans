@@ -286,14 +286,15 @@ window._rebuildChainPoints = function () {
     let currentPointNum = 1;
 
     G.figureLines.forEach(function(lineData, index) {
-        if (lineData.isDiagonal) return;
-        if (lineData.isClosing)  return;
+        if (lineData.isDiagonal) return;  // діагоналі не додають точок
+        if (lineData.isClosing)  return;  // замикаюча — окремо після
 
         const lastPt    = G.shapePoints[G.shapePoints.length - 1];
         let endX = lastPt.x, endY = lastPt.y;
         const scaledLen = lineData.length * SCALE;
 
-        if (lineData.direction === 'free' && lineData.isPending) {
+        if (lineData.isPending) {
+            // Точка з невідомим кутом — тимчасово на місці попередньої
             currentPointNum++;
             G.shapePoints.push({ x: lastPt.x, y: lastPt.y, num: currentPointNum, isTemp: true });
             G.figureLines[index].from = lastPt.num;
@@ -302,6 +303,7 @@ window._rebuildChainPoints = function () {
         }
 
         if (lineData.direction === 'free' && lineData._cachedEnd) {
+            // free-лінія з відомими координатами (після діагоналі)
             endX = lineData._cachedEnd.x;
             endY = lineData._cachedEnd.y;
         } else {
@@ -310,6 +312,9 @@ window._rebuildChainPoints = function () {
                 case 'bottom': endY = lastPt.y + scaledLen; break;
                 case 'left':   endX = lastPt.x - scaledLen; break;
                 case 'right':  endX = lastPt.x + scaledLen; break;
+                case 'free':
+                    // free без _cachedEnd — залишаємо на місці попередньої точки
+                    endX = lastPt.x; endY = lastPt.y; break;
             }
         }
 
@@ -452,77 +457,85 @@ window.calculateFreeAngleFigure = function () {
 
 /* ── Застосування діагонального обмеження ── */
 /**
- * Фіксує pt1 (і всі лінії до неї).
- * Переміщує pt2 — кінець лінії pt1→pt2 — так, щоб відстань pt1→pt2 = diagDist.
- * Лінія pt1→pt2 отримує direction='free', length=diagDist, _cachedEnd={x,y}.
- * Діагональ (штрихова лінія між pt1Num і pt2Num) зберігається/оновлюється в G.figureLines.
+ * Встановлює відстань між точками pt1Num і pt2Num = diagDist.
+ * Точка pt1Num і всі лінії до неї — фіксовані.
+ * Рухається точка pt2Num: знаходимо лінію що закінчується в pt2Num (лінія X→pt2),
+ * і змінюємо її direction='free' + _cachedEnd так, щоб pt2 виявилась на відстані diagDist від pt1.
+ * Довжина лінії X→pt2 зберігається (не змінюється).
+ * Між pt1Num і pt2Num додається штрихова діагональна лінія.
  */
 window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
-    // Знаходимо лінію pt1 → pt2 (безпосередню, не діагональну)
+    // Спочатку синхронізуємо G.shapePoints з поточним станом G.figureLines
+    _rebuildChainPoints();
+
+    // Знаходимо лінію що ЗАКІНЧУЄТЬСЯ в pt2Num (вона буде змінювати кут)
     const lineIdx = G.figureLines.findIndex(function(l) {
-        return !l.isDiagonal && l.from === pt1Num && l.to === pt2Num;
+        return !l.isDiagonal && !l.isClosing && l.to === pt2Num;
     });
     if (lineIdx === -1) {
-        showToast('Лінія ' + pt1Num + '→' + pt2Num + ' не знайдена', 'error');
+        showToast('Лінія що веде до точки ' + pt2Num + ' не знайдена', 'error');
         return;
     }
 
-    // Координата pt1 (фіксована)
+    // Координата pt1 (фіксована — звідси вимірюємо діагональ)
     const p1 = G.shapePoints.find(function(p) { return p.num === pt1Num; });
     if (!p1) { showToast('Точку ' + pt1Num + ' не знайдено', 'error'); return; }
 
-    // Знаходимо "партнерську" точку для діагоналі.
-    // Діагональ введена як pt1Num + pt2Num, але pt2 — це кінець лінії pt1→pt2.
-    // Нам потрібно знати, де зараз знаходиться pt1Num у ланцюгу, і куди повинна потрапити pt2Num.
-    // Знаходимо точку, від якої виходить діагональ (anchor = pt1Num в ланцюгу),
-    // і куди вона повинна вказувати.
+    // Початок лінії X→pt2 (фіксований, бо лежить до pt2 у ланцюгу)
+    const lineFromNum = G.figureLines[lineIdx].from;
+    const pFrom = G.shapePoints.find(function(p) { return p.num === lineFromNum; });
+    if (!pFrom) { showToast('Початкову точку лінії не знайдено', 'error'); return; }
 
-    // Визначаємо: pt2Num — це точка, до якої йде ДІАГОНАЛЬ (вхідний параметр з modals).
-    // pt2Num в нашій системі — це точка-якір (вже є в ланцюгу).
-    // Шукаємо anchor-точку pt2Num:
-    const anchor = G.shapePoints.find(function(p) { return p.num === pt2Num; });
-    if (!anchor) { showToast('Точку ' + pt2Num + ' не знайдено', 'error'); return; }
+    // Довжина лінії X→pt2 (зберігаємо)
+    const lineLen = G.figureLines[lineIdx].length * SCALE;  // px
+    const diagPx  = diagDist * SCALE;                        // px
 
-    // Лінія pt1→pt2 у ланцюгу — це lineIdx.
-    // Її довжина залишається такою ж (НЕ змінюємо), але КУТ змінюється.
-    // Нова позиція pt2 = pt1 + вектор довжиною lineData.length,
-    //   такий що відстань pt2_new → anchor = diagDist.
-    const lineLen = G.figureLines[lineIdx].length * SCALE;  // довжина лінії pt1→pt2 в px
-    const diagPx  = diagDist * SCALE;
+    // Відстань від p1 до pFrom (відома, фіксована)
+    const dx_pf = pFrom.x - p1.x;
+    const dy_pf = pFrom.y - p1.y;
+    const distP1toFrom = Math.sqrt(dx_pf * dx_pf + dy_pf * dy_pf);
 
-    // Відстань від p1 до anchor
-    const dx_anch = anchor.x - p1.x;
-    const dy_anch = anchor.y - p1.y;
-    const distToAnchor = Math.sqrt(dx_anch * dx_anch + dy_anch * dy_anch);
+    // Нам треба знайти точку pt2_new таку що:
+    //   |pFrom → pt2_new| = lineLen
+    //   |p1    → pt2_new| = diagPx
+    //
+    // Це перетин двох кіл: коло C1(pFrom, lineLen) і коло C2(p1, diagPx).
+    // Розв'язуємо систему.
 
-    if (distToAnchor === 0) { showToast('Точки збігаються', 'error'); return; }
+    const d = Math.sqrt(Math.pow(pFrom.x - p1.x, 2) + Math.pow(pFrom.y - p1.y, 2));
 
-    // Перевірка трикутника: lineLen, diagPx, distToAnchor
-    if (lineLen + diagPx <= distToAnchor ||
-        lineLen + distToAnchor <= diagPx ||
-        diagPx + distToAnchor <= lineLen) {
-        showToast('Неможливо побудувати трикутник з такою діагоналлю (порушена нерівність трикутника)', 'error');
+    if (d === 0) {
+        showToast('Точки pt1 і початок лінії збігаються', 'error');
+        return;
+    }
+    if (d > lineLen + diagPx) {
+        showToast('Відстань між точками завелика — кола не перетинаються', 'error');
+        return;
+    }
+    if (d < Math.abs(lineLen - diagPx)) {
+        showToast('Одне коло всередині іншого — перетин неможливий', 'error');
         return;
     }
 
-    // Теорема косинусів: кут при p1 між (p1→anchor) і (p1→pt2_new)
-    // lineLen² = distToAnchor² + diagPx² - 2*distToAnchor*diagPx*cos(angle_at_anchor)  — НЕ те
-    // Нам: знаємо |p1→pt2_new|=lineLen, |pt2_new→anchor|=diagPx, |p1→anchor|=distToAnchor
-    // Кут при p1: cos(α) = (lineLen² + distToAnchor² - diagPx²) / (2*lineLen*distToAnchor)
-    const cosAlpha = (lineLen * lineLen + distToAnchor * distToAnchor - diagPx * diagPx) /
-                     (2 * lineLen * distToAnchor);
-    const alpha = Math.acos(Math.max(-1, Math.min(1, cosAlpha)));
+    // Знаходимо точку перетину двох кіл
+    // a = (lineLen² - diagPx² + d²) / (2d)
+    const a = (lineLen * lineLen - diagPx * diagPx + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, lineLen * lineLen - a * a));
 
-    // Базовий кут p1 → anchor
-    const baseAngle = Math.atan2(dy_anch, dx_anch);
+    // Одиничний вектор pFrom → p1
+    const ux = (p1.x - pFrom.x) / d;
+    const uy = (p1.y - pFrom.y) / d;
 
-    // Два варіанти положення pt2_new
-    const angle1 = baseAngle + alpha;
-    const angle2 = baseAngle - alpha;
-    const pt2a = { x: p1.x + Math.cos(angle1) * lineLen, y: p1.y + Math.sin(angle1) * lineLen };
-    const pt2b = { x: p1.x + Math.cos(angle2) * lineLen, y: p1.y + Math.sin(angle2) * lineLen };
+    // Перпендикуляр
+    const px = -uy, py = ux;
 
-    // Поточна позиція pt2 (до зміни)
+    // Два варіанти перетину
+    const midX = pFrom.x + a * ux;
+    const midY = pFrom.y + a * uy;
+    const pt2a = { x: midX + h * px, y: midY + h * py };
+    const pt2b = { x: midX - h * px, y: midY - h * py };
+
+    // Вибираємо варіант ближчий до поточної позиції pt2
     const currentPt2 = G.shapePoints.find(function(p) { return p.num === pt2Num; });
     let newPt2;
     if (currentPt2) {
@@ -533,31 +546,31 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
         newPt2 = pt2a;
     }
 
-    // Оновлюємо лінію pt1→pt2: direction=free, зберігаємо length, запам'ятовуємо кінцеву точку
+    // Оновлюємо лінію X→pt2: direction=free, _cachedEnd = нова позиція pt2
     G.figureLines[lineIdx].direction  = 'free';
     G.figureLines[lineIdx]._cachedEnd = { x: newPt2.x, y: newPt2.y };
 
-    // Зберігаємо/оновлюємо діагональну лінію в G.figureLines
+    // Зберігаємо/оновлюємо діагональну (штрихову) лінію pt1↔pt2 в G.figureLines
     const existDiagIdx = G.figureLines.findIndex(function(l) {
         return l.isDiagonal &&
                ((l.from === pt1Num && l.to === pt2Num) ||
                 (l.from === pt2Num && l.to === pt1Num));
     });
     const diagLineData = {
-        id:              existDiagIdx !== -1 ? G.figureLines[existDiagIdx].id : G.lineIdCounter++,
-        from:            pt1Num,
-        to:              pt2Num,
-        isDiagonal:      true,
-        isClosing:       false,
-        isPending:       false,
-        direction:       'free',
-        lineType:        'line',
-        length:          diagDist,
-        elements:        [{ type: 'number', value: diagDist }],
-        code:            'diagonal\nline\n' + diagDist,
+        id:               existDiagIdx !== -1 ? G.figureLines[existDiagIdx].id : G.lineIdCounter++,
+        from:             pt1Num,
+        to:               pt2Num,
+        isDiagonal:       true,
+        isClosing:        false,
+        isPending:        false,
+        direction:        'free',
+        lineType:         'line',
+        length:           diagDist,
+        elements:         [{ type: 'number', value: diagDist }],
+        code:             'diagonal\nline\n' + diagDist,
         dimensionVisible: true,
         dimensionRotated: false,
-        _cachedEnd:      null
+        _cachedEnd:       null
     };
     if (existDiagIdx !== -1) {
         G.figureLines[existDiagIdx] = diagLineData;
@@ -568,7 +581,6 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
     redrawEntireFigure();
     showToast('Діагональ ' + pt1Num + '-' + pt2Num + ' = ' + diagDist + ' м застосовано', 'success');
 };
-
 
 /* ── Допоміжна: намалювати лінію + розмір + точку на shapeCanvas ── */
 window._drawShapeLine = function (x1, y1, x2, y2, length, isClosing, lineData) {
