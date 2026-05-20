@@ -250,7 +250,11 @@ window.redrawEntireFigure = function () {
         if (!fromPt || !toPt) return;
 
         if (lineData.isDiagonal) {
-            _renderSvgDashedLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            if (typeof _renderSvgDashedLine === 'function') {
+                _renderSvgDashedLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            } else {
+                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            }
             drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
         } else {
             _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);

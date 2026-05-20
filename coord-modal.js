@@ -92,27 +92,37 @@ window.applyDiagonal = function () {
 
 /* ── Закрити модалку координат та обробити введення ── */
 window.closeCoordModal = function () {
-    const inputText = document.getElementById('coordInput').value.trim();
+    /* Модалка закривається в будь-якому випадку */
+    const modal     = document.getElementById('coordModal');
+    const inputEl   = document.getElementById('coordInput');
+    const inputText = inputEl ? inputEl.value.trim() : '';
 
-    if (inputText) {
-        const parsedData = parseCoordinateInput(inputText);
-        if (parsedData) {
-            if (appState.editingLineId) {
-                updateExistingLine(appState.editingLineId, parsedData);
-                appState.editingLineId = null;
-            } else {
-                drawLineOnCanvas(parsedData);
+    try {
+        if (inputText) {
+            const parsedData = parseCoordinateInput(inputText);
+            if (parsedData) {
+                if (appState.editingLineId) {
+                    updateExistingLine(appState.editingLineId, parsedData);
+                    appState.editingLineId = null;
+                } else {
+                    drawLineOnCanvas(parsedData);
+                }
             }
+            /* parsedData === null: помилка парсингу — showToast вже показано, нічого не міняємо */
+        } else {
+            /* Порожнє поле — закрити без змін */
+            appState.editingLineId = null;
+            appState.isClosingLine = false;
         }
-        /* parsedData === null: помилка парсингу — не змінюємо нічого, не скидаємо editingLineId */
-    } else {
-        /* Порожнє поле — просто закриваємо без будь-яких змін */
+    } catch (err) {
+        console.error('closeCoordModal error:', err);
+        showToast('Помилка обробки координат: ' + err.message, 'error');
         appState.editingLineId = null;
         appState.isClosingLine = false;
+    } finally {
+        if (modal)   modal.style.display = 'none';
+        if (inputEl) inputEl.value = '';
     }
-
-    document.getElementById('coordModal').style.display = 'none';
-    document.getElementById('coordInput').value = '';
 };
 
 /* Застаріла функція (залишена для сумісності) */
