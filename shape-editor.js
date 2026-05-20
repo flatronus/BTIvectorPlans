@@ -137,13 +137,22 @@ window._getPrevLineVector = function () {
  *   left   — поворот ліворуч (90° проти годинникової)
  */
 window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
-    const { ux, uy } = _getPrevLineVector();
+    // Перевіряємо чи є вже створені лінії (крім діагоналей)
+    const hasLines = G.figureLines.some(function(l) { return !l.isDiagonal; });
 
     let vx, vy;
-    switch (direction) {
-        case 'right':  vx =  uy; vy = -ux; break; // поворот за год. (-90°)
-        case 'left':   vx = -uy; vy =  ux; break; // поворот проти год. (+90°)
-        default:       vx =  ux; vy =  uy; break;
+    if (!hasLines) {
+        // Перша лінія: right = горизонталь вправо, left = горизонталь вліво
+        vx = direction === 'left' ? -1 : 1;
+        vy = 0;
+    } else {
+        // Наступні лінії: поворот відносно попередньої
+        const { ux, uy } = _getPrevLineVector();
+        switch (direction) {
+            case 'right':  vx =  uy; vy = -ux; break; // поворот за год. (-90°)
+            case 'left':   vx = -uy; vy =  ux; break; // поворот проти год. (+90°)
+            default:       vx =  ux; vy =  uy; break;
+        }
     }
 
     return {
@@ -391,8 +400,8 @@ window.redrawEntireFigure = function () {
 window._rebuildChainPoints = function () {
     G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
     let currentPointNum = 1;
-    // Вектор попередньої лінії для відносних напрямків (дефолт: вправо)
-    let prevUx = 1, prevUy = 0;
+    let prevUx = 1, prevUy = 0; // дефолтний вектор
+    let isFirstLine = true;     // прапорець першої лінії
 
     G.figureLines.forEach(function(lineData, index) {
         if (lineData.isDiagonal) return;
@@ -416,12 +425,18 @@ window._rebuildChainPoints = function () {
         } else if (lineData.direction === 'free') {
             endX = lastPt.x; endY = lastPt.y;
         } else {
-            // Відносний напрямок — відносно вектора попередньої лінії
             let vx, vy;
-            switch (lineData.direction) {
-                case 'right':  vx =  prevUy; vy = -prevUx; break; // за год.
-                case 'left':   vx = -prevUy; vy =  prevUx; break; // проти год.
-                default:       vx =  prevUx; vy =  prevUy; break;
+            if (isFirstLine) {
+                // Перша лінія: right = вправо, left = вліво (абсолютно горизонтально)
+                vx = lineData.direction === 'left' ? -1 : 1;
+                vy = 0;
+            } else {
+                // Наступні: поворот відносно попередньої
+                switch (lineData.direction) {
+                    case 'right':  vx =  prevUy; vy = -prevUx; break; // за год.
+                    case 'left':   vx = -prevUy; vy =  prevUx; break; // проти год.
+                    default:       vx =  prevUx; vy =  prevUy; break;
+                }
             }
             endX = lastPt.x + vx * scaledLen;
             endY = lastPt.y + vy * scaledLen;
@@ -432,10 +447,11 @@ window._rebuildChainPoints = function () {
         G.figureLines[index].from = lastPt.num;
         G.figureLines[index].to   = currentPointNum;
 
-        // Оновлюємо вектор для наступної лінії
+        // Оновлюємо вектор і скидаємо прапорець першої лінії
         const dx = endX - lastPt.x, dy = endY - lastPt.y;
         const len = Math.sqrt(dx * dx + dy * dy);
         if (len > 0) { prevUx = dx / len; prevUy = dy / len; }
+        isFirstLine = false;
     });
 
     G.pointCounter = currentPointNum;
