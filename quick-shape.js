@@ -85,13 +85,16 @@ window.createRectangle = function (width, height) {
             G.shapePoints.push({ x: toX, y: toY, num: G.pointCounter });
         }
 
+        const _toX = pt.closing ? START_X : (idx < 3 ? points[idx + 1]?.x ?? START_X : START_X);
+        const _toY = pt.closing ? START_Y : (idx < 3 ? points[idx + 1]?.y ?? START_Y : START_Y);
         G.figureLines.push({
             id: G.lineIdCounter++, from: from.num, to: pt.closing ? 1 : G.pointCounter,
-            direction: pt.dir, lineType: 'line',
+            direction: 'free', lineType: 'line',
             elements: [{ type: 'number', value: parseFloat(pt.len) }],
-            code: `${pt.dir}\nline\n${parseFloat(pt.len).toFixed(2)}`,
+            code: 'free\nline\n' + parseFloat(pt.len).toFixed(2),
             length: parseFloat(pt.len), isClosing: pt.closing, isPending: false,
-            dimensionVisible: true, dimensionRotated: false
+            dimensionVisible: true, dimensionRotated: false,
+            _cachedEnd: pt.closing ? null : { x: _toX, y: _toY }
         });
     });
 
@@ -116,11 +119,12 @@ window.createTriangle = function (side1, side2, side3) {
     G.pointCounter++;
     G.shapePoints.push({ x: endX2, y: endY2, num: G.pointCounter });
     G.figureLines.push({
-        id: G.lineIdCounter++, from: 1, to: 2, direction: 'right', lineType: 'line',
+        id: G.lineIdCounter++, from: 1, to: 2, direction: 'free', lineType: 'line',
         elements: [{ type: 'number', value: parseFloat(side1) }],
-        code: `right\nline\n${parseFloat(side1).toFixed(2)}`,
+        code: 'free\nline\n' + parseFloat(side1).toFixed(2),
         length: parseFloat(side1), isClosing: false, isPending: false,
-        dimensionVisible: true, dimensionRotated: false
+        dimensionVisible: true, dimensionRotated: false,
+        _cachedEnd: { x: endX2, y: endY2 }
     });
 
     const cosAngle = (side1 ** 2 + side2 ** 2 - side3 ** 2) / (2 * side1 * side2);
@@ -135,9 +139,10 @@ window.createTriangle = function (side1, side2, side3) {
     G.figureLines.push({
         id: G.lineIdCounter++, from: 2, to: 3, direction: 'free', lineType: 'line',
         elements: [{ type: 'number', value: parseFloat(side2) }],
-        code: `free\nline\n${parseFloat(side2).toFixed(2)}`,
+        code: 'free\nline\n' + parseFloat(side2).toFixed(2),
         length: parseFloat(side2), isClosing: false, isPending: false, quadrant: 'bottom',
-        dimensionVisible: true, dimensionRotated: false
+        dimensionVisible: true, dimensionRotated: false,
+        _cachedEnd: { x: endX3, y: endY3 }
     });
 
     const from3 = G.shapePoints[2];
@@ -145,9 +150,10 @@ window.createTriangle = function (side1, side2, side3) {
     G.figureLines.push({
         id: G.lineIdCounter++, from: 3, to: 1, direction: 'free', lineType: 'line',
         elements: [{ type: 'number', value: parseFloat(side3) }],
-        code: `free\nline\n${parseFloat(side3).toFixed(2)}`,
+        code: 'free\nline\n' + parseFloat(side3).toFixed(2),
         length: parseFloat(side3), isClosing: true, isPending: false,
-        dimensionVisible: true, dimensionRotated: false
+        dimensionVisible: true, dimensionRotated: false,
+        _cachedEnd: null
     });
 
     calculateAndDisplayArea();

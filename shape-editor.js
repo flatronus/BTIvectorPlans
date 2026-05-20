@@ -98,6 +98,62 @@ window.drawLineDimension = function (x1, y1, x2, y2, lengthInMeters, lineData) {
     svg.appendChild(_makeSvgText(textX, textY, rounded.toFixed(2), angle));
 };
 
+/* ── Відносні напрямки ── */
+/**
+ * Повертає вектор попередньої лінії (від її початку до кінця).
+ * Якщо попередньої лінії немає — дефолтний напрямок вправо.
+ */
+window._getPrevLineVector = function () {
+    // Беремо останню не-діагональну, не-pending лінію
+    let prevLine = null;
+    for (let i = G.figureLines.length - 1; i >= 0; i--) {
+        if (!G.figureLines[i].isDiagonal && !G.figureLines[i].isPending) {
+            prevLine = G.figureLines[i];
+            break;
+        }
+    }
+    if (!prevLine) return { ux: 1, uy: 0 }; // дефолт: вправо
+
+    const fromPt = G.shapePoints.find(function(p) { return p.num === prevLine.from; });
+    const toPt   = prevLine.isClosing
+        ? G.shapePoints[0]
+        : G.shapePoints.find(function(p) { return p.num === prevLine.to; });
+
+    if (!fromPt || !toPt) return { ux: 1, uy: 0 };
+
+    const dx = toPt.x - fromPt.x;
+    const dy = toPt.y - fromPt.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return { ux: 1, uy: 0 };
+    return { ux: dx / len, uy: dy / len };
+};
+
+/**
+ * Обчислює кінцеву точку лінії відносно попередньої.
+ * Напрямки відносні до вектора попередньої лінії:
+ *   top    — продовження вперед (0°)
+ *   right  — поворот праворуч (90° за годинниковою)
+ *   bottom — розворот (180°)
+ *   left   — поворот ліворуч (90° проти годинникової)
+ */
+window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
+    const { ux, uy } = _getPrevLineVector();
+
+    let vx, vy;
+    switch (direction) {
+        case 'top':    vx =  ux; vy =  uy; break; // вперед
+        case 'right':  vx = -uy; vy =  ux; break; // вправо (перпендикуляр за год.)
+        case 'bottom': vx = -ux; vy = -uy; break; // назад
+        case 'left':   vx =  uy; vy = -ux; break; // вліво (перпендикуляр проти год.)
+        default:       vx =  ux; vy =  uy; break;
+    }
+
+    return {
+        x: fromX + vx * scaledLen,
+        y: fromY + vy * scaledLen
+    };
+};
+
 /* ── Малювання лінії на shapeCanvas ── */
 window.drawLineOnCanvas = function (parsedData) {
     const svg       = document.getElementById('shapeCanvas');
@@ -149,12 +205,8 @@ window.drawLineOnCanvas = function (parsedData) {
         endY = G.shapePoints[0].y;
     } else {
         const scaledLen = lineLength * SCALE;
-        switch (parsedData.direction) {
-            case 'top':    endY = lastPoint.y - scaledLen; break;
-            case 'bottom': endY = lastPoint.y + scaledLen; break;
-            case 'left':   endX = lastPoint.x - scaledLen; break;
-            case 'right':  endX = lastPoint.x + scaledLen; break;
-        }
+        const rel = _calcRelativeEnd(lastPoint.x, lastPoint.y, parsedData.direction, scaledLen);
+        endX = rel.x; endY = rel.y;
     }
 
     _renderSvgLine(svg, lastPoint.x, lastPoint.y, endX, endY, G.lineIdCounter);
@@ -284,17 +336,18 @@ window.redrawEntireFigure = function () {
 window._rebuildChainPoints = function () {
     G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
     let currentPointNum = 1;
+    // Вектор попередньої лінії для відносних напрямків (дефолт: вправо)
+    let prevUx = 1, prevUy = 0;
 
     G.figureLines.forEach(function(lineData, index) {
-        if (lineData.isDiagonal) return;  // діагоналі не додають точок
-        if (lineData.isClosing)  return;  // замикаюча — окремо після
+        if (lineData.isDiagonal) return;
+        if (lineData.isClosing)  return;
 
         const lastPt    = G.shapePoints[G.shapePoints.length - 1];
         let endX = lastPt.x, endY = lastPt.y;
         const scaledLen = lineData.length * SCALE;
 
         if (lineData.isPending) {
-            // Точка з невідомим кутом — тимчасово на місці попередньої
             currentPointNum++;
             G.shapePoints.push({ x: lastPt.x, y: lastPt.y, num: currentPointNum, isTemp: true });
             G.figureLines[index].from = lastPt.num;
@@ -303,30 +356,37 @@ window._rebuildChainPoints = function () {
         }
 
         if (lineData.direction === 'free' && lineData._cachedEnd) {
-            // free-лінія з відомими координатами (після діагоналі)
             endX = lineData._cachedEnd.x;
             endY = lineData._cachedEnd.y;
+        } else if (lineData.direction === 'free') {
+            endX = lastPt.x; endY = lastPt.y;
         } else {
+            // Відносний напрямок — відносно вектора попередньої лінії
+            let vx, vy;
             switch (lineData.direction) {
-                case 'top':    endY = lastPt.y - scaledLen; break;
-                case 'bottom': endY = lastPt.y + scaledLen; break;
-                case 'left':   endX = lastPt.x - scaledLen; break;
-                case 'right':  endX = lastPt.x + scaledLen; break;
-                case 'free':
-                    // free без _cachedEnd — залишаємо на місці попередньої точки
-                    endX = lastPt.x; endY = lastPt.y; break;
+                case 'top':    vx =  prevUx; vy =  prevUy; break;
+                case 'right':  vx = -prevUy; vy =  prevUx; break;
+                case 'bottom': vx = -prevUx; vy = -prevUy; break;
+                case 'left':   vx =  prevUy; vy = -prevUx; break;
+                default:       vx =  prevUx; vy =  prevUy; break;
             }
+            endX = lastPt.x + vx * scaledLen;
+            endY = lastPt.y + vy * scaledLen;
         }
 
         currentPointNum++;
         G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
         G.figureLines[index].from = lastPt.num;
         G.figureLines[index].to   = currentPointNum;
+
+        // Оновлюємо вектор для наступної лінії
+        const dx = endX - lastPt.x, dy = endY - lastPt.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) { prevUx = dx / len; prevUy = dy / len; }
     });
 
     G.pointCounter = currentPointNum;
 
-    // Прив'язуємо замикаючі лінії та оновлюємо їх довжину
     G.figureLines.forEach(function(lineData, index) {
         if (!lineData.isClosing || lineData.isDiagonal) return;
         const lastNonDiag = G.shapePoints[G.shapePoints.length - 1];
