@@ -149,8 +149,8 @@ window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
         // Наступні лінії: поворот відносно попередньої
         const { ux, uy } = _getPrevLineVector();
         switch (direction) {
-            case 'right':  vx =  uy; vy = -ux; break; // поворот за год. (-90°)
-            case 'left':   vx = -uy; vy =  ux; break; // поворот проти год. (+90°)
+            case 'right':  vx = -uy; vy =  ux; break; // праворуч від напрямку (+90° за год. в SVG)
+            case 'left':   vx =  uy; vy = -ux; break; // ліворуч від напрямку (-90° проти год. в SVG)
             default:       vx =  ux; vy =  uy; break;
         }
     }
@@ -433,8 +433,8 @@ window._rebuildChainPoints = function () {
             } else {
                 // Наступні: поворот відносно попередньої
                 switch (lineData.direction) {
-                    case 'right':  vx =  prevUy; vy = -prevUx; break; // за год.
-                    case 'left':   vx = -prevUy; vy =  prevUx; break; // проти год.
+                    case 'right':  vx = -prevUy; vy =  prevUx; break; // праворуч від напрямку
+                    case 'left':   vx =  prevUy; vy = -prevUx; break; // ліворуч від напрямку
                     default:       vx =  prevUx; vy =  prevUy; break;
                 }
             }
