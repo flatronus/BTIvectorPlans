@@ -41,7 +41,7 @@ window.updateLinesList = function () {
         return;
     }
 
-
+    linesList.appendChild(_makeCheckboxRow(
         'buildingTypeCheckbox', 'Будівля', G.isBuilding, toggleBuildingType
     ));
 

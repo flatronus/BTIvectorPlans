@@ -60,9 +60,14 @@ window.autoScaleAndCenterFigure = function () {
     });
     if (!isFinite(minX)) return;
     const fw = maxX - minX, fh = maxY - minY;
-    const padX = Math.max(fw * 0.2, 50);
-    const padY = Math.max(fh * 0.2, 50);
-    svg.setAttribute('viewBox', `${minX - padX} ${minY - padY} ${fw + padX * 2} ${fh + padY * 2}`);
+    const padX = Math.max(fw * 0.25, 80);
+    const padY = Math.max(fh * 0.25, 80);
+    // Забезпечуємо квадратний мінімум: щоб xMidYMid meet центрував фігуру по обох осях
+    const vbW = Math.max(fw + padX * 2, fh + padY * 2);
+    const vbH = vbW;
+    const cx  = (minX + maxX) / 2;
+    const cy  = (minY + maxY) / 2;
+    svg.setAttribute('viewBox', `${cx - vbW / 2} ${cy - vbH / 2} ${vbW} ${vbH}`);
 };
 
 /* ── Номер приміщення в центрі ── */
