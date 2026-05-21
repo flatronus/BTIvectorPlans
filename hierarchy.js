@@ -96,6 +96,9 @@ window.selectHierarchyItem = function (item) {
 };
 
 window.openShapeModalForEdit = function (item) {
+    appState.viewingElementMode    = false;
+    appState.viewingElementSource  = null;
+    appState.viewingElementTransform = null;
     document.getElementById('shapeModal').style.display = 'block';
     G.figureLines = JSON.parse(JSON.stringify(item.figureLines));
     G.shapePoints = JSON.parse(JSON.stringify(item.shapePoints));

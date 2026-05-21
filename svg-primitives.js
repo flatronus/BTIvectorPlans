@@ -71,6 +71,7 @@ window.renderStartPoint = function (svg) {
 
 window.resetSvgCanvas = function (svg) {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.setAttribute('viewBox', '0 0 800 600');
     G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
     renderStartPoint(svg);
 };

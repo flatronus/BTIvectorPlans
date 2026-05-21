@@ -86,8 +86,11 @@ window.applyDiagonal = function () {
     if (existIdx !== -1) G.diagonals[existIdx] = diagEntry;
     else                 G.diagonals.push(diagEntry);
 
-    _applyDiagonalConstraint(pt1Num, pt2Num, dist);
-    closeDiagonalModal();
+    try {
+        _applyDiagonalConstraint(pt1Num, pt2Num, dist);
+    } finally {
+        closeDiagonalModal();
+    }
 };
 
 /* ── Закрити модалку координат та обробити введення ── */

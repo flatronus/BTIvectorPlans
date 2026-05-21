@@ -54,10 +54,11 @@ window.autoScaleAndCenterFigure = function () {
     if (G.shapePoints.length < 2) return;
     const svg = document.getElementById('shapeCanvas');
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    G.shapePoints.forEach(p => {
+    G.shapePoints.filter(p => !p.isTemp).forEach(p => {
         if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
         if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
     });
+    if (!isFinite(minX)) return;
     const fw = maxX - minX, fh = maxY - minY;
     const padX = Math.max(fw * 0.2, 50);
     const padY = Math.max(fh * 0.2, 50);
@@ -735,23 +736,23 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
 /* ── Відкриття елемента у редакторі фігур ── */
 /**
  * Відкриває редактор фігур у режимі перегляду елемента.
- * Показує лише одну лінію (hostLine) з елементом (el) на ній.
- * item — елемент ієрархії (кімната/будівля), до якої належить лінія.
+ * Показує лише одну лінію (hostLine) з елементом (el) на ній,
+ * у тій самій орієнтації та позиції, що й на головному полотні.
  */
 window.openElementInShapeEditor = function (item, hostLine, el) {
-    // Встановлюємо режим перегляду елемента
     appState.editingHierarchyItemId = null;
     appState.viewingElementMode = true;
     appState.viewingElementSource = { item, hostLine, el };
 
-    // Завантажуємо повну фігуру для правильних координат
+    // Завантажуємо фігуру і перераховуємо координати
     G.figureLines = JSON.parse(JSON.stringify(item.figureLines));
     G.shapePoints = JSON.parse(JSON.stringify(item.shapePoints));
     G.roomNumber  = item.roomNumber || '';
     G.isBuilding  = item.type === 'building';
 
-    // Знаходимо координати лінії-хоста
     _rebuildChainPoints();
+
+    // Знаходимо точки лінії-хоста в координатах редактора
     const fromPt = G.shapePoints.find(p => p.num === hostLine.from);
     const toPt   = hostLine.isClosing ? G.shapePoints[0] : G.shapePoints.find(p => p.num === hostLine.to);
 
@@ -761,51 +762,40 @@ window.openElementInShapeEditor = function (item, hostLine, el) {
         return;
     }
 
-    // Відкриваємо модалку і малюємо лінію + елемент
+    // Відкриваємо модалку
     document.getElementById('shapeModal').style.display = 'block';
 
     const svg = document.getElementById('shapeCanvas');
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-    // Нормалізуємо: переносимо лінію до зручного положення для перегляду
-    // Лінія малюється горизонтально зліва направо від START_X, START_Y
-    const linePxLen = Math.sqrt(Math.pow(toPt.x - fromPt.x, 2) + Math.pow(toPt.y - fromPt.y, 2));
-    const drawX1 = START_X;
-    const drawY1 = START_Y;
-    const drawX2 = START_X + linePxLen;
-    const drawY2 = START_Y;
+    // Малюємо лінію в оригінальних координатах (як у редакторі фігур)
+    const x1 = fromPt.x, y1 = fromPt.y;
+    const x2 = toPt.x,   y2 = toPt.y;
 
-    // Зберігаємо трансформацію для відображення (оригінальний вектор → горизонталь)
-    appState.viewingElementTransform = {
-        fromPt, toPt, drawX1, drawY1, drawX2, drawY2,
-        origLen: linePxLen
-    };
+    // Точки початку і кінця
+    _renderSvgPoint(svg, x1, y1, hostLine.from);
+    _renderSvgPoint(svg, x2, y2, hostLine.to ?? 1);
 
-    // Малюємо точки-початок і кінець
-    _renderSvgPoint(svg, drawX1, drawY1, hostLine.from);
-    _renderSvgPoint(svg, drawX2, drawY2, hostLine.to ?? 1);
+    // Лінія
+    _renderSvgLine(svg, x1, y1, x2, y2);
 
-    // Малюємо лінію
-    _renderSvgLine(svg, drawX1, drawY1, drawX2, drawY2);
+    // Розмір
+    drawLineDimension(x1, y1, x2, y2, hostLine.length, hostLine);
 
-    // Розмір лінії
-    drawLineDimension(drawX1, drawY1, drawX2, drawY2, hostLine.length, hostLine);
+    // Елемент на лінії
+    drawElementsOnLine(hostLine, x1, y1, x2, y2, SCALE);
 
-    // Малюємо елемент на лінії (використовуємо трансформовані координати)
-    const fakeLineData = Object.assign({}, hostLine, { elements: hostLine.elements });
-    drawElementsOnLine(fakeLineData, drawX1, drawY1, drawX2, drawY2, SCALE);
+    // Встановлюємо viewBox з відступами навколо лінії
+    const linePxLen = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    const pad = Math.max(linePxLen * 0.4, 80);
+    const vbMinX = Math.min(x1, x2) - pad;
+    const vbMinY = Math.min(y1, y2) - pad * 1.5;
+    const vbW    = Math.abs(x2 - x1) + pad * 2;
+    const vbH    = Math.abs(y2 - y1) + pad * 3;
+    svg.setAttribute('viewBox', `${vbMinX} ${vbMinY} ${Math.max(vbW, 200)} ${Math.max(vbH, 200)}`);
 
-    // Автомасштаб
-    const pad = Math.max(linePxLen * 0.3, 80);
-    svg.setAttribute('viewBox', `${drawX1 - pad} ${drawY1 - pad * 1.5} ${linePxLen + pad * 2} ${pad * 3}`);
-
-    // Показуємо назву елемента в панелі ліній
     updateLinesList();
 };
-
-/* ── Додаткова функція: показ "тільки перегляд" у панелі ліній ── */
-// updateLinesList перевіряє appState.viewingElementMode і виводить інформацію про елемент
-
 
 window._drawShapeLine = function (x1, y1, x2, y2, length, isClosing, lineData) {
     const svg = document.getElementById('shapeCanvas');
