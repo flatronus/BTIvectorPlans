@@ -161,7 +161,10 @@ window.createHierarchyItemElement = function (item) {
             linesWithElements.forEach(line => {
                 extractLineElements(line.elements || []).forEach(el => {
                     const row = document.createElement('div');
-                    row.style.cssText = 'display: flex; align-items: center; gap: 5px; padding: 2px 0; font-size: 11px; color: #555;';
+                    row.style.cssText = 'display: flex; align-items: center; gap: 5px; padding: 2px 4px; font-size: 11px; color: #555; cursor: pointer; border-radius: 3px;';
+                    row.title = 'Відкрити елемент у редакторі';
+                    row.onmouseenter = () => { row.style.background = '#f3e5f5'; };
+                    row.onmouseleave = () => { row.style.background = ''; };
 
                     const elIcon = document.createElement('i');
                     elIcon.className = 'fas fa-window-maximize';
@@ -173,6 +176,11 @@ window.createHierarchyItemElement = function (item) {
                     const lineNum = `Л${line.from}-${line.to ?? '?'}`;
                     elLabel.textContent = `${el.code} (${name}) · ${lineNum} · ${el.start.toFixed(2)}–${el.end.toFixed(2)}м`;
                     row.appendChild(elLabel);
+
+                    row.onclick = (e) => {
+                        e.stopPropagation();
+                        openElementInShapeEditor(item, line, el);
+                    };
 
                     detailsWrap.appendChild(row);
                 });

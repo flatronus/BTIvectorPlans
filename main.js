@@ -16,6 +16,15 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     window.closeShapeModal = function () {
+        // У режимі перегляду елемента — просто закриваємо без збереження
+        if (appState.viewingElementMode) {
+            appState.viewingElementMode    = false;
+            appState.viewingElementSource  = null;
+            appState.viewingElementTransform = null;
+            document.getElementById('shapeModal').style.display = 'none';
+            resetShapeData();
+            return;
+        }
         if (G.figureLines.length === 0) {
             showToast('Спочатку створіть фігуру', 'warning'); return;
         }
@@ -26,6 +35,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /** Закрити редактор фігур без збереження змін */
     window.cancelShapeModal = function () {
+        appState.viewingElementMode    = false;
+        appState.viewingElementSource  = null;
+        appState.viewingElementTransform = null;
         document.getElementById('shapeModal').style.display = 'none';
         resetShapeData();
     };

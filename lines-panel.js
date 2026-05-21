@@ -7,7 +7,41 @@ window.updateLinesList = function () {
     const linesList = document.getElementById('linesList');
     linesList.innerHTML = '';
 
-    linesList.appendChild(_makeCheckboxRow(
+    // ── Режим перегляду елемента ──
+    if (appState.viewingElementMode && appState.viewingElementSource) {
+        const { item, hostLine, el } = appState.viewingElementSource;
+        const ELEMENT_NAMES_LOCAL = {
+            WI1: 'Вікно',  DV1: 'Двері',   OT1: 'Отвір',
+            KO1: 'Комин 1', KO2: 'Комин 2',
+            PI1: 'Піч 1',   PI2: 'Піч 2',
+            KU1: 'Кухня 1', KU2: 'Кухня 2', KU3: 'Кухня 3',
+            KL1: 'Колона 1', KL2: 'Колона 2',
+            NI1: 'Ніша'
+        };
+
+        const infoBox = document.createElement('div');
+        infoBox.style.cssText = 'padding: 8px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; margin-bottom: 10px; font-size: 12px;';
+        infoBox.innerHTML = `
+            <div style="font-weight: bold; color: #6a1b9a; margin-bottom: 6px;">
+                <i class="fas fa-window-maximize"></i> ${el.code} — ${ELEMENT_NAMES_LOCAL[el.code] || el.code}
+            </div>
+            <div style="color: #555; line-height: 1.6;">
+                Приміщення: <b>${item.roomNumber || item.name}</b><br>
+                Лінія: <b>Л${hostLine.from}-${hostLine.to ?? '?'}</b><br>
+                Позиція: <b>${el.start.toFixed(2)} – ${el.end.toFixed(2)} м</b><br>
+                Довжина: <b>${(el.end - el.start).toFixed(2)} м</b>
+            </div>
+        `;
+        linesList.appendChild(infoBox);
+
+        const hintBox = document.createElement('div');
+        hintBox.style.cssText = 'padding: 6px 8px; background: #fff8e1; border: 1px solid #ffc107; border-radius: 4px; font-size: 11px; color: #795548;';
+        hintBox.textContent = 'Режим перегляду. Натисніть «Відміна» для виходу.';
+        linesList.appendChild(hintBox);
+        return;
+    }
+
+
         'buildingTypeCheckbox', 'Будівля', G.isBuilding, toggleBuildingType
     ));
 

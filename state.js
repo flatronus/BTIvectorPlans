@@ -16,6 +16,13 @@ const appState = {
     /** Розрахована площа фігури (рядок, наприклад "12.3") */
     calculatedArea: null,
 
-    /** Площа, уведена вручну користувачем */
-    customArea: null,
+    /** true — редактор фігур відкрито у режимі перегляду елемента (не редагування) */
+    viewingElementMode: false,
+
+    /** Дані для режиму перегляду: { item, hostLine, el } */
+    viewingElementSource: null,
+
+    /** Трансформація для відображення елемента */
+    viewingElementTransform: null,
+
 };
