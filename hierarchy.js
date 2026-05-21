@@ -24,8 +24,9 @@ window.extractLineElements = function (elements) {
             elements[i + 1]?.type === 'number' &&
             elements[i + 2]?.type === 'element') {
             let code = elements[i + 2].value;
-            if (code.startsWith('-')) code = code.substring(1);
-            result.push({ start: elements[i].value, end: elements[i + 1].value, code });
+            let side = 1;
+            if (code.startsWith('-')) { side = -1; code = code.substring(1); }
+            result.push({ start: elements[i].value, end: elements[i + 1].value, code, side });
             i += 2;
         }
     }

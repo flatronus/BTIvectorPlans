@@ -738,28 +738,41 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
     showToast('Діагональ ' + pt1Num + '-' + pt2Num + ' = ' + diagDist + ' м застосовано', 'success');
 };
 
-/* ── Відкриття елемента у редакторі фігур ── */
+/* ── Відкриття елемента (WI1 тощо) у редакторі фігур — режим редагування ── */
 /**
- * Відкриває редактор фігур у режимі перегляду елемента.
- * Показує лише одну лінію (hostLine) з елементом (el) на ній,
- * у тій самій орієнтації та позиції, що й на головному полотні.
+ * Відкриває редактор фігур у режимі редагування елемента.
+ * Показує лінію-хост із вікном. Кути вікна (на протилежному боці від лінії-хоста)
+ * нумеруються A і B. Можна додавати лінії, дотичні до вікна.
+ * Товщину вікна можна змінити через список ліній.
  */
 window.openElementInShapeEditor = function (item, hostLine, el) {
     appState.editingHierarchyItemId = null;
-    appState.viewingElementMode = true;
+    appState.viewingElementMode = true;            // прапорець «режим елемента» (не звичайний редактор)
     appState.viewingElementSource = { item, hostLine, el };
+    appState.editingElementThickness = typeof el.thickness === 'number' ? el.thickness : ELEMENT_THICKNESS;
 
-    // Завантажуємо фігуру і перераховуємо координати
-    G.figureLines = JSON.parse(JSON.stringify(item.figureLines));
-    G.shapePoints = JSON.parse(JSON.stringify(item.shapePoints));
-    G.roomNumber  = item.roomNumber || '';
-    G.isBuilding  = item.type === 'building';
+    // Скидаємо окремий масив ліній для цього режиму
+    G.elementEditorLines   = [];   // лінії що малюються кнопкою «Додати»
+    G.elementEditorPoints  = [];   // їх точки (починаючи з точки 1 = START_X, START_Y)
+    G.elementEditorCounter = 1;
 
+    // Завантажуємо фігуру для перерахунку координат хоста
+    const figureLines = JSON.parse(JSON.stringify(item.figureLines));
+    const shapePoints = JSON.parse(JSON.stringify(item.shapePoints));
+
+    // Перебудовуємо координати
+    const savedLines  = G.figureLines;
+    const savedPoints = G.shapePoints;
+    G.figureLines = figureLines;
+    G.shapePoints = shapePoints;
     _rebuildChainPoints();
+    const rebuildPoints = G.shapePoints;
+    G.figureLines = savedLines;
+    G.shapePoints = savedPoints;
 
-    // Знаходимо точки лінії-хоста в координатах редактора
-    const fromPt = G.shapePoints.find(p => p.num === hostLine.from);
-    const toPt   = hostLine.isClosing ? G.shapePoints[0] : G.shapePoints.find(p => p.num === hostLine.to);
+    // Знаходимо точки лінії-хоста
+    const fromPt = rebuildPoints.find(p => p.num === hostLine.from);
+    const toPt   = hostLine.isClosing ? rebuildPoints[0] : rebuildPoints.find(p => p.num === hostLine.to);
 
     if (!fromPt || !toPt) {
         showToast('Не вдалося знайти координати лінії елемента', 'error');
@@ -767,39 +780,193 @@ window.openElementInShapeEditor = function (item, hostLine, el) {
         return;
     }
 
+    // Зберігаємо координати хоста для подальшого малювання
+    appState.viewingElementTransform = { x1: fromPt.x, y1: fromPt.y, x2: toPt.x, y2: toPt.y };
+
     // Відкриваємо модалку
     document.getElementById('shapeModal').style.display = 'block';
+
+    _redrawElementEditorCanvas();
+    updateLinesList();
+};
+
+/**
+ * Перемальовує canvas у режимі редагування елемента.
+ * Показує: лінію-хост, вікно, кути A і B, додані лінії.
+ */
+window._redrawElementEditorCanvas = function () {
+    if (!appState.viewingElementMode || !appState.viewingElementTransform) return;
 
     const svg = document.getElementById('shapeCanvas');
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-    // Малюємо лінію в оригінальних координатах (як у редакторі фігур)
-    const x1 = fromPt.x, y1 = fromPt.y;
-    const x2 = toPt.x,   y2 = toPt.y;
+    const { x1, y1, x2, y2 } = appState.viewingElementTransform;
+    const { item, hostLine, el } = appState.viewingElementSource;
+    const thickness = appState.editingElementThickness;
 
-    // Точки початку і кінця
-    _renderSvgPoint(svg, x1, y1, hostLine.from);
-    _renderSvgPoint(svg, x2, y2, hostLine.to ?? 1);
+    // Вектор вздовж лінії-хоста
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ux = dx / len, uy = dy / len;
+    // Перпендикуляр (ліворуч від напрямку = всередину за замовчуванням)
+    const px = uy, py = -ux;
 
-    // Лінія
+    // Координати вікна вздовж лінії-хоста
+    const elStartPx = el.start * SCALE;
+    const elEndPx   = el.end   * SCALE;
+    const side      = el.side || 1;
+
+    const wA_x = x1 + ux * elStartPx + px * thickness * SCALE * side;
+    const wA_y = y1 + uy * elStartPx + py * thickness * SCALE * side;
+    const wB_x = x1 + ux * elEndPx   + px * thickness * SCALE * side;
+    const wB_y = y1 + uy * elEndPx   + py * thickness * SCALE * side;
+
+    // Малюємо лінію-хост
     _renderSvgLine(svg, x1, y1, x2, y2);
-
-    // Розмір
     drawLineDimension(x1, y1, x2, y2, hostLine.length, hostLine);
 
-    // Елемент на лінії
+    // Малюємо вікно
     drawElementsOnLine(hostLine, x1, y1, x2, y2, SCALE);
 
-    // Встановлюємо viewBox з відступами навколо лінії
-    const linePxLen = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    const pad = Math.max(linePxLen * 0.4, 80);
-    const vbMinX = Math.min(x1, x2) - pad;
-    const vbMinY = Math.min(y1, y2) - pad * 1.5;
-    const vbW    = Math.abs(x2 - x1) + pad * 2;
-    const vbH    = Math.abs(y2 - y1) + pad * 3;
-    svg.setAttribute('viewBox', `${vbMinX} ${vbMinY} ${Math.max(vbW, 200)} ${Math.max(vbH, 200)}`);
+    // Малюємо протилежну сторону вікна (паралельна лінія)
+    _renderSvgDashedLine(svg, wA_x, wA_y, wB_x, wB_y);
 
+    // Нумеруємо кути A і B (на протилежному боці від лінії-хоста)
+    _renderWindowCornerLabel(svg, wA_x, wA_y, 'A');
+    _renderWindowCornerLabel(svg, wB_x, wB_y, 'B');
+
+    // Зберігаємо координати кутів для використання в coord-modal
+    appState.viewingElementTransform.wA = { x: wA_x, y: wA_y };
+    appState.viewingElementTransform.wB = { x: wB_x, y: wB_y };
+
+    // Малюємо додані лінії
+    if (G.elementEditorLines && G.elementEditorLines.length > 0) {
+        const pts = G.elementEditorPoints || [];
+        G.elementEditorLines.forEach(function (eLine) {
+            const fPt = pts.find(p => p.num === eLine.from);
+            const tPt = pts.find(p => p.num === eLine.to);
+            if (!fPt || !tPt) return;
+            _renderSvgLine(svg, fPt.x, fPt.y, tPt.x, tPt.y);
+            drawLineDimension(fPt.x, fPt.y, tPt.x, tPt.y, eLine.length, eLine);
+            _renderSvgPoint(svg, tPt.x, tPt.y, tPt.num);
+        });
+    } else {
+        // Малюємо початкову точку 1
+        _renderSvgPoint(svg, START_X, START_Y, 1);
+    }
+
+    // Підписуємо розмір вікна
+    const winLen = (el.end - el.start).toFixed(2);
+    const midWx  = (wA_x + wB_x) / 2;
+    const midWy  = (wA_y + wB_y) / 2;
+    const wAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+    svg.appendChild(_makeSvgText(midWx + px * 12, midWy + py * 12, winLen + 'м', wAngle));
+
+    // viewBox — вміщує і хост-лінію, і вікно, і додані точки
+    const allX = [x1, x2, wA_x, wB_x, START_X];
+    const allY = [y1, y2, wA_y, wB_y, START_Y];
+    if (G.elementEditorPoints) {
+        G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
+    }
+    const minX = Math.min(...allX), maxX = Math.max(...allX);
+    const minY = Math.min(...allY), maxY = Math.max(...allY);
+    const fw = maxX - minX, fh = maxY - minY;
+    const pad = Math.max(fw * 0.3, fh * 0.3, 80);
+    const vbSz = Math.max(fw, fh) + pad * 2;
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    svg.setAttribute('viewBox', `${cx - vbSz / 2} ${cy - vbSz / 2} ${vbSz} ${vbSz}`);
+};
+
+/** Малює мітку кута вікна (A або B) */
+window._renderWindowCornerLabel = function (svg, x, y, label) {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', x); circle.setAttribute('cy', y);
+    circle.setAttribute('r', '5'); circle.setAttribute('fill', '#9C27B0');
+    svg.appendChild(circle);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', x + 10); text.setAttribute('y', y - 5);
+    text.setAttribute('font-size', '14'); text.setAttribute('fill', '#9C27B0');
+    text.setAttribute('font-weight', 'bold');
+    text.textContent = label;
+    svg.appendChild(text);
+};
+
+/**
+ * Додає нову лінію до G.elementEditorLines на основі parsedData.
+ * Перша лінія виходить із точки START_X, START_Y.
+ * Напрямок обчислюється за тим самим алгоритмом що і у звичайному редакторі,
+ * але відносно попередньої лінії в elementEditorLines.
+ */
+window._addLineToElementEditor = function (parsedData) {
+    if (!G.elementEditorPoints) {
+        G.elementEditorPoints  = [{ x: START_X, y: START_Y, num: 1 }];
+        G.elementEditorLines   = [];
+        G.elementEditorCounter = 1;
+    }
+
+    let lineLength = 0;
+    for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+        if (parsedData.elements[i].type === 'number') {
+            lineLength = parsedData.elements[i].value;
+            break;
+        }
+    }
+
+    if (lineLength <= 0) {
+        showToast('Довжина лінії має бути більше нуля', 'warning');
+        return;
+    }
+
+    const lastPt    = G.elementEditorPoints[G.elementEditorPoints.length - 1];
+    const scaledLen = lineLength * SCALE;
+
+    // Обчислення напрямку відносно попередньої лінії елемента
+    let vx, vy;
+    const hasLines = G.elementEditorLines.length > 0;
+
+    if (!hasLines) {
+        vx = parsedData.direction === 'left' ? -1 : 1;
+        vy = 0;
+    } else {
+        const prevEl = G.elementEditorLines[G.elementEditorLines.length - 1];
+        const prevFrom = G.elementEditorPoints.find(p => p.num === prevEl.from);
+        const prevTo   = G.elementEditorPoints.find(p => p.num === prevEl.to);
+        let prevUx = 1, prevUy = 0;
+        if (prevFrom && prevTo) {
+            const pdx = prevTo.x - prevFrom.x, pdy = prevTo.y - prevFrom.y;
+            const plen = Math.sqrt(pdx * pdx + pdy * pdy);
+            if (plen > 0) { prevUx = pdx / plen; prevUy = pdy / plen; }
+        }
+        switch (parsedData.direction) {
+            case 'right':  vx = -prevUy; vy =  prevUx; break;
+            case 'left':   vx =  prevUy; vy = -prevUx; break;
+            default:       vx =  prevUx; vy =  prevUy; break;
+        }
+    }
+
+    const endX = lastPt.x + vx * scaledLen;
+    const endY = lastPt.y + vy * scaledLen;
+
+    G.elementEditorCounter++;
+    const newPtNum = G.elementEditorCounter;
+    G.elementEditorPoints.push({ x: endX, y: endY, num: newPtNum });
+
+    G.elementEditorLines.push({
+        id:               G.elementEditorLines.length + 1,
+        from:             lastPt.num,
+        to:               newPtNum,
+        direction:        parsedData.direction,
+        lineType:         parsedData.lineType,
+        elements:         parsedData.elements,
+        length:           lineLength,
+        dimensionVisible: true,
+        dimensionRotated: false
+    });
+
+    _redrawElementEditorCanvas();
     updateLinesList();
+    showToast('Лінію додано', 'success');
 };
 
 window._drawShapeLine = function (x1, y1, x2, y2, length, isClosing, lineData) {

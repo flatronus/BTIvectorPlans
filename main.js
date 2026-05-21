@@ -13,16 +13,19 @@ document.addEventListener('DOMContentLoaded', function () {
     window.openShapeModal = function () {
         appState.editingHierarchyItemId = null;
         document.getElementById('shapeModal').style.display = 'block';
+        _updateShapeModalToolbar();
     };
 
     window.closeShapeModal = function () {
-        // У режимі перегляду елемента — просто закриваємо без збереження
+        // У режимі перегляду/редагування елемента — просто закриваємо без збереження фігури
         if (appState.viewingElementMode) {
             appState.viewingElementMode    = false;
             appState.viewingElementSource  = null;
             appState.viewingElementTransform = null;
+            appState._addingElementLine    = false;
             document.getElementById('shapeModal').style.display = 'none';
             resetShapeData();
+            _updateShapeModalToolbar();
             return;
         }
         if (G.figureLines.length === 0) {
@@ -31,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function () {
         transferFigureToMainCanvas();
         document.getElementById('shapeModal').style.display = 'none';
         resetShapeData();
+        _updateShapeModalToolbar();
     };
 
     /** Закрити редактор фігур без збереження змін */
@@ -38,8 +42,44 @@ document.addEventListener('DOMContentLoaded', function () {
         appState.viewingElementMode    = false;
         appState.viewingElementSource  = null;
         appState.viewingElementTransform = null;
+        appState._addingElementLine    = false;
         document.getElementById('shapeModal').style.display = 'none';
         resetShapeData();
+        _updateShapeModalToolbar();
+    };
+
+    /**
+     * Кнопка «Додати» в редакторі фігур.
+     * В звичайному режимі — addPoint().
+     * В режимі елемента — addElementEditorLine().
+     */
+    window.shapeModalAddAction = function () {
+        if (appState.viewingElementMode) {
+            addElementEditorLine();
+        } else {
+            addPoint();
+        }
+    };
+
+    /**
+     * Оновлює видимість кнопок тулбара залежно від режиму.
+     * В режимі елемента — ховаємо «Замкнути», «Діагональ», «Швидко».
+     */
+    window._updateShapeModalToolbar = function () {
+        const isElMode = appState.viewingElementMode;
+        const closeBtn = document.getElementById('shapeToolbarCloseBtn');
+        const diagBtn  = document.getElementById('shapeToolbarDiagBtn');
+        const quickBtn = document.getElementById('shapeToolbarQuickBtn');
+        const addBtn   = document.getElementById('shapeToolbarAddBtn');
+
+        if (closeBtn) closeBtn.style.display = isElMode ? 'none' : '';
+        if (diagBtn)  diagBtn.style.display  = isElMode ? 'none' : '';
+        if (quickBtn) quickBtn.style.display = isElMode ? 'none' : '';
+        if (addBtn && isElMode) {
+            addBtn.title = 'Додати лінію до вікна';
+        } else if (addBtn) {
+            addBtn.title = 'Додати точку';
+        }
     };
 
     /** Відкрити / приховати панель ієрархії */
@@ -51,7 +91,36 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btn) btn.classList.toggle('bg-blue-100', isHidden);
     };
 
-    /* ── Клавіатурні скорочення ── */
+    /* ── Модалка зміни товщини вікна ── */
+    window.openElementThicknessModal = function () {
+        const inp = document.getElementById('elementThicknessInput');
+        if (inp) inp.value = (appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2);
+        document.getElementById('elementThicknessModal').style.display = 'block';
+        setTimeout(() => inp && inp.select(), 100);
+    };
+
+    window.closeElementThicknessModal = function () {
+        document.getElementById('elementThicknessModal').style.display = 'none';
+    };
+
+    window.applyElementThickness = function () {
+        const inp = document.getElementById('elementThicknessInput');
+        const val = parseFloat(inp ? inp.value : '');
+        if (isNaN(val) || val <= 0) {
+            showToast('Введіть коректну товщину', 'warning');
+            return;
+        }
+        appState.editingElementThickness = val;
+        closeElementThicknessModal();
+        _redrawElementEditorCanvas();
+        updateLinesList();
+        showToast(`Товщина вікна: ${val.toFixed(2)} м`, 'success');
+    };
+
+    /* ── Enter у полі товщини ── */
+    document.getElementById('elementThicknessInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
+    });
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {
             switch (e.key.toLowerCase()) {

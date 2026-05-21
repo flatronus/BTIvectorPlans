@@ -45,4 +45,9 @@ window.G = {
 
     /* Точки фігури */
     shapePoints: [{ x: START_X, y: START_Y, num: 1 }],
+
+    /* Стан редактора елемента (вікна тощо) */
+    elementEditorLines:   [],
+    elementEditorPoints:  [{ x: START_X, y: START_Y, num: 1 }],
+    elementEditorCounter: 1,
 };

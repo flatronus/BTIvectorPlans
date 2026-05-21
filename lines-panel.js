@@ -7,7 +7,7 @@ window.updateLinesList = function () {
     const linesList = document.getElementById('linesList');
     linesList.innerHTML = '';
 
-    // ── Режим перегляду елемента ──
+    // ── Режим редагування елемента ──
     if (appState.viewingElementMode && appState.viewingElementSource) {
         const { item, hostLine, el } = appState.viewingElementSource;
         const ELEMENT_NAMES_LOCAL = {
@@ -19,24 +19,56 @@ window.updateLinesList = function () {
             NI1: 'Ніша'
         };
 
-        const infoBox = document.createElement('div');
-        infoBox.style.cssText = 'padding: 8px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; margin-bottom: 10px; font-size: 12px;';
-        infoBox.innerHTML = `
-            <div style="font-weight: bold; color: #6a1b9a; margin-bottom: 6px;">
-                <i class="fas fa-window-maximize"></i> ${el.code} — ${ELEMENT_NAMES_LOCAL[el.code] || el.code}
-            </div>
-            <div style="color: #555; line-height: 1.6;">
-                Приміщення: <b>${item.roomNumber || item.name}</b><br>
-                Лінія: <b>Л${hostLine.from}-${hostLine.to ?? '?'}</b><br>
-                Позиція: <b>${el.start.toFixed(2)} – ${el.end.toFixed(2)} м</b><br>
-                Довжина: <b>${(el.end - el.start).toFixed(2)} м</b>
-            </div>
-        `;
-        linesList.appendChild(infoBox);
+        // Заголовок — хост-лінія
+        const hostRow = document.createElement('div');
+        hostRow.style.cssText = 'padding: 6px 8px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; margin-bottom: 5px; font-size: 12px; font-weight: bold; color: #1565c0;';
+        hostRow.textContent = `Лінія Л${hostLine.from}-${hostLine.to ?? '?'} · ${hostLine.length?.toFixed(2)} м`;
+        linesList.appendChild(hostRow);
+
+        // Рядок вікна — клік відкриває редактор товщини
+        const elRow = document.createElement('div');
+        elRow.style.cssText = 'padding: 6px 8px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; cursor: pointer;';
+        elRow.title = 'Клікніть для зміни товщини';
+
+        const elIcon = document.createElement('i');
+        elIcon.className = 'fas fa-window-maximize';
+        elIcon.style.cssText = 'font-size: 12px; color: #9C27B0;';
+        elRow.appendChild(elIcon);
+
+        const elLabel = document.createElement('span');
+        elLabel.style.cssText = 'flex: 1; font-size: 12px; font-weight: bold; color: #6a1b9a;';
+        elLabel.textContent = `${el.code} — ${ELEMENT_NAMES_LOCAL[el.code] || el.code} · ${el.start.toFixed(2)}–${el.end.toFixed(2)} м`;
+        elRow.appendChild(elLabel);
+
+        const thickLabel = document.createElement('span');
+        thickLabel.style.cssText = 'font-size: 11px; color: #888;';
+        thickLabel.textContent = `т=${(appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2)} м`;
+        elRow.appendChild(thickLabel);
+
+        elRow.onclick = () => openElementThicknessModal();
+        linesList.appendChild(elRow);
+
+        // Список доданих ліній
+        if (G.elementEditorLines && G.elementEditorLines.length > 0) {
+            const sepDiv = document.createElement('div');
+            sepDiv.style.cssText = 'font-size: 10px; color: #999; padding: 4px 0; font-weight: bold;';
+            sepDiv.textContent = 'Додані лінії:';
+            linesList.appendChild(sepDiv);
+
+            G.elementEditorLines.forEach(eLine => {
+                const eRow = document.createElement('div');
+                eRow.style.cssText = 'padding: 5px 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 3px; font-size: 12px; display: flex; align-items: center; gap: 6px;';
+                const eLbl = document.createElement('span');
+                eLbl.style.flex = '1';
+                eLbl.textContent = `Л${eLine.from}-${eLine.to} · ${eLine.length.toFixed(2)} м`;
+                eRow.appendChild(eLbl);
+                linesList.appendChild(eRow);
+            });
+        }
 
         const hintBox = document.createElement('div');
-        hintBox.style.cssText = 'padding: 6px 8px; background: #fff8e1; border: 1px solid #ffc107; border-radius: 4px; font-size: 11px; color: #795548;';
-        hintBox.textContent = 'Режим перегляду. Натисніть «Відміна» для виходу.';
+        hintBox.style.cssText = 'padding: 6px 8px; background: #fff8e1; border: 1px solid #ffc107; border-radius: 4px; font-size: 11px; color: #795548; margin-top: 8px;';
+        hintBox.innerHTML = 'A і B — кути вікна на протилежному боці.<br>Кнопка <b>Додати</b> додає лінію від точки 1 до вікна.<br>У вікні координат вкажіть <b>A</b> або <b>B</b> замість числа для прив\'язки до кута.';
         linesList.appendChild(hintBox);
         return;
     }

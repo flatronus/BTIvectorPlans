@@ -25,4 +25,13 @@ const appState = {
     /** Трансформація для відображення елемента */
     viewingElementTransform: null,
 
+    /** Товщина вікна при редагуванні елемента (в метрах) */
+    editingElementThickness: ELEMENT_THICKNESS,
+
+    /** true — coord modal відкрито для додавання лінії до елемента */
+    _addingElementLine: false,
+
+    /** customArea при редагуванні */
+    customArea: null,
+
 };

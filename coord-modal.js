@@ -8,6 +8,7 @@ window.addPoint = function () {
     document.getElementById('coordInput').value = '';
     document.getElementById('coordModal').style.display = 'block';
     appState.editingLineId = null;
+    _updateWindowCornerAnchorUI();
     setTimeout(() => document.getElementById('coordInput').focus(), 100);
 };
 
@@ -100,6 +101,18 @@ window.closeCoordModal = function () {
     const inputText = inputEl ? inputEl.value.trim() : '';
 
     try {
+        // Режим додавання лінії до елемента (вікна)
+        if (appState._addingElementLine) {
+            appState._addingElementLine = false;
+            if (inputText) {
+                const parsedData = parseCoordinateInput(inputText);
+                if (parsedData) {
+                    _addLineToElementEditor(parsedData);
+                }
+            }
+            return;
+        }
+
         if (inputText) {
             /* Є текст — парсимо і малюємо або оновлюємо */
             const parsedData = parseCoordinateInput(inputText);
@@ -125,9 +138,13 @@ window.closeCoordModal = function () {
         showToast('Помилка: ' + err.message, 'error');
         appState.editingLineId = null;
         appState.isClosingLine = false;
+        appState._addingElementLine = false;
     } finally {
         if (modal)   modal.style.display = 'none';
         if (inputEl) inputEl.value = '';
+        // Сховати блок прив'язки
+        const box = document.getElementById('windowCornerAnchorBox');
+        if (box) box.style.display = 'none';
     }
 };
 
@@ -135,8 +152,11 @@ window.closeCoordModal = function () {
 window.cancelCoordModal = function () {
     appState.editingLineId = null;
     appState.isClosingLine = false;
+    appState._addingElementLine = false;
     document.getElementById('coordModal').style.display = 'none';
     document.getElementById('coordInput').value = '';
+    const box = document.getElementById('windowCornerAnchorBox');
+    if (box) box.style.display = 'none';
 };
 
 /* Застаріла функція (залишена для сумісності) */
@@ -217,4 +237,80 @@ window.parseCoordinateInput = function (inputText) {
     }
 
     return { direction, lineType, elements };
+};
+
+/* ── UI прив'язки до кута вікна (A/B) ── */
+
+/**
+ * Оновлює блок прив'язки до кута вікна у coord modal.
+ * Показує блок тільки в режимі редагування елемента, розраховує
+ * відстань від поточної точки 1 редактора до кутів A та B.
+ */
+window._updateWindowCornerAnchorUI = function () {
+    const box = document.getElementById('windowCornerAnchorBox');
+    if (!box) return;
+
+    if (!appState.viewingElementMode || !appState.viewingElementTransform) {
+        box.style.display = 'none';
+        return;
+    }
+
+    const tr = appState.viewingElementTransform;
+    if (!tr.wA || !tr.wB) {
+        box.style.display = 'none';
+        return;
+    }
+
+    box.style.display = 'block';
+
+    // Точка 1 в редакторі елементів = START_X, START_Y
+    const pt1 = G.elementEditorPoints && G.elementEditorPoints.length > 0
+        ? G.elementEditorPoints[0]
+        : { x: START_X, y: START_Y };
+
+    const distA = (Math.hypot(tr.wA.x - pt1.x, tr.wA.y - pt1.y) / SCALE).toFixed(2);
+    const distB = (Math.hypot(tr.wB.x - pt1.x, tr.wB.y - pt1.y) / SCALE).toFixed(2);
+
+    const info = document.getElementById('windowCornerDistanceInfo');
+    if (info) info.textContent = `відстань від т.1 до A: ${distA} м, до B: ${distB} м`;
+};
+
+/**
+ * Вставляє у поле вводу відстань від точки 1 до кута A або B.
+ * Це дозволяє прив'язати першу лінію до кута вікна.
+ */
+window.insertWindowCornerAnchor = function (corner) {
+    if (!appState.viewingElementTransform) return;
+    const tr = appState.viewingElementTransform;
+    const cornerPt = corner === 'A' ? tr.wA : tr.wB;
+    if (!cornerPt) return;
+
+    const pt1 = G.elementEditorPoints && G.elementEditorPoints.length > 0
+        ? G.elementEditorPoints[0]
+        : { x: START_X, y: START_Y };
+
+    const dist = (Math.hypot(cornerPt.x - pt1.x, cornerPt.y - pt1.y) / SCALE).toFixed(2);
+
+    const coordInput = document.getElementById('coordInput');
+    const cursorPos  = coordInput.selectionStart;
+    const textBefore = coordInput.value.substring(0, cursorPos);
+    const textAfter  = coordInput.value.substring(cursorPos);
+    const prefix     = (textBefore && !textBefore.endsWith('\n')) ? '\n' : '';
+    const newText    = textBefore + prefix + dist + '\n';
+    coordInput.value = newText + textAfter;
+    coordInput.setSelectionRange(newText.length, newText.length);
+    coordInput.focus();
+};
+
+/**
+ * Відкриває coord modal у режимі редагування елемента.
+ * Додає нову лінію до G.elementEditorLines.
+ */
+window.addElementEditorLine = function () {
+    document.getElementById('coordInput').value = '';
+    document.getElementById('coordModal').style.display = 'block';
+    appState.editingLineId = null;
+    appState._addingElementLine = true;
+    _updateWindowCornerAnchorUI();
+    setTimeout(() => document.getElementById('coordInput').focus(), 100);
 };
