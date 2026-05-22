@@ -833,8 +833,8 @@ window._redrawElementEditorCanvas = function () {
     _renderSvgLine(svg, x1, y1, x2, y2);
     drawLineDimension(x1, y1, x2, y2, hostLine.length, hostLine);
 
-    // Малюємо вікно (елемент на лінії)
-    drawElementsOnLine(hostLine, x1, y1, x2, y2, SCALE);
+    // Малюємо вікно (елемент на лінії) з поточною товщиною
+    drawElementsOnLine(hostLine, x1, y1, x2, y2, SCALE, svg, thickness);
 
     // Малюємо протилежну сторону вікна (штрихова)
     _renderSvgDashedLine(svg, wA_x, wA_y, wB_x, wB_y);
@@ -850,32 +850,19 @@ window._redrawElementEditorCanvas = function () {
     const wAngle = Math.atan2(dy, dx) * 180 / Math.PI;
     svg.appendChild(_makeSvgText(midWx + px * 14 * side, midWy + py * 14 * side, winLen + 'м', wAngle));
 
-    // Реальні номери точок хост-лінії (fromNum та toNum)
-    const fromNum = hostLine.from;
-    const toNum   = hostLine.isClosing
-        ? appState.viewingElementSource.item.shapePoints[0]?.num ?? 1
-        : hostLine.to;
+    // Точка 1 — розміщуємо праворуч від кута A з відступом
+    const pt1OffsetPx = 40;
+    const pt1x = wA_x - ux * pt1OffsetPx;
+    const pt1y = wA_y - uy * pt1OffsetPx;
 
-    // Малюємо точки хост-лінії з їхніми справжніми номерами
-    _renderSvgPoint(svg, x1, y1, fromNum);
-    _renderSvgPoint(svg, x2, y2, toNum);
-
-    // Ініціалізуємо elementEditorPoints на основі реальних точок хост-лінії
-    // (скидаємо лише якщо ще не ініціалізовано для цього відкриття)
+    // Ініціалізуємо або оновлюємо початкову точку elementEditorPoints[0]
     if (!G.elementEditorPoints || G.elementEditorPoints.length === 0) {
-        G.elementEditorPoints  = [
-            { x: x1, y: y1, num: fromNum },
-            { x: x2, y: y2, num: toNum }
-        ];
-        G.elementEditorCounter = toNum;
+        G.elementEditorPoints  = [{ x: pt1x, y: pt1y, num: 1 }];
+        G.elementEditorCounter = 1;
     } else {
-        // Оновлюємо координати реальних точок (якщо товщина тощо змінилась)
-        G.elementEditorPoints[0] = { x: x1, y: y1, num: fromNum };
-        if (G.elementEditorPoints.length < 2) {
-            G.elementEditorPoints.splice(1, 0, { x: x2, y: y2, num: toNum });
-        } else {
-            G.elementEditorPoints[1] = { x: x2, y: y2, num: toNum };
-        }
+        // Завжди оновлюємо координату точки 1 (якщо товщина змінилась — кути зрушились)
+        G.elementEditorPoints[0].x = pt1x;
+        G.elementEditorPoints[0].y = pt1y;
     }
 
     // Малюємо додані лінії
@@ -891,9 +878,12 @@ window._redrawElementEditorCanvas = function () {
         });
     }
 
+    // Точка 1 малюється завжди
+    _renderSvgPoint(svg, pt1x, pt1y, 1);
+
     // viewBox — тільки навколо хост-лінії, вікна і доданих точок
-    const allX = [x1, x2, wA_x, wB_x];
-    const allY = [y1, y2, wA_y, wB_y];
+    const allX = [x1, x2, wA_x, wB_x, pt1x];
+    const allY = [y1, y2, wA_y, wB_y, pt1y];
     if (G.elementEditorLines && G.elementEditorLines.length > 0) {
         G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
     }
@@ -923,29 +913,15 @@ window._renderWindowCornerLabel = function (svg, x, y, label) {
 
 /**
  * Додає нову лінію до G.elementEditorLines на основі parsedData.
- * Перша лінія виходить із точки from хост-лінії (реальна точка з її номером).
+ * Перша лінія виходить із точки START_X, START_Y.
  * Напрямок обчислюється за тим самим алгоритмом що і у звичайному редакторі,
  * але відносно попередньої лінії в elementEditorLines.
  */
 window._addLineToElementEditor = function (parsedData) {
-    if (!G.elementEditorPoints || G.elementEditorPoints.length === 0) {
-        // Ініціалізуємо з реальних координат хост-лінії, якщо вони доступні
-        const tr = appState.viewingElementTransform;
-        const hl = appState.viewingElementSource?.hostLine;
-        const fromNum = hl ? hl.from : 1;
-        const toNum   = hl ? (hl.isClosing
-            ? (appState.viewingElementSource?.item?.shapePoints[0]?.num ?? 1)
-            : hl.to) : 2;
-        const x1 = tr ? tr.x1 : START_X;
-        const y1 = tr ? tr.y1 : START_Y;
-        const x2 = tr ? tr.x2 : START_X + SCALE;
-        const y2 = tr ? tr.y2 : START_Y;
-        G.elementEditorPoints  = [
-            { x: x1, y: y1, num: fromNum },
-            { x: x2, y: y2, num: toNum }
-        ];
+    if (!G.elementEditorPoints) {
+        G.elementEditorPoints  = [{ x: START_X, y: START_Y, num: 1 }];
         G.elementEditorLines   = [];
-        G.elementEditorCounter = toNum;
+        G.elementEditorCounter = 1;
     }
 
     let lineLength = 0;

@@ -3,9 +3,9 @@
  * Залежності: constants.js, svg-primitives.js
  */
 
-window.drawElementsOnLine = function (parsedData, x1, y1, x2, y2, scale, targetGroup) {
+window.drawElementsOnLine = function (parsedData, x1, y1, x2, y2, scale, targetGroup, overrideThickness) {
     const svg       = targetGroup || document.getElementById('shapeCanvas');
-    const thickness = ELEMENT_THICKNESS * scale;
+    const thickness = (overrideThickness !== undefined ? overrideThickness : ELEMENT_THICKNESS) * scale;
 
     const dx  = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
