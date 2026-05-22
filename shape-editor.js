@@ -750,6 +750,8 @@ window.openElementInShapeEditor = function (item, hostLine, el) {
     appState.viewingElementMode = true;            // прапорець «режим елемента» (не звичайний редактор)
     appState.viewingElementSource = { item, hostLine, el };
     appState.editingElementThickness = typeof el.thickness === 'number' ? el.thickness : ELEMENT_THICKNESS;
+    appState.editingElementAnchor = '';
+    appState.editingElementAnchorParsed = null;
 
     // Скидаємо окремий масив ліній для цього режиму
     G.elementEditorLines   = [];   // лінії що малюються кнопкою «Додати»
@@ -890,11 +892,31 @@ window._redrawElementEditorCanvas = function () {
         });
     }
 
+    // Малюємо точку прив'язки (isAnchor) — фіолетовий квадратик
+    G.elementEditorPoints.forEach(function (pt) {
+        if (!pt.isAnchor) return;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', pt.x - 5); rect.setAttribute('y', pt.y - 5);
+        rect.setAttribute('width', '10'); rect.setAttribute('height', '10');
+        rect.setAttribute('fill', '#9C27B0');
+        svg.appendChild(rect);
+        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl.setAttribute('x', pt.x + 10); lbl.setAttribute('y', pt.y - 5);
+        lbl.setAttribute('font-size', '13'); lbl.setAttribute('fill', '#9C27B0');
+        lbl.setAttribute('font-weight', 'bold');
+        lbl.textContent = 'П' + pt.num;
+        svg.appendChild(lbl);
+    });
+
     // viewBox — тільки навколо хост-лінії, вікна і доданих точок
     const allX = [x1, x2, wA_x, wB_x];
     const allY = [y1, y2, wA_y, wB_y];
-    if (G.elementEditorLines && G.elementEditorLines.length > 0) {
-        G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
+    // Включаємо anchor-точку і всі додані точки у viewBox
+    G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
+    // Якщо прив'язка задана але ліній ще немає — включаємо обчислену anchor-точку
+    if (G.elementEditorLines.length === 0 && appState.editingElementAnchorParsed) {
+        const ap = _calcAnchorPoint(appState.editingElementAnchorParsed);
+        if (ap) { allX.push(ap.x); allY.push(ap.y); }
     }
     const minX = Math.min(...allX), maxX = Math.max(...allX);
     const minY = Math.min(...allY), maxY = Math.max(...allY);
@@ -918,6 +940,49 @@ window._renderWindowCornerLabel = function (svg, x, y, label) {
     text.setAttribute('font-weight', 'bold');
     text.textContent = label;
     svg.appendChild(text);
+};
+
+/**
+ * Розбирає рядок прив'язки типу "A 2,12" або "B 0.50".
+ * Повертає { corner: 'A'|'B', dist: number } або null.
+ */
+window._parseAnchorInput = function (raw) {
+    if (!raw) return null;
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    const corner = parts[0].toUpperCase();
+    if (corner !== 'A' && corner !== 'B') return null;
+    const dist = parseFloat(parts[1].replace(',', '.'));
+    if (isNaN(dist) || dist < 0) return null;
+    return { corner, dist };
+};
+
+/**
+ * Обчислює початкову точку нової лінії на протилежному боці вікна (від A або B кута).
+ * Точка розміщується на відстані anchor.dist від кута вздовж лінії A→B.
+ * anchor = { corner: 'A'|'B', dist: number }
+ * Повертає { x, y } у координатах SVG або null.
+ */
+window._calcAnchorPoint = function (anchor) {
+    const tr = appState.viewingElementTransform;
+    if (!tr || !tr.wA || !tr.wB) return null;
+
+    // Вектор вздовж протилежної сторони вікна (від A до B)
+    const dx = tr.wB.x - tr.wA.x;
+    const dy = tr.wB.y - tr.wA.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return null;
+    const ux = dx / len, uy = dy / len;
+
+    // Від B — вектор іде у зворотньому напрямку (до A)
+    const origin = anchor.corner === 'A' ? tr.wA : tr.wB;
+    const sign   = anchor.corner === 'A' ? 1 : -1;
+    const distPx = anchor.dist * SCALE;
+
+    return {
+        x: origin.x + ux * distPx * sign,
+        y: origin.y + uy * distPx * sign
+    };
 };
 
 /**
@@ -959,18 +1024,59 @@ window._addLineToElementEditor = function (parsedData) {
         return;
     }
 
+    // Якщо прив'язка задана і це перша лінія — додаємо проміжну точку на протилежному боці вікна
+    const isFirstLine = G.elementEditorLines.length === 0;
+    if (isFirstLine && appState.editingElementAnchorParsed) {
+        const anchorPt = _calcAnchorPoint(appState.editingElementAnchorParsed);
+        if (anchorPt) {
+            G.elementEditorCounter++;
+            const anchorNum = G.elementEditorCounter;
+            G.elementEditorPoints.push({ x: anchorPt.x, y: anchorPt.y, num: anchorNum, isAnchor: true });
+        }
+    }
+
     const lastPt    = G.elementEditorPoints[G.elementEditorPoints.length - 1];
     const scaledLen = lineLength * SCALE;
 
-    // Обчислення напрямку відносно попередньої лінії елемента
+    // Обчислення напрямку:
+    // - якщо перша лінія і є прив'язка — напрямок перпендикулярно від вікна (від A/B боку назовні)
+    // - якщо перша лінія без прив'язки — right/left горизонтально
+    // - якщо не перша — відносно попередньої лінії
     let vx, vy;
     const hasLines = G.elementEditorLines.length > 0;
 
     if (!hasLines) {
-        vx = parsedData.direction === 'left' ? -1 : 1;
-        vy = 0;
+        if (appState.editingElementAnchorParsed) {
+            // Перша лінія від anchor-точки: напрямок перпендикулярно до хост-лінії, назовні від вікна
+            const tr = appState.viewingElementTransform;
+            if (tr) {
+                const hdx = tr.x2 - tr.x1, hdy = tr.y2 - tr.y1;
+                const hlen = Math.sqrt(hdx * hdx + hdy * hdy);
+                if (hlen > 0) {
+                    const hux = hdx / hlen, huy = hdy / hlen;
+                    const el   = appState.viewingElementSource?.el;
+                    const side = el ? (el.side || 1) : 1;
+                    // перпендикуляр у бік від хоста (той самий що й у вікна)
+                    const ppx = huy * side, ppy = -hux * side;
+                    if (parsedData.direction === 'left') {
+                        vx = -ppx; vy = -ppy;
+                    } else {
+                        vx = ppx; vy = ppy;
+                    }
+                } else {
+                    vx = parsedData.direction === 'left' ? -1 : 1;
+                    vy = 0;
+                }
+            } else {
+                vx = parsedData.direction === 'left' ? -1 : 1;
+                vy = 0;
+            }
+        } else {
+            vx = parsedData.direction === 'left' ? -1 : 1;
+            vy = 0;
+        }
     } else {
-        const prevEl = G.elementEditorLines[G.elementEditorLines.length - 1];
+        const prevEl   = G.elementEditorLines[G.elementEditorLines.length - 1];
         const prevFrom = G.elementEditorPoints.find(p => p.num === prevEl.from);
         const prevTo   = G.elementEditorPoints.find(p => p.num === prevEl.to);
         let prevUx = 1, prevUy = 0;

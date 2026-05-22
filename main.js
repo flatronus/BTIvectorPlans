@@ -87,6 +87,8 @@ document.addEventListener('DOMContentLoaded', function () {
     window.openElementThicknessModal = function () {
         const inp = document.getElementById('elementThicknessInput');
         if (inp) inp.value = (appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2);
+        const anchorInp = document.getElementById('elementAnchorInput');
+        if (anchorInp) anchorInp.value = appState.editingElementAnchor || '';
         document.getElementById('elementThicknessModal').style.display = 'block';
         setTimeout(() => inp && inp.select(), 100);
     };
@@ -103,15 +105,36 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         appState.editingElementThickness = val;
+
+        // Читаємо і парсимо поле прив'язки
+        const anchorInp = document.getElementById('elementAnchorInput');
+        const anchorRaw = anchorInp ? anchorInp.value.trim() : '';
+        if (anchorRaw) {
+            const parsed = _parseAnchorInput(anchorRaw);
+            if (parsed) {
+                appState.editingElementAnchor = anchorRaw;
+                appState.editingElementAnchorParsed = parsed;
+            } else {
+                showToast("Невірний формат прив'язки. Приклад: A 2,12", 'warning');
+                return;
+            }
+        } else {
+            appState.editingElementAnchor = '';
+            appState.editingElementAnchorParsed = null;
+        }
+
         closeElementThicknessModal();
         _redrawElementEditorCanvas();
-        _updateShapeModalToolbar();   // оновлює текст «т=…» у тулбарі
+        _updateShapeModalToolbar();
         updateLinesList();
         showToast(`Товщина вікна: ${val.toFixed(2)} м`, 'success');
     };
 
-    /* ── Enter у полі товщини ── */
+    /* ── Enter у полях товщини та прив'язки ── */
     document.getElementById('elementThicknessInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
+    });
+    document.getElementById('elementAnchorInput')?.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
     });
     document.addEventListener('keydown', (e) => {

@@ -28,6 +28,12 @@ const appState = {
     /** Товщина вікна при редагуванні елемента (в метрах) */
     editingElementThickness: ELEMENT_THICKNESS,
 
+    /** Рядок прив'язки у форматі "A 2,12" або "B 0,50" (або порожній) */
+    editingElementAnchor: '',
+
+    /** Розібрана прив'язка { corner: 'A'|'B', dist: number } або null */
+    editingElementAnchorParsed: null,
+
     /** true — coord modal відкрито для додавання лінії до елемента */
     _addingElementLine: false,
 
