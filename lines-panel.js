@@ -27,8 +27,7 @@ window.updateLinesList = function () {
 
         // Рядок вікна — клік відкриває редактор товщини
         const elRow = document.createElement('div');
-        elRow.style.cssText = 'padding: 6px 8px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; cursor: pointer;';
-        elRow.title = 'Клікніть для зміни товщини';
+        elRow.style.cssText = 'padding: 6px 8px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
 
         const elIcon = document.createElement('i');
         elIcon.className = 'fas fa-window-maximize';
@@ -45,7 +44,6 @@ window.updateLinesList = function () {
         thickLabel.textContent = `т=${(appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2)} м`;
         elRow.appendChild(thickLabel);
 
-        elRow.onclick = () => openElementThicknessModal();
         linesList.appendChild(elRow);
 
         // Список доданих ліній
