@@ -62,14 +62,16 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     /**
-     * Оновлює підпис кнопки «Додати» залежно від режиму.
+     * Оновлює видимість кнопок тулбара залежно від режиму.
+     * В режимі елемента — показуємо кнопку «Товщина»; підпис «Додати» змінюється.
      */
     window._updateShapeModalToolbar = function () {
         const isElMode = appState.viewingElementMode;
-        const addBtn = document.getElementById('shapeToolbarAddBtn');
-        if (addBtn) {
-            addBtn.title = isElMode ? 'Додати лінію до вікна' : 'Додати точку';
-        }
+        const addBtn   = document.getElementById('shapeToolbarAddBtn');
+        const thickBtn = document.getElementById('shapeToolbarThicknessBtn');
+
+        if (thickBtn) thickBtn.style.display = isElMode ? '' : 'none';
+        if (addBtn)   addBtn.title = isElMode ? 'Додати лінію до вікна' : 'Додати точку';
     };
 
     /** Відкрити / приховати панель ієрархії */
@@ -110,12 +112,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /* ── Enter у полі товщини ── */
     document.getElementById('elementThicknessInput')?.addEventListener('keydown', function(e) {
-        if (e.code === 'NumpadDecimal') {
-            e.preventDefault();
-            const el = this, s = el.selectionStart, en = el.selectionEnd;
-            el.value = el.value.slice(0, s) + '.' + el.value.slice(en);
-            el.setSelectionRange(s + 1, s + 1);
-        }
         if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
     });
     document.addEventListener('keydown', (e) => {

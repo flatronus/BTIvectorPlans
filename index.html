@@ -144,7 +144,10 @@
             <!-- Панель інструментів модалки -->
             <div class="shape-modal-toolbar" id="shapeModalToolbar">
                 <span class="shape-modal-title">Редактор фігур</span>
-
+                <!-- Кнопка товщини — видима лише в режимі елемента -->
+                <button class="shape-btn shape-btn-purple" id="shapeToolbarThicknessBtn" style="display:none;" onclick="openElementThicknessModal()" title="Змінити товщину вікна">
+                    <i class="fas fa-arrows-alt-h"></i><span class="shape-btn-label"> Товщина</span>
+                </button>
                 <button class="shape-btn shape-btn-blue" id="shapeToolbarAddBtn" onclick="shapeModalAddAction()" title="Додати точку">
                     <i class="fas fa-plus"></i><span class="shape-btn-label"> Додати</span>
                 </button>

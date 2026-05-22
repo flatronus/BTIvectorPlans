@@ -19,33 +19,6 @@ window.updateLinesList = function () {
             NI1: 'Ніша'
         };
 
-        // Заголовок — хост-лінія
-        const hostRow = document.createElement('div');
-        hostRow.style.cssText = 'padding: 6px 8px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; margin-bottom: 5px; font-size: 12px; font-weight: bold; color: #1565c0;';
-        hostRow.textContent = `Лінія Л${hostLine.from}-${hostLine.to ?? '?'} · ${hostLine.length?.toFixed(2)} м`;
-        linesList.appendChild(hostRow);
-
-        // Рядок вікна — клік відкриває редактор товщини
-        const elRow = document.createElement('div');
-        elRow.style.cssText = 'padding: 6px 8px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
-
-        const elIcon = document.createElement('i');
-        elIcon.className = 'fas fa-window-maximize';
-        elIcon.style.cssText = 'font-size: 12px; color: #9C27B0;';
-        elRow.appendChild(elIcon);
-
-        const elLabel = document.createElement('span');
-        elLabel.style.cssText = 'flex: 1; font-size: 12px; font-weight: bold; color: #6a1b9a;';
-        elLabel.textContent = `${el.code} — ${ELEMENT_NAMES_LOCAL[el.code] || el.code} · ${el.start.toFixed(2)}–${el.end.toFixed(2)} м`;
-        elRow.appendChild(elLabel);
-
-        const thickLabel = document.createElement('span');
-        thickLabel.style.cssText = 'font-size: 11px; color: #888;';
-        thickLabel.textContent = `т=${(appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2)} м`;
-        elRow.appendChild(thickLabel);
-
-        linesList.appendChild(elRow);
-
         // Список доданих ліній
         if (G.elementEditorLines && G.elementEditorLines.length > 0) {
             const sepDiv = document.createElement('div');
@@ -64,10 +37,6 @@ window.updateLinesList = function () {
             });
         }
 
-        const hintBox = document.createElement('div');
-        hintBox.style.cssText = 'padding: 6px 8px; background: #fff8e1; border: 1px solid #ffc107; border-radius: 4px; font-size: 11px; color: #795548; margin-top: 8px;';
-        hintBox.innerHTML = 'A і B — кути вікна на протилежному боці.<br>Кнопка <b>Додати</b> додає лінію від точки 1 до вікна.<br>У вікні координат вкажіть <b>A</b> або <b>B</b> замість числа для прив\'язки до кута.';
-        linesList.appendChild(hintBox);
         return;
     }
 
