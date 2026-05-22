@@ -892,7 +892,7 @@ window._redrawElementEditorCanvas = function () {
         });
     }
 
-    // Малюємо точку прив'язки (isAnchor) — фіолетовий квадратик
+    // Малюємо anchor-точку (isAnchor) — фіолетовий квадратик
     G.elementEditorPoints.forEach(function (pt) {
         if (!pt.isAnchor) return;
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -908,12 +908,10 @@ window._redrawElementEditorCanvas = function () {
         svg.appendChild(lbl);
     });
 
-    // viewBox — тільки навколо хост-лінії, вікна і доданих точок
+    // viewBox — навколо хост-лінії, вікна, доданих точок і anchor-точки
     const allX = [x1, x2, wA_x, wB_x];
     const allY = [y1, y2, wA_y, wB_y];
-    // Включаємо anchor-точку і всі додані точки у viewBox
     G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
-    // Якщо прив'язка задана але ліній ще немає — включаємо обчислену anchor-точку
     if (G.elementEditorLines.length === 0 && appState.editingElementAnchorParsed) {
         const ap = _calcAnchorPoint(appState.editingElementAnchorParsed);
         if (ap) { allX.push(ap.x); allY.push(ap.y); }
@@ -958,35 +956,143 @@ window._parseAnchorInput = function (raw) {
 };
 
 /**
- * Обчислює початкову точку нової лінії на протилежному боці вікна (від A або B кута).
- * Точка розміщується на відстані anchor.dist від кута вздовж лінії A→B.
+ * Обчислює точку прив'язки на протилежному боці вікна.
  * anchor = { corner: 'A'|'B', dist: number }
- * Повертає { x, y } у координатах SVG або null.
+ * Повертає { x, y } або null.
  */
 window._calcAnchorPoint = function (anchor) {
     const tr = appState.viewingElementTransform;
     if (!tr || !tr.wA || !tr.wB) return null;
-
-    // Вектор вздовж протилежної сторони вікна (від A до B)
-    const dx = tr.wB.x - tr.wA.x;
-    const dy = tr.wB.y - tr.wA.y;
+    const dx = tr.wB.x - tr.wA.x, dy = tr.wB.y - tr.wA.y;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) return null;
     const ux = dx / len, uy = dy / len;
-
-    // Від B — вектор іде у зворотньому напрямку (до A)
     const origin = anchor.corner === 'A' ? tr.wA : tr.wB;
     const sign   = anchor.corner === 'A' ? 1 : -1;
     const distPx = anchor.dist * SCALE;
-
-    return {
-        x: origin.x + ux * distPx * sign,
-        y: origin.y + uy * distPx * sign
-    };
+    return { x: origin.x + ux * distPx * sign, y: origin.y + uy * distPx * sign };
 };
 
 /**
- * Додає нову лінію до G.elementEditorLines на основі parsedData.
+ * Відкриває coordModal для редагування лінії елемента.
+ * Після підтвердження — оновлює лінію в G.elementEditorLines і перемальовує.
+ */
+window._editElementLine = function (line) {
+    document.getElementById('coordInput').value = line.code || ('free\nline\n' + line.length.toFixed(2));
+    document.getElementById('coordModal').style.display = 'block';
+    appState._editingElementLineId = line.id;
+    appState._addingElementLine = false;
+    setTimeout(() => document.getElementById('coordInput').focus(), 100);
+};
+
+/**
+ * Оновлює лінію елемента з даним id на основі parsedData.
+ * Якщо поле порожнє (видалення) — видаляє лінію і всі наступні.
+ */
+window._updateElementLine = function (lineId, parsedData) {
+    const idx = G.elementEditorLines.findIndex(function (l) { return l.id === lineId; });
+    if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
+
+    let newLength = 0;
+    for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+        if (parsedData.elements[i].type === 'number') { newLength = parsedData.elements[i].value; break; }
+    }
+
+    if (newLength <= 0) {
+        // Порожня довжина = видалити цю лінію і всі наступні
+        G.elementEditorLines = G.elementEditorLines.slice(0, idx);
+        // Видаляємо точки що більше не потрібні
+        if (idx < G.elementEditorLines.length) {
+            const keepPts = new Set();
+            G.elementEditorLines.forEach(function (l) { keepPts.add(l.from); keepPts.add(l.to); });
+            G.elementEditorPoints = G.elementEditorPoints.filter(function (p) { return keepPts.has(p.num); });
+        } else if (G.elementEditorLines.length === 0) {
+            // Всі лінії видалено — залишаємо тільки точки хост-лінії
+            const tr = appState.viewingElementTransform;
+            const hl = appState.viewingElementSource?.hostLine;
+            const fromNum = hl ? hl.from : 1;
+            const toNum   = hl ? (hl.isClosing
+                ? (appState.viewingElementSource?.item?.shapePoints[0]?.num ?? 1)
+                : hl.to) : 2;
+            G.elementEditorPoints = [
+                { x: tr ? tr.x1 : START_X, y: tr ? tr.y1 : START_Y, num: fromNum },
+                { x: tr ? tr.x2 : START_X + SCALE, y: tr ? tr.y2 : START_Y, num: toNum }
+            ];
+            G.elementEditorCounter = toNum;
+        }
+        _redrawElementEditorCanvas();
+        updateLinesList();
+        showToast('Лінію видалено', 'info');
+        return;
+    }
+
+    G.elementEditorLines[idx].length   = newLength;
+    G.elementEditorLines[idx].direction = parsedData.direction;
+    G.elementEditorLines[idx].lineType  = parsedData.lineType;
+    G.elementEditorLines[idx].elements  = parsedData.elements;
+    G.elementEditorLines[idx].code      = document.getElementById('coordInput').value;
+
+    // Перераховуємо координати кінцевої точки цієї лінії і всіх наступних
+    _rebuildElementEditorPoints(idx);
+
+    _redrawElementEditorCanvas();
+    updateLinesList();
+    showToast('Лінію оновлено', 'success');
+};
+
+/**
+ * Перераховує координати точок elementEditorLines починаючи з лінії startIdx.
+ */
+window._rebuildElementEditorPoints = function (startIdx) {
+    for (let i = startIdx; i < G.elementEditorLines.length; i++) {
+        const line   = G.elementEditorLines[i];
+        const fromPt = G.elementEditorPoints.find(function (p) { return p.num === line.from; });
+        if (!fromPt) continue;
+
+        const scaledLen = line.length * SCALE;
+        let vx, vy;
+
+        if (i === 0) {
+            if (appState.editingElementAnchorParsed) {
+                const tr = appState.viewingElementTransform;
+                if (tr) {
+                    const hdx = tr.x2 - tr.x1, hdy = tr.y2 - tr.y1;
+                    const hlen = Math.sqrt(hdx * hdx + hdy * hdy);
+                    if (hlen > 0) {
+                        const hux = hdx / hlen, huy = hdy / hlen;
+                        const side = (appState.viewingElementSource?.el?.side || 1);
+                        const ppx = huy * side, ppy = -hux * side;
+                        if (line.direction === 'left') { vx = -ppx; vy = -ppy; }
+                        else                           { vx =  ppx; vy =  ppy; }
+                    } else { vx = line.direction === 'left' ? -1 : 1; vy = 0; }
+                } else { vx = line.direction === 'left' ? -1 : 1; vy = 0; }
+            } else {
+                vx = line.direction === 'left' ? -1 : 1; vy = 0;
+            }
+        } else {
+            const prev     = G.elementEditorLines[i - 1];
+            const prevFrom = G.elementEditorPoints.find(function (p) { return p.num === prev.from; });
+            const prevTo   = G.elementEditorPoints.find(function (p) { return p.num === prev.to; });
+            let prevUx = 1, prevUy = 0;
+            if (prevFrom && prevTo) {
+                const pdx = prevTo.x - prevFrom.x, pdy = prevTo.y - prevFrom.y;
+                const plen = Math.sqrt(pdx * pdx + pdy * pdy);
+                if (plen > 0) { prevUx = pdx / plen; prevUy = pdy / plen; }
+            }
+            switch (line.direction) {
+                case 'right':  vx = -prevUy; vy =  prevUx; break;
+                case 'left':   vx =  prevUy; vy = -prevUx; break;
+                default:       vx =  prevUx; vy =  prevUy; break;
+            }
+        }
+
+        const endX = fromPt.x + vx * scaledLen;
+        const endY = fromPt.y + vy * scaledLen;
+
+        const toPt = G.elementEditorPoints.find(function (p) { return p.num === line.to; });
+        if (toPt) { toPt.x = endX; toPt.y = endY; }
+    }
+};
  * Перша лінія виходить із точки START_X, START_Y.
  * Напрямок обчислюється за тим самим алгоритмом що і у звичайному редакторі,
  * але відносно попередньої лінії в elementEditorLines.
@@ -1024,56 +1130,40 @@ window._addLineToElementEditor = function (parsedData) {
         return;
     }
 
-    // Якщо прив'язка задана і це перша лінія — додаємо проміжну точку на протилежному боці вікна
+    // Якщо прив'язка задана і це перша лінія — додаємо anchor-точку на протилежному боці вікна
     const isFirstLine = G.elementEditorLines.length === 0;
     if (isFirstLine && appState.editingElementAnchorParsed) {
         const anchorPt = _calcAnchorPoint(appState.editingElementAnchorParsed);
         if (anchorPt) {
             G.elementEditorCounter++;
-            const anchorNum = G.elementEditorCounter;
-            G.elementEditorPoints.push({ x: anchorPt.x, y: anchorPt.y, num: anchorNum, isAnchor: true });
+            G.elementEditorPoints.push({ x: anchorPt.x, y: anchorPt.y, num: G.elementEditorCounter, isAnchor: true });
         }
     }
 
     const lastPt    = G.elementEditorPoints[G.elementEditorPoints.length - 1];
     const scaledLen = lineLength * SCALE;
 
-    // Обчислення напрямку:
-    // - якщо перша лінія і є прив'язка — напрямок перпендикулярно від вікна (від A/B боку назовні)
-    // - якщо перша лінія без прив'язки — right/left горизонтально
-    // - якщо не перша — відносно попередньої лінії
+    // Напрямок: перша лінія з прив'язкою — перпендикулярно від вікна назовні;
+    // перша без прив'язки — горизонтально; наступні — відносно попередньої.
     let vx, vy;
     const hasLines = G.elementEditorLines.length > 0;
 
     if (!hasLines) {
         if (appState.editingElementAnchorParsed) {
-            // Перша лінія від anchor-точки: напрямок перпендикулярно до хост-лінії, назовні від вікна
             const tr = appState.viewingElementTransform;
             if (tr) {
                 const hdx = tr.x2 - tr.x1, hdy = tr.y2 - tr.y1;
                 const hlen = Math.sqrt(hdx * hdx + hdy * hdy);
                 if (hlen > 0) {
                     const hux = hdx / hlen, huy = hdy / hlen;
-                    const el   = appState.viewingElementSource?.el;
-                    const side = el ? (el.side || 1) : 1;
-                    // перпендикуляр у бік від хоста (той самий що й у вікна)
+                    const side = (appState.viewingElementSource?.el?.side || 1);
                     const ppx = huy * side, ppy = -hux * side;
-                    if (parsedData.direction === 'left') {
-                        vx = -ppx; vy = -ppy;
-                    } else {
-                        vx = ppx; vy = ppy;
-                    }
-                } else {
-                    vx = parsedData.direction === 'left' ? -1 : 1;
-                    vy = 0;
-                }
-            } else {
-                vx = parsedData.direction === 'left' ? -1 : 1;
-                vy = 0;
-            }
+                    if (parsedData.direction === 'left') { vx = -ppx; vy = -ppy; }
+                    else                                 { vx =  ppx; vy =  ppy; }
+                } else { vx = parsedData.direction === 'left' ? -1 : 1; vy = 0; }
+            } else { vx = parsedData.direction === 'left' ? -1 : 1; vy = 0; }
         } else {
-            vx = parsedData.direction === 'left' ? -1 : 1;
-            vy = 0;
+            vx = parsedData.direction === 'left' ? -1 : 1; vy = 0;
         }
     } else {
         const prevEl   = G.elementEditorLines[G.elementEditorLines.length - 1];
@@ -1106,6 +1196,7 @@ window._addLineToElementEditor = function (parsedData) {
         direction:        parsedData.direction,
         lineType:         parsedData.lineType,
         elements:         parsedData.elements,
+        code:             document.getElementById('coordInput').value,
         length:           lineLength,
         dimensionVisible: true,
         dimensionRotated: false

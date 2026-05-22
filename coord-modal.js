@@ -101,6 +101,19 @@ window.closeCoordModal = function () {
     const inputText = inputEl ? inputEl.value.trim() : '';
 
     try {
+        // Режим редагування існуючої лінії елемента
+        if (appState._editingElementLineId !== null && appState._editingElementLineId !== undefined) {
+            const lineId = appState._editingElementLineId;
+            appState._editingElementLineId = null;
+            if (inputText) {
+                const parsedData = parseCoordinateInput(inputText);
+                if (parsedData) {
+                    _updateElementLine(lineId, parsedData);
+                }
+            }
+            return;
+        }
+
         // Режим додавання лінії до елемента (вікна)
         if (appState._addingElementLine) {
             appState._addingElementLine = false;
@@ -153,6 +166,7 @@ window.cancelCoordModal = function () {
     appState.editingLineId = null;
     appState.isClosingLine = false;
     appState._addingElementLine = false;
+    appState._editingElementLineId = null;
     document.getElementById('coordModal').style.display = 'none';
     document.getElementById('coordInput').value = '';
     const box = document.getElementById('windowCornerAnchorBox');

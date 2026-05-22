@@ -9,33 +9,42 @@ window.updateLinesList = function () {
 
     // ── Режим редагування елемента ──
     if (appState.viewingElementMode && appState.viewingElementSource) {
-        const { item, hostLine, el } = appState.viewingElementSource;
-        const ELEMENT_NAMES_LOCAL = {
-            WI1: 'Вікно',  DV1: 'Двері',   OT1: 'Отвір',
-            KO1: 'Комин 1', KO2: 'Комин 2',
-            PI1: 'Піч 1',   PI2: 'Піч 2',
-            KU1: 'Кухня 1', KU2: 'Кухня 2', KU3: 'Кухня 3',
-            KL1: 'Колона 1', KL2: 'Колона 2',
-            NI1: 'Ніша'
-        };
+        const lines = G.elementEditorLines || [];
 
-        // Список доданих ліній
-        if (G.elementEditorLines && G.elementEditorLines.length > 0) {
-            const sepDiv = document.createElement('div');
-            sepDiv.style.cssText = 'font-size: 10px; color: #999; padding: 4px 0; font-weight: bold;';
-            sepDiv.textContent = 'Додані лінії:';
-            linesList.appendChild(sepDiv);
-
-            G.elementEditorLines.forEach(eLine => {
-                const eRow = document.createElement('div');
-                eRow.style.cssText = 'padding: 5px 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 3px; font-size: 12px; display: flex; align-items: center; gap: 6px;';
-                const eLbl = document.createElement('span');
-                eLbl.style.flex = '1';
-                eLbl.textContent = `Л${eLine.from}-${eLine.to} · ${eLine.length.toFixed(2)} м`;
-                eRow.appendChild(eLbl);
-                linesList.appendChild(eRow);
-            });
+        if (lines.length === 0) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.style.cssText = 'color: #999; font-size: 12px; padding: 8px; text-align: center;';
+            emptyDiv.textContent = 'Немає ліній. Натисніть «Додати».';
+            linesList.appendChild(emptyDiv);
+            return;
         }
+
+        lines.forEach(function (line) {
+            const lineContainer = document.createElement('div');
+            lineContainer.style.cssText = 'padding: 6px 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
+
+            const lineBtn = document.createElement('button');
+            lineBtn.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
+            lineBtn.textContent = (line.from || '?') + '-' + (line.to !== undefined ? line.to : '?') + ' · ' + line.length.toFixed(2) + ' м';
+            lineBtn.onclick = function () { _editElementLine(line); };
+            lineContainer.appendChild(lineBtn);
+
+            const visChk = _makeSmallCheckbox(
+                line.dimensionVisible !== false,
+                'Показати розмір',
+                function (checked) { line.dimensionVisible = checked; _redrawElementEditorCanvas(); }
+            );
+            lineContainer.appendChild(visChk);
+
+            const rotChk = _makeSmallCheckbox(
+                line.dimensionRotated === true,
+                'Розвернути на 180°',
+                function (checked) { line.dimensionRotated = checked; _redrawElementEditorCanvas(); }
+            );
+            lineContainer.appendChild(rotChk);
+
+            linesList.appendChild(lineContainer);
+        });
 
         return;
     }
