@@ -63,37 +63,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /**
      * Оновлює видимість кнопок тулбара залежно від режиму.
-     * В режимі елемента — ховаємо «Замкнути», «Діагональ», «Швидко»;
-     * показуємо інфо про лінію/елемент і кнопку «Товщина».
+     * В режимі елемента — показуємо кнопку «Товщина»; підпис «Додати» змінюється.
      */
     window._updateShapeModalToolbar = function () {
         const isElMode = appState.viewingElementMode;
-        const closeBtn     = document.getElementById('shapeToolbarCloseBtn');
-        const diagBtn      = document.getElementById('shapeToolbarDiagBtn');
-        const quickBtn     = document.getElementById('shapeToolbarQuickBtn');
-        const addBtn       = document.getElementById('shapeToolbarAddBtn');
-        const thickBtn     = document.getElementById('shapeToolbarThicknessBtn');
-        const elInfoSpan   = document.getElementById('shapeToolbarElInfo');
+        const addBtn   = document.getElementById('shapeToolbarAddBtn');
+        const thickBtn = document.getElementById('shapeToolbarThicknessBtn');
 
-        if (closeBtn)   closeBtn.style.display   = isElMode ? 'none' : '';
-        if (diagBtn)    diagBtn.style.display     = isElMode ? 'none' : '';
-        if (quickBtn)   quickBtn.style.display    = isElMode ? 'none' : '';
-        if (thickBtn)   thickBtn.style.display    = isElMode ? '' : 'none';
-        if (elInfoSpan) elInfoSpan.style.display  = isElMode ? '' : 'none';
-
-        if (addBtn) {
-            addBtn.title = isElMode ? 'Додати лінію до вікна' : 'Додати точку';
-        }
-
-        // Заповнюємо інфо-спан даними про елемент
-        if (isElMode && elInfoSpan && appState.viewingElementSource) {
-            const { hostLine, el } = appState.viewingElementSource;
-            const NAMES = { WI1:'Вікно', DV1:'Двері', OT1:'Отвір' };
-            const name  = NAMES[el.code] || el.code;
-            const thick = (appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2);
-            elInfoSpan.textContent =
-                `${el.code} (${name}) · Л${hostLine.from}-${hostLine.to ?? '?'} · ${el.start.toFixed(2)}–${el.end.toFixed(2)} м · т=${thick} м`;
-        }
+        if (thickBtn) thickBtn.style.display = isElMode ? '' : 'none';
+        if (addBtn)   addBtn.title = isElMode ? 'Додати лінію до вікна' : 'Додати точку';
     };
 
     /** Відкрити / приховати панель ієрархії */
@@ -119,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.applyElementThickness = function () {
         const inp = document.getElementById('elementThicknessInput');
-        const val = parseFloat((inp ? inp.value : '').replace(',', '.'));
+        const val = parseFloat(inp ? inp.value.replace(',', '.') : '');
         if (isNaN(val) || val <= 0) {
             showToast('Введіть коректну товщину', 'warning');
             return;
@@ -127,19 +105,13 @@ document.addEventListener('DOMContentLoaded', function () {
         appState.editingElementThickness = val;
         closeElementThicknessModal();
         _redrawElementEditorCanvas();
-        _updateShapeModalToolbar();
+        _updateShapeModalToolbar();   // оновлює текст «т=…» у тулбарі
         updateLinesList();
         showToast(`Товщина вікна: ${val.toFixed(2)} м`, 'success');
     };
 
-    /* ── Кома і NumpadDecimal вставляють «.» у полі товщини ── */
+    /* ── Enter у полі товщини ── */
     document.getElementById('elementThicknessInput')?.addEventListener('keydown', function(e) {
-        if (e.code === 'NumpadDecimal' || e.key === ',') {
-            e.preventDefault();
-            const el = this, s = el.selectionStart, en = el.selectionEnd;
-            el.value = el.value.slice(0, s) + '.' + el.value.slice(en);
-            el.setSelectionRange(s + 1, s + 1);
-        }
         if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
     });
     document.addEventListener('keydown', (e) => {
