@@ -111,39 +111,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const anchorRaw = anchorInp ? anchorInp.value.trim() : '';
 
         if (anchorRaw) {
-            // Парсимо прив'язку
             const parsed = _parseAnchorInput(anchorRaw);
             if (!parsed) {
-                showToast("Невірний формат прив'язки. Приклад: A 2,12", 'warning');
+                showToast("Невірний формат прив'язки. Приклад: A 2", 'warning');
                 return;
             }
-            appState.editingElementAnchor       = anchorRaw;
-            appState.editingElementAnchorParsed = parsed;
-
-            // Зберігаємо wA/wB до закриття редактора елемента
             const tr = appState.viewingElementTransform;
             if (!tr || !tr.wA || !tr.wB) {
                 showToast('Не вдалося отримати координати вікна', 'error');
                 return;
             }
-            const wA = { x: tr.wA.x, y: tr.wA.y };
-            const wB = { x: tr.wB.x, y: tr.wB.y };
-
             closeElementThicknessModal();
-
-            // Закриваємо редактор елемента
-            appState.viewingElementMode      = false;
-            appState.viewingElementSource    = null;
-            appState.viewingElementTransform = null;
-            appState._addingElementLine      = false;
-            document.getElementById('shapeModal').style.display = 'none';
-            resetShapeData();
-
-            // Відкриваємо звичайний редактор фігури з першою лінією від прив'язки
-            appState.editingHierarchyItemId = null;
-            document.getElementById('shapeModal').style.display = 'block';
-            _updateShapeModalToolbar();
-            _startFigureFromAnchor(parsed, wA, wB);
+            appState.editingElementAnchor       = anchorRaw;
+            appState.editingElementAnchorParsed = parsed;
+            _drawAnchorLineOnMainCanvas(parsed, tr.wA, tr.wB);
 
         } else {
             appState.editingElementAnchor       = '';

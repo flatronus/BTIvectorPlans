@@ -1040,14 +1040,18 @@ window._parseAnchorInput = function (raw) {
  *   wA, wB — кути вікна на протилежному боці від хост-лінії (у SVG-координатах).
  *   anchor.corner = 'A', anchor.dist = d:
  *     - вектор вздовж вікна: u = normalize(wB - wA)
- *     - вектор від B (від центру вікна): -u
- *     - точка 1 = wA + (-u) * d  = wA - u * d  (відходимо від wA у бік від wB)
- *     - точка 2 = pt1 + u * d               (вздовж вікна на відстань d)
- *   anchor.corner = 'B': симетрично — від wB у бік від wA.
+ *     - точка 1 = wA - u * d  (від wA у бік від wB)
+ *     - точка 2 = pt1 + u * d (вздовж вікна, довжина = d)
+ *   anchor.corner = 'B': симетрично від wB.
+ * Лінія малюється на головному SVG полотні. Жодних перемикань режимів.
  */
-window._startFigureFromAnchor = function (anchor, wA, wB) {
-    const svg = document.getElementById('shapeCanvas');
-    if (!svg) return;
+window._drawAnchorLineOnMainCanvas = function (anchor, wA, wB) {
+    const canvas = window.canvasManager?.canvases.find(
+        c => c.id === window.canvasManager?.activeCanvasId
+    );
+    if (!canvas) { showToast('Немає активного полотна', 'error'); return; }
+    const mainSvg = document.querySelector(`[data-canvas-id="${canvas.id}"] svg`);
+    if (!mainSvg) return;
 
     // Вектор вздовж вікна A→B
     const dx  = wB.x - wA.x, dy = wB.y - wA.y;
@@ -1057,61 +1061,32 @@ window._startFigureFromAnchor = function (anchor, wA, wB) {
 
     const distPx = anchor.dist * SCALE;
 
-    // Точка 1: від відповідного кута вікна, у напрямку від протилежного кута
+    // Точка 1: від кута вікна у напрямку від протилежного кута
     let pt1x, pt1y;
     if (anchor.corner === 'A') {
-        // від wA у напрямку -u (від B)
         pt1x = wA.x - ux * distPx;
         pt1y = wA.y - uy * distPx;
     } else {
-        // від wB у напрямку +u (від A)
         pt1x = wB.x + ux * distPx;
         pt1y = wB.y + uy * distPx;
     }
 
-    // Точка 2: від точки 1 вздовж вікна (A→B) на відстань dist
+    // Точка 2: від точки 1 вздовж вікна на відстань dist
     const pt2x = pt1x + ux * distPx;
     const pt2y = pt1y + uy * distPx;
 
-    // Скидаємо канвас і ставимо точку 1 в pt1
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-    G.shapePoints   = [{ x: pt1x, y: pt1y, num: 1 }];
-    G.figureLines   = [];
-    G.pendingFreeLines = [];
-    G.lineIdCounter = 1;
-    G.pointCounter  = 1;
-    G.diagonals     = [];
+    // Малюємо лінію на головному полотні
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', pt1x); line.setAttribute('y1', pt1y);
+    line.setAttribute('x2', pt2x); line.setAttribute('y2', pt2y);
+    line.setAttribute('stroke', 'black');
+    line.setAttribute('stroke-width', '1');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    mainSvg.appendChild(line);
 
-    // Малюємо точку 1
-    _renderSvgPoint(svg, pt1x, pt1y, 1);
-
-    // Малюємо першу лінію (вздовж вікна, довжина = dist)
+    // Підпис розміру
     const lineData = { dimensionVisible: true, dimensionRotated: false };
-    _renderSvgLine(svg, pt1x, pt1y, pt2x, pt2y);
-    drawLineDimension(pt1x, pt1y, pt2x, pt2y, anchor.dist, lineData);
-    _renderSvgPoint(svg, pt2x, pt2y, 2);
+    drawMainCanvasDimension(mainSvg, pt1x, pt1y, pt2x, pt2y, anchor.dist, lineData);
 
-    // Додаємо точку 2 і лінію в стан фігури
-    G.pointCounter = 2;
-    G.shapePoints.push({ x: pt2x, y: pt2y, num: 2 });
-    G.figureLines.push({
-        id:               G.lineIdCounter++,
-        from:             1,
-        to:               2,
-        direction:        'free',
-        lineType:         'line',
-        elements:         [{ type: 'number', value: anchor.dist }],
-        code:             'free\nline\n' + anchor.dist.toFixed(2),
-        length:           anchor.dist,
-        isClosing:        false,
-        isPending:        false,
-        isDiagonal:       false,
-        dimensionVisible: true,
-        dimensionRotated: false,
-        _cachedEnd:       { x: pt2x, y: pt2y }
-    });
-
-    autoScaleAndCenterFigure();
-    updateLinesList();
-    showToast(`Фігуру прив'язано до вікна (${anchor.corner} ${anchor.dist} м)`, 'success');
+    showToast(`Лінію прив'язки намальовано (${anchor.corner} ${anchor.dist} м)`, 'success');
 };
