@@ -750,8 +750,6 @@ window.openElementInShapeEditor = function (item, hostLine, el) {
     appState.viewingElementMode = true;            // прапорець «режим елемента» (не звичайний редактор)
     appState.viewingElementSource = { item, hostLine, el };
     appState.editingElementThickness = typeof el.thickness === 'number' ? el.thickness : ELEMENT_THICKNESS;
-    appState.editingElementAnchor = '';
-    appState.editingElementAnchorParsed = null;
 
     // Скидаємо окремий масив ліній для цього режиму
     G.elementEditorLines   = [];   // лінії що малюються кнопкою «Додати»
@@ -892,29 +890,11 @@ window._redrawElementEditorCanvas = function () {
         });
     }
 
-    // Малюємо anchor-точку (isAnchor) — фіолетовий квадратик
-    G.elementEditorPoints.forEach(function (pt) {
-        if (!pt.isAnchor) return;
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', pt.x - 5); rect.setAttribute('y', pt.y - 5);
-        rect.setAttribute('width', '10'); rect.setAttribute('height', '10');
-        rect.setAttribute('fill', '#9C27B0');
-        svg.appendChild(rect);
-        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        lbl.setAttribute('x', pt.x + 10); lbl.setAttribute('y', pt.y - 5);
-        lbl.setAttribute('font-size', '13'); lbl.setAttribute('fill', '#9C27B0');
-        lbl.setAttribute('font-weight', 'bold');
-        lbl.textContent = 'П' + pt.num;
-        svg.appendChild(lbl);
-    });
-
-    // viewBox — навколо хост-лінії, вікна, доданих точок і anchor-точки
+    // viewBox — тільки навколо хост-лінії, вікна і доданих точок
     const allX = [x1, x2, wA_x, wB_x];
     const allY = [y1, y2, wA_y, wB_y];
-    G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
-    if (G.elementEditorLines.length === 0 && appState.editingElementAnchorParsed) {
-        const ap = _calcAnchorPoint(appState.editingElementAnchorParsed);
-        if (ap) { allX.push(ap.x); allY.push(ap.y); }
+    if (G.elementEditorLines && G.elementEditorLines.length > 0) {
+        G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
     }
     const minX = Math.min(...allX), maxX = Math.max(...allX);
     const minY = Math.min(...allY), maxY = Math.max(...allY);
@@ -938,160 +918,6 @@ window._renderWindowCornerLabel = function (svg, x, y, label) {
     text.setAttribute('font-weight', 'bold');
     text.textContent = label;
     svg.appendChild(text);
-};
-
-/**
- * Розбирає рядок прив'язки типу "A 2,12" або "B 0.50".
- * Повертає { corner: 'A'|'B', dist: number } або null.
- */
-window._parseAnchorInput = function (raw) {
-    if (!raw) return null;
-    const parts = raw.trim().split(/\s+/);
-    if (parts.length < 2) return null;
-    const corner = parts[0].toUpperCase();
-    if (corner !== 'A' && corner !== 'B') return null;
-    const dist = parseFloat(parts[1].replace(',', '.'));
-    if (isNaN(dist) || dist < 0) return null;
-    return { corner, dist };
-};
-
-/**
- * Обчислює точку прив'язки на протилежному боці вікна.
- * anchor = { corner: 'A'|'B', dist: number }
- * Повертає { x, y } або null.
- */
-window._calcAnchorPoint = function (anchor) {
-    const tr = appState.viewingElementTransform;
-    if (!tr || !tr.wA || !tr.wB) return null;
-    const dx = tr.wB.x - tr.wA.x, dy = tr.wB.y - tr.wA.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0) return null;
-    const ux = dx / len, uy = dy / len;
-    const origin = anchor.corner === 'A' ? tr.wA : tr.wB;
-    const sign   = anchor.corner === 'A' ? 1 : -1;
-    const distPx = anchor.dist * SCALE;
-    return { x: origin.x + ux * distPx * sign, y: origin.y + uy * distPx * sign };
-};
-
-/**
- * Відкриває coordModal для редагування лінії елемента.
- * Після підтвердження — оновлює лінію в G.elementEditorLines і перемальовує.
- */
-window._editElementLine = function (line) {
-    document.getElementById('coordInput').value = line.code || ('free\nline\n' + line.length.toFixed(2));
-    document.getElementById('coordModal').style.display = 'block';
-    appState._editingElementLineId = line.id;
-    appState._addingElementLine = false;
-    setTimeout(() => document.getElementById('coordInput').focus(), 100);
-};
-
-/**
- * Оновлює лінію елемента з даним id на основі parsedData.
- * Якщо поле порожнє (видалення) — видаляє лінію і всі наступні.
- */
-window._updateElementLine = function (lineId, parsedData) {
-    const idx = G.elementEditorLines.findIndex(function (l) { return l.id === lineId; });
-    if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
-
-    let newLength = 0;
-    for (let i = parsedData.elements.length - 1; i >= 0; i--) {
-        if (parsedData.elements[i].type === 'number') { newLength = parsedData.elements[i].value; break; }
-    }
-
-    if (newLength <= 0) {
-        // Порожня довжина = видалити цю лінію і всі наступні
-        G.elementEditorLines = G.elementEditorLines.slice(0, idx);
-        // Видаляємо точки що більше не потрібні
-        if (idx < G.elementEditorLines.length) {
-            const keepPts = new Set();
-            G.elementEditorLines.forEach(function (l) { keepPts.add(l.from); keepPts.add(l.to); });
-            G.elementEditorPoints = G.elementEditorPoints.filter(function (p) { return keepPts.has(p.num); });
-        } else if (G.elementEditorLines.length === 0) {
-            // Всі лінії видалено — залишаємо тільки точки хост-лінії
-            const tr = appState.viewingElementTransform;
-            const hl = appState.viewingElementSource?.hostLine;
-            const fromNum = hl ? hl.from : 1;
-            const toNum   = hl ? (hl.isClosing
-                ? (appState.viewingElementSource?.item?.shapePoints[0]?.num ?? 1)
-                : hl.to) : 2;
-            G.elementEditorPoints = [
-                { x: tr ? tr.x1 : START_X, y: tr ? tr.y1 : START_Y, num: fromNum },
-                { x: tr ? tr.x2 : START_X + SCALE, y: tr ? tr.y2 : START_Y, num: toNum }
-            ];
-            G.elementEditorCounter = toNum;
-        }
-        _redrawElementEditorCanvas();
-        updateLinesList();
-        showToast('Лінію видалено', 'info');
-        return;
-    }
-
-    G.elementEditorLines[idx].length   = newLength;
-    G.elementEditorLines[idx].direction = parsedData.direction;
-    G.elementEditorLines[idx].lineType  = parsedData.lineType;
-    G.elementEditorLines[idx].elements  = parsedData.elements;
-    G.elementEditorLines[idx].code      = document.getElementById('coordInput').value;
-
-    // Перераховуємо координати кінцевої точки цієї лінії і всіх наступних
-    _rebuildElementEditorPoints(idx);
-
-    _redrawElementEditorCanvas();
-    updateLinesList();
-    showToast('Лінію оновлено', 'success');
-};
-
-/**
- * Перераховує координати точок elementEditorLines починаючи з лінії startIdx.
- */
-window._rebuildElementEditorPoints = function (startIdx) {
-    for (let i = startIdx; i < G.elementEditorLines.length; i++) {
-        const line   = G.elementEditorLines[i];
-        const fromPt = G.elementEditorPoints.find(function (p) { return p.num === line.from; });
-        if (!fromPt) continue;
-
-        const scaledLen = line.length * SCALE;
-        let vx, vy;
-
-        if (i === 0) {
-            if (appState.editingElementAnchorParsed) {
-                const tr = appState.viewingElementTransform;
-                if (tr) {
-                    const hdx = tr.x2 - tr.x1, hdy = tr.y2 - tr.y1;
-                    const hlen = Math.sqrt(hdx * hdx + hdy * hdy);
-                    if (hlen > 0) {
-                        const hux = hdx / hlen, huy = hdy / hlen;
-                        const side = (appState.viewingElementSource?.el?.side || 1);
-                        const ppx = huy * side, ppy = -hux * side;
-                        if (line.direction === 'left') { vx = -ppx; vy = -ppy; }
-                        else                           { vx =  ppx; vy =  ppy; }
-                    } else { vx = line.direction === 'left' ? -1 : 1; vy = 0; }
-                } else { vx = line.direction === 'left' ? -1 : 1; vy = 0; }
-            } else {
-                vx = line.direction === 'left' ? -1 : 1; vy = 0;
-            }
-        } else {
-            const prev     = G.elementEditorLines[i - 1];
-            const prevFrom = G.elementEditorPoints.find(function (p) { return p.num === prev.from; });
-            const prevTo   = G.elementEditorPoints.find(function (p) { return p.num === prev.to; });
-            let prevUx = 1, prevUy = 0;
-            if (prevFrom && prevTo) {
-                const pdx = prevTo.x - prevFrom.x, pdy = prevTo.y - prevFrom.y;
-                const plen = Math.sqrt(pdx * pdx + pdy * pdy);
-                if (plen > 0) { prevUx = pdx / plen; prevUy = pdy / plen; }
-            }
-            switch (line.direction) {
-                case 'right':  vx = -prevUy; vy =  prevUx; break;
-                case 'left':   vx =  prevUy; vy = -prevUx; break;
-                default:       vx =  prevUx; vy =  prevUy; break;
-            }
-        }
-
-        const endX = fromPt.x + vx * scaledLen;
-        const endY = fromPt.y + vy * scaledLen;
-
-        const toPt = G.elementEditorPoints.find(function (p) { return p.num === line.to; });
-        if (toPt) { toPt.x = endX; toPt.y = endY; }
-    }
 };
 
 /**
@@ -1133,43 +959,18 @@ window._addLineToElementEditor = function (parsedData) {
         return;
     }
 
-    // Якщо прив'язка задана і це перша лінія — додаємо anchor-точку на протилежному боці вікна
-    const isFirstLine = G.elementEditorLines.length === 0;
-    if (isFirstLine && appState.editingElementAnchorParsed) {
-        const anchorPt = _calcAnchorPoint(appState.editingElementAnchorParsed);
-        if (anchorPt) {
-            G.elementEditorCounter++;
-            G.elementEditorPoints.push({ x: anchorPt.x, y: anchorPt.y, num: G.elementEditorCounter, isAnchor: true });
-        }
-    }
-
     const lastPt    = G.elementEditorPoints[G.elementEditorPoints.length - 1];
     const scaledLen = lineLength * SCALE;
 
-    // Напрямок: перша лінія з прив'язкою — перпендикулярно від вікна назовні;
-    // перша без прив'язки — горизонтально; наступні — відносно попередньої.
+    // Обчислення напрямку відносно попередньої лінії елемента
     let vx, vy;
     const hasLines = G.elementEditorLines.length > 0;
 
     if (!hasLines) {
-        if (appState.editingElementAnchorParsed) {
-            const tr = appState.viewingElementTransform;
-            if (tr) {
-                const hdx = tr.x2 - tr.x1, hdy = tr.y2 - tr.y1;
-                const hlen = Math.sqrt(hdx * hdx + hdy * hdy);
-                if (hlen > 0) {
-                    const hux = hdx / hlen, huy = hdy / hlen;
-                    const side = (appState.viewingElementSource?.el?.side || 1);
-                    const ppx = huy * side, ppy = -hux * side;
-                    if (parsedData.direction === 'left') { vx = -ppx; vy = -ppy; }
-                    else                                 { vx =  ppx; vy =  ppy; }
-                } else { vx = parsedData.direction === 'left' ? -1 : 1; vy = 0; }
-            } else { vx = parsedData.direction === 'left' ? -1 : 1; vy = 0; }
-        } else {
-            vx = parsedData.direction === 'left' ? -1 : 1; vy = 0;
-        }
+        vx = parsedData.direction === 'left' ? -1 : 1;
+        vy = 0;
     } else {
-        const prevEl   = G.elementEditorLines[G.elementEditorLines.length - 1];
+        const prevEl = G.elementEditorLines[G.elementEditorLines.length - 1];
         const prevFrom = G.elementEditorPoints.find(p => p.num === prevEl.from);
         const prevTo   = G.elementEditorPoints.find(p => p.num === prevEl.to);
         let prevUx = 1, prevUy = 0;
@@ -1199,7 +1000,6 @@ window._addLineToElementEditor = function (parsedData) {
         direction:        parsedData.direction,
         lineType:         parsedData.lineType,
         elements:         parsedData.elements,
-        code:             document.getElementById('coordInput').value,
         length:           lineLength,
         dimensionVisible: true,
         dimensionRotated: false
@@ -1216,4 +1016,102 @@ window._drawShapeLine = function (x1, y1, x2, y2, length, isClosing, lineData) {
     const numLen = typeof length === 'number' ? length : parseFloat(length);
     drawLineDimension(x1, y1, x2, y2, numLen, lineData);
     if (!isClosing) _renderSvgPoint(svg, x2, y2, G.pointCounter + 1);
+};
+
+/**
+ * Розбирає рядок прив'язки типу "A 2,12" або "B 0.50".
+ * Повертає { corner: 'A'|'B', dist: number } або null.
+ */
+window._parseAnchorInput = function (raw) {
+    if (!raw) return null;
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    const corner = parts[0].toUpperCase();
+    if (corner !== 'A' && corner !== 'B') return null;
+    const dist = parseFloat(parts[1].replace(',', '.'));
+    if (isNaN(dist) || dist <= 0) return null;
+    return { corner, dist };
+};
+
+/**
+ * Відкриває звичайний редактор фігури з першою лінією прив'язаною до вікна.
+ *
+ * Геометрія:
+ *   wA, wB — кути вікна на протилежному боці від хост-лінії (у SVG-координатах).
+ *   anchor.corner = 'A', anchor.dist = d:
+ *     - вектор вздовж вікна: u = normalize(wB - wA)
+ *     - вектор від B (від центру вікна): -u
+ *     - точка 1 = wA + (-u) * d  = wA - u * d  (відходимо від wA у бік від wB)
+ *     - точка 2 = pt1 + u * d               (вздовж вікна на відстань d)
+ *   anchor.corner = 'B': симетрично — від wB у бік від wA.
+ */
+window._startFigureFromAnchor = function (anchor, wA, wB) {
+    const svg = document.getElementById('shapeCanvas');
+    if (!svg) return;
+
+    // Вектор вздовж вікна A→B
+    const dx  = wB.x - wA.x, dy = wB.y - wA.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) { showToast('Некоректні координати вікна', 'error'); return; }
+    const ux = dx / len, uy = dy / len;
+
+    const distPx = anchor.dist * SCALE;
+
+    // Точка 1: від відповідного кута вікна, у напрямку від протилежного кута
+    let pt1x, pt1y;
+    if (anchor.corner === 'A') {
+        // від wA у напрямку -u (від B)
+        pt1x = wA.x - ux * distPx;
+        pt1y = wA.y - uy * distPx;
+    } else {
+        // від wB у напрямку +u (від A)
+        pt1x = wB.x + ux * distPx;
+        pt1y = wB.y + uy * distPx;
+    }
+
+    // Точка 2: від точки 1 вздовж вікна (A→B) на відстань dist
+    const pt2x = pt1x + ux * distPx;
+    const pt2y = pt1y + uy * distPx;
+
+    // Скидаємо канвас і ставимо точку 1 в pt1
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    G.shapePoints   = [{ x: pt1x, y: pt1y, num: 1 }];
+    G.figureLines   = [];
+    G.pendingFreeLines = [];
+    G.lineIdCounter = 1;
+    G.pointCounter  = 1;
+    G.diagonals     = [];
+
+    // Малюємо точку 1
+    _renderSvgPoint(svg, pt1x, pt1y, 1);
+
+    // Малюємо першу лінію (вздовж вікна, довжина = dist)
+    const lineData = { dimensionVisible: true, dimensionRotated: false };
+    _renderSvgLine(svg, pt1x, pt1y, pt2x, pt2y);
+    drawLineDimension(pt1x, pt1y, pt2x, pt2y, anchor.dist, lineData);
+    _renderSvgPoint(svg, pt2x, pt2y, 2);
+
+    // Додаємо точку 2 і лінію в стан фігури
+    G.pointCounter = 2;
+    G.shapePoints.push({ x: pt2x, y: pt2y, num: 2 });
+    G.figureLines.push({
+        id:               G.lineIdCounter++,
+        from:             1,
+        to:               2,
+        direction:        'free',
+        lineType:         'line',
+        elements:         [{ type: 'number', value: anchor.dist }],
+        code:             'free\nline\n' + anchor.dist.toFixed(2),
+        length:           anchor.dist,
+        isClosing:        false,
+        isPending:        false,
+        isDiagonal:       false,
+        dimensionVisible: true,
+        dimensionRotated: false,
+        _cachedEnd:       { x: pt2x, y: pt2y }
+    });
+
+    autoScaleAndCenterFigure();
+    updateLinesList();
+    showToast(`Фігуру прив'язано до вікна (${anchor.corner} ${anchor.dist} м)`, 'success');
 };

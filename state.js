@@ -37,9 +37,6 @@ const appState = {
     /** true — coord modal відкрито для додавання лінії до елемента */
     _addingElementLine: false,
 
-    /** id лінії елемента що редагується (null якщо нова) */
-    _editingElementLineId: null,
-
     /** customArea при редагуванні */
     customArea: null,
 
