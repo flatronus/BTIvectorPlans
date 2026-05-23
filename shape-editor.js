@@ -1093,6 +1093,9 @@ window._rebuildElementEditorPoints = function (startIdx) {
         if (toPt) { toPt.x = endX; toPt.y = endY; }
     }
 };
+
+/**
+ * Додає нову лінію до G.elementEditorLines на основі parsedData.
  * Перша лінія виходить із точки START_X, START_Y.
  * Напрямок обчислюється за тим самим алгоритмом що і у звичайному редакторі,
  * але відносно попередньої лінії в elementEditorLines.
