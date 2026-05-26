@@ -106,6 +106,13 @@ window.openShapeModalForEdit = function (item) {
     G.roomNumber  = item.roomNumber || '';
     G.isBuilding  = item.type === 'building';
     appState.editingHierarchyItemId = item.id;
+
+    // Відновлюємо лічильники щоб нові лінії/точки не конфліктували з існуючими
+    const maxLineId = G.figureLines.reduce((m, l) => Math.max(m, l.id || 0), 0);
+    G.lineIdCounter = maxLineId + 1;
+    const maxPointNum = G.shapePoints.reduce((m, p) => Math.max(m, p.num || 0), 0);
+    G.pointCounter  = maxPointNum;
+
     redrawEntireFigure();
 };
 
@@ -183,7 +190,7 @@ window.createHierarchyItemElement = function (item) {
 
                     row.onclick = (e) => {
                         e.stopPropagation();
-                        openElementInShapeEditor(item, line, el);
+                        showToast('Редагування елементів через панель ієрархії вимкнено', 'info');
                     };
 
                     detailsWrap.appendChild(row);

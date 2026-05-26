@@ -7,48 +7,6 @@ window.updateLinesList = function () {
     const linesList = document.getElementById('linesList');
     linesList.innerHTML = '';
 
-    // ── Режим редагування елемента ──
-    if (appState.viewingElementMode && appState.viewingElementSource) {
-        const lines = G.elementEditorLines || [];
-
-        if (lines.length === 0) {
-            const emptyDiv = document.createElement('div');
-            emptyDiv.style.cssText = 'color: #999; font-size: 12px; padding: 8px; text-align: center;';
-            emptyDiv.textContent = 'Немає ліній. Натисніть «Додати».';
-            linesList.appendChild(emptyDiv);
-            return;
-        }
-
-        lines.forEach(function (line) {
-            const lineContainer = document.createElement('div');
-            lineContainer.style.cssText = 'padding: 6px 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;';
-
-            const lineBtn = document.createElement('button');
-            lineBtn.style.cssText = 'flex: 1; padding: 4px; background: transparent; border: none; cursor: pointer; text-align: left; font-size: 12px; font-weight: bold;';
-            lineBtn.textContent = (line.from || '?') + '-' + (line.to !== undefined ? line.to : '?') + ' · ' + line.length.toFixed(2) + ' м';
-            lineBtn.onclick = function () { _editElementLine(line); };
-            lineContainer.appendChild(lineBtn);
-
-            const visChk = _makeSmallCheckbox(
-                line.dimensionVisible !== false,
-                'Показати розмір',
-                function (checked) { line.dimensionVisible = checked; _redrawElementEditorCanvas(); }
-            );
-            lineContainer.appendChild(visChk);
-
-            const rotChk = _makeSmallCheckbox(
-                line.dimensionRotated === true,
-                'Розвернути на 180°',
-                function (checked) { line.dimensionRotated = checked; _redrawElementEditorCanvas(); }
-            );
-            lineContainer.appendChild(rotChk);
-
-            linesList.appendChild(lineContainer);
-        });
-
-        return;
-    }
-
     linesList.appendChild(_makeCheckboxRow(
         'buildingTypeCheckbox', 'Будівля', G.isBuilding, toggleBuildingType
     ));

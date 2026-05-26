@@ -43,29 +43,29 @@
 
                     <!-- Інструменти -->
                     <div class="flex items-center gap-x-1 md:gap-x-2">
-                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Інструмент «Рука» (H)">
+                        <button id="btn-mode-pan" class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition active-tool" onclick="shapeTransform.setMode('pan')" title="Рука — переміщення полотна (H)">
                             <i class="fas fa-hand-paper text-gray-700"></i>
                             <span class="toolbar-label ml-1 text-sm">Рука</span>
                         </button>
 
-                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Інструмент «Зум» (Z)">
-                            <i class="fas fa-search text-gray-700"></i>
-                            <span class="toolbar-label ml-1 text-sm">Зум</span>
+                        <button id="btn-mode-select" class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="shapeTransform.setMode('select')" title="Вибір фігури (V)">
+                            <i class="fas fa-mouse-pointer text-gray-700"></i>
+                            <span class="toolbar-label ml-1 text-sm">Вибір</span>
+                        </button>
+
+                        <button id="btn-mode-move" class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="shapeTransform.setMode('move')" title="Переміщення фігури (M)">
+                            <i class="fas fa-arrows-alt text-gray-700"></i>
+                            <span class="toolbar-label ml-1 text-sm">Рухати</span>
+                        </button>
+
+                        <button id="btn-mode-rotate" class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="shapeTransform.setMode('rotate')" title="Обертання фігури (R)">
+                            <i class="fas fa-sync-alt text-gray-700"></i>
+                            <span class="toolbar-label ml-1 text-sm">Крутити</span>
                         </button>
 
                         <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="openShapeModal()" title="Додати фігуру (S)">
                             <i class="fas fa-shapes text-gray-700"></i>
                             <span class="toolbar-label ml-1 text-sm">Фігури</span>
-                        </button>
-
-                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Змінити орієнтацію">
-                            <i class="fas fa-sync-alt text-gray-700"></i>
-                            <span class="toolbar-label ml-1 text-sm">Орієнтація</span>
-                        </button>
-
-                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" title="Інструмент «Рамка» (F)">
-                            <i class="fas fa-square text-gray-700"></i>
-                            <span class="toolbar-label ml-1 text-sm">Рамка</span>
                         </button>
                     </div>
 
@@ -144,10 +144,6 @@
             <!-- Панель інструментів модалки -->
             <div class="shape-modal-toolbar" id="shapeModalToolbar">
                 <span class="shape-modal-title">Редактор фігур</span>
-                <!-- Кнопка товщини — видима лише в режимі елемента -->
-                <button class="shape-btn shape-btn-purple" id="shapeToolbarThicknessBtn" style="display:none;" onclick="openElementThicknessModal()" title="Змінити товщину вікна">
-                    <i class="fas fa-arrows-alt-h"></i><span class="shape-btn-label"> Товщина</span>
-                </button>
                 <button class="shape-btn shape-btn-blue" id="shapeToolbarAddBtn" onclick="shapeModalAddAction()" title="Додати точку">
                     <i class="fas fa-plus"></i><span class="shape-btn-label"> Додати</span>
                 </button>
@@ -184,40 +180,6 @@
         </div>
     </div>
 
-    <!-- Модалка зміни товщини вікна/елемента -->
-    <div id="elementThicknessModal" class="modal">
-        <div class="modal-content" style="max-width: 340px;">
-            <h3 style="margin-top: 0;">Товщина вікна</h3>
-            <div style="margin-bottom: 12px; font-size: 13px; color: #555; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 4px; padding: 10px;">
-                Введіть товщину вікна в метрах (товщина стіни в місці вікна).
-            </div>
-            <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 6px;">Товщина (м):</label>
-            <input
-                type="text"
-                id="elementThicknessInput"
-                inputmode="decimal"
-                placeholder="0.20"
-                style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #9C27B0; border-radius: 4px; box-sizing: border-box; margin-bottom: 16px;"
-            >
-            <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px;">Прив'язка:</label>
-            <div style="font-size: 11px; color: #777; margin-bottom: 6px;">Точка відстань (напр. <b>A 2</b> або <b>B 1,5</b>). Відкладає т.1 нової фігури від кута A або B у напрямку від протилежного кута, перша лінія — вздовж вікна.</div>
-            <input
-                type="text"
-                id="elementAnchorInput"
-                placeholder="A 2"
-                style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #9C27B0; border-radius: 4px; box-sizing: border-box; margin-bottom: 16px;"
-            >
-            <div class="modal-buttons">
-                <button style="padding: 8px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="applyElementThickness()">
-                    <i class="fas fa-check"></i> OK
-                </button>
-                <button style="padding: 8px 20px; background: #9E9E9E; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="closeElementThicknessModal()">
-                    <i class="fas fa-times"></i> Відміна
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Модалка введення координат -->
     <div id="coordModal" class="modal">
         <div class="modal-content" style="max-width: 100vw; max-height: 100vh; width: 100%; height: 100%; margin: 0; border-radius: 0; padding: 0; display: flex; flex-direction: column;">
@@ -240,15 +202,6 @@
                 <div style="width: 133px;">
                     <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 16px;">Введіть числа (по одному в рядку):</label>
                     <textarea id="coordInput" inputmode="decimal" style="width: 100%; height: 400px; font-size: 18px; padding: 15px; border: 2px solid #ddd; border-radius: 4px; font-family: monospace; resize: vertical;" placeholder="100&#10;200&#10;150"></textarea>
-                    <!-- Прив'язка до кута вікна — видима тільки в режимі елемента -->
-                    <div id="windowCornerAnchorBox" style="display:none; margin-top: 12px; background: #f3e5f5; border: 1px solid #9C27B0; border-radius: 6px; padding: 10px;">
-                        <div style="font-size: 12px; font-weight: bold; color: #6a1b9a; margin-bottom: 6px;">Прив'язка до кута вікна:</div>
-                        <div style="font-size: 11px; color: #555; margin-bottom: 8px;" id="windowCornerDistanceInfo">відстань від т.1 до A: — м, до B: — м</div>
-                        <div style="display: flex; gap: 6px;">
-                            <button onclick="insertWindowCornerAnchor('A')" style="flex:1; padding: 6px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">A</button>
-                            <button onclick="insertWindowCornerAnchor('B')" style="flex:1; padding: 6px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">B</button>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Кнопки налаштувань -->
@@ -419,9 +372,10 @@
     <script src="hierarchy.js"></script>       <!-- 8. Дерево елементів -->
     <script src="shape-editor.js"></script>    <!-- 9. Малювання фігур -->
     <script src="shape-transfer.js"></script>  <!-- 10. Перенос на головне полотно -->
-    <script src="coord-modal.js"></script>     <!-- 11. Модалка координат -->
-    <script src="lines-panel.js"></script>     <!-- 12. Панель ліній -->
-    <script src="quick-shape.js"></script>     <!-- 13. Швидке створення фігур -->
-    <script src="main.js"></script>            <!-- 14. Ініціалізація (останній) -->
+    <script src="shape-transform.js"></script> <!-- 11. Переміщення та обертання -->
+    <script src="coord-modal.js"></script>     <!-- 12. Модалка координат -->
+    <script src="lines-panel.js"></script>     <!-- 13. Панель ліній -->
+    <script src="quick-shape.js"></script>     <!-- 14. Швидке створення фігур -->
+    <script src="main.js"></script>            <!-- 15. Ініціалізація (останній) -->
 </body>
 </html>

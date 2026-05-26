@@ -17,17 +17,6 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     window.closeShapeModal = function () {
-        // У режимі перегляду/редагування елемента — просто закриваємо без збереження фігури
-        if (appState.viewingElementMode) {
-            appState.viewingElementMode    = false;
-            appState.viewingElementSource  = null;
-            appState.viewingElementTransform = null;
-            appState._addingElementLine    = false;
-            document.getElementById('shapeModal').style.display = 'none';
-            resetShapeData();
-            _updateShapeModalToolbar();
-            return;
-        }
         if (G.figureLines.length === 0) {
             showToast('Спочатку створіть фігуру', 'warning'); return;
         }
@@ -39,10 +28,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /** Закрити редактор фігур без збереження змін */
     window.cancelShapeModal = function () {
-        appState.viewingElementMode    = false;
-        appState.viewingElementSource  = null;
-        appState.viewingElementTransform = null;
-        appState._addingElementLine    = false;
         document.getElementById('shapeModal').style.display = 'none';
         resetShapeData();
         _updateShapeModalToolbar();
@@ -50,28 +35,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /**
      * Кнопка «Додати» в редакторі фігур.
-     * В звичайному режимі — addPoint().
-     * В режимі елемента — addElementEditorLine().
      */
     window.shapeModalAddAction = function () {
-        if (appState.viewingElementMode) {
-            addElementEditorLine();
-        } else {
-            addPoint();
-        }
+        addPoint();
     };
 
     /**
-     * Оновлює видимість кнопок тулбара залежно від режиму.
-     * В режимі елемента — показуємо кнопку «Товщина»; підпис «Додати» змінюється.
+     * Оновлює видимість кнопок тулбара.
      */
     window._updateShapeModalToolbar = function () {
-        const isElMode = appState.viewingElementMode;
-        const addBtn   = document.getElementById('shapeToolbarAddBtn');
         const thickBtn = document.getElementById('shapeToolbarThicknessBtn');
-
-        if (thickBtn) thickBtn.style.display = isElMode ? '' : 'none';
-        if (addBtn)   addBtn.title = isElMode ? 'Додати лінію до вікна' : 'Додати точку';
+        if (thickBtn) thickBtn.style.display = 'none';
     };
 
     /** Відкрити / приховати панель ієрархії */
@@ -83,68 +57,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btn) btn.classList.toggle('bg-blue-100', isHidden);
     };
 
-    /* ── Модалка зміни товщини вікна ── */
-    window.openElementThicknessModal = function () {
-        const inp = document.getElementById('elementThicknessInput');
-        if (inp) inp.value = (appState.editingElementThickness || ELEMENT_THICKNESS).toFixed(2);
-        const anchorInp = document.getElementById('elementAnchorInput');
-        if (anchorInp) anchorInp.value = appState.editingElementAnchor || '';
-        document.getElementById('elementThicknessModal').style.display = 'block';
-        setTimeout(() => inp && inp.select(), 100);
-    };
-
-    window.closeElementThicknessModal = function () {
-        document.getElementById('elementThicknessModal').style.display = 'none';
-    };
-
-    window.applyElementThickness = function () {
-        const inp = document.getElementById('elementThicknessInput');
-        const val = parseFloat(inp ? inp.value.replace(',', '.') : '');
-        if (isNaN(val) || val <= 0) {
-            showToast('Введіть коректну товщину', 'warning');
-            return;
-        }
-        appState.editingElementThickness = val;
-
-        // Читаємо поле прив'язки
-        const anchorInp = document.getElementById('elementAnchorInput');
-        const anchorRaw = anchorInp ? anchorInp.value.trim() : '';
-
-        if (anchorRaw) {
-            const parsed = _parseAnchorInput(anchorRaw);
-            if (!parsed) {
-                showToast("Невірний формат прив'язки. Приклад: A 2", 'warning');
-                return;
-            }
-            const tr = appState.viewingElementTransform;
-            if (!tr || !tr.wA || !tr.wB) {
-                showToast('Не вдалося отримати координати вікна', 'error');
-                return;
-            }
-            closeElementThicknessModal();
-            appState.editingElementAnchor       = anchorRaw;
-            appState.editingElementAnchorParsed = parsed;
-            _drawAnchorLineOnMainCanvas(parsed, tr.wA, tr.wB);
-
-        } else {
-            appState.editingElementAnchor       = '';
-            appState.editingElementAnchorParsed = null;
-            closeElementThicknessModal();
-            _redrawElementEditorCanvas();
-            _updateShapeModalToolbar();
-            updateLinesList();
-            showToast(`Товщина вікна: ${val.toFixed(2)} м`, 'success');
-        }
-    };
-
-    /* ── Enter у полях товщини та прив'язки ── */
-    document.getElementById('elementThicknessInput')?.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
-    });
-    document.getElementById('elementAnchorInput')?.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); applyElementThickness(); }
-    });
+    /* ── Клавіатурні скорочення ── */
     document.addEventListener('keydown', (e) => {
+        // Пропускаємо якщо фокус в полі вводу
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         if (e.ctrlKey || e.metaKey) {
             switch (e.key.toLowerCase()) {
                 case 'n': e.preventDefault(); canvasManager.createCanvas();  break;
@@ -154,6 +70,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 case '+': e.preventDefault(); zoomIn();                       break;
                 case '-': e.preventDefault(); zoomOut();                      break;
             }
+            return;
+        }
+        // Режими інструментів
+        switch (e.key.toLowerCase()) {
+            case 'h': shapeTransform.setMode('pan');    break;
+            case 'v': shapeTransform.setMode('select'); break;
+            case 'm': shapeTransform.setMode('move');   break;
+            case 'r': shapeTransform.setMode('rotate'); break;
         }
     });
 

@@ -23,9 +23,6 @@ window.resetShapeData = function () {
     appState.calculatedArea         = null;
     appState.customArea             = null;
     appState.editingHierarchyItemId = null;
-    appState.viewingElementMode     = false;
-    appState.viewingElementSource   = null;
-    appState.viewingElementTransform = null;
     G.roomNumber          = '';
     G.roomNumberInputValue = '';
     G.diagonals           = [];
@@ -366,6 +363,26 @@ window.updateExistingLine = function (lineId, parsedData) {
     G.figureLines[idx].elements  = parsedData.elements;
     G.figureLines[idx].code      = document.getElementById('coordInput').value;
     G.figureLines[idx].length    = newLength;
+
+    // Якщо це free-лінія з _cachedEnd — перераховуємо кінець зі збереженням напрямку
+    if (parsedData.direction === 'free' && G.figureLines[idx]._cachedEnd) {
+        // Знаходимо початкову точку лінії
+        _rebuildChainPoints();
+        const fromPt = G.shapePoints.find(function(p) { return p.num === G.figureLines[idx].from; });
+        if (fromPt) {
+            const oldEnd = G.figureLines[idx]._cachedEnd;
+            const dx = oldEnd.x - fromPt.x;
+            const dy = oldEnd.y - fromPt.y;
+            const oldLen = Math.sqrt(dx * dx + dy * dy);
+            if (oldLen > 0) {
+                // Зберігаємо напрямок, масштабуємо на нову довжину
+                G.figureLines[idx]._cachedEnd = {
+                    x: fromPt.x + dx / oldLen * newLength * SCALE,
+                    y: fromPt.y + dy / oldLen * newLength * SCALE
+                };
+            }
+        }
+    }
 
     // Якщо це діагональ — оновлюємо позицію кінцевої точки
     if (G.figureLines[idx].isDiagonal && newLength > 0) {
@@ -738,18 +755,19 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
     showToast('Діагональ ' + pt1Num + '-' + pt2Num + ' = ' + diagDist + ' м застосовано', 'success');
 };
 
-/* ── Відкриття елемента (WI1 тощо) у редакторі фігур — режим редагування ── */
-/**
- * Відкриває редактор фігур у режимі редагування елемента.
- * Показує лінію-хост із вікном. Кути вікна (на протилежному боці від лінії-хоста)
- * нумеруються A і B. Можна додавати лінії, дотичні до вікна.
- * Товщину вікна можна змінити через список ліній.
- */
+/* ── Відкриття елемента (WI1 тощо) у редакторі фігур — ВИМКНЕНО ── */
 window.openElementInShapeEditor = function (item, hostLine, el) {
+    showToast('Редагування елементів вікна вимкнено у цій версії', 'info');
+};
+
+window._openElementInShapeEditorLegacy = function (item, hostLine, el) {
     appState.editingHierarchyItemId = null;
     appState.viewingElementMode = true;            // прапорець «режим елемента» (не звичайний редактор)
     appState.viewingElementSource = { item, hostLine, el };
-    appState.editingElementThickness = typeof el.thickness === 'number' ? el.thickness : ELEMENT_THICKNESS;
+    appState.editingElementThickness = typeof hostLine._elementThickness === 'number'
+        ? hostLine._elementThickness
+        : (typeof el.thickness === 'number' ? el.thickness : ELEMENT_THICKNESS);
+    appState.editingElementBinding   = hostLine._elementBinding || el.binding || null;
 
     // Скидаємо окремий масив ліній для цього режиму
     G.elementEditorLines   = [];   // лінії що малюються кнопкою «Додати»
@@ -793,11 +811,6 @@ window.openElementInShapeEditor = function (item, hostLine, el) {
     updateLinesList();
 };
 
-/**
- * Перемальовує canvas у режимі редагування елемента.
- * Точка 1 розміщується поруч із вікном (не в глобальних START_X/START_Y).
- * viewBox будується тільки навколо хост-лінії + кутів A/B + доданих точок.
- */
 window._redrawElementEditorCanvas = function () {
     if (!appState.viewingElementMode || !appState.viewingElementTransform) return;
 
@@ -839,9 +852,9 @@ window._redrawElementEditorCanvas = function () {
     // Малюємо протилежну сторону вікна (штрихова)
     _renderSvgDashedLine(svg, wA_x, wA_y, wB_x, wB_y);
 
-    // Мітки кутів A і B
-    _renderWindowCornerLabel(svg, wA_x, wA_y, 'A');
-    _renderWindowCornerLabel(svg, wB_x, wB_y, 'B');
+    // Мітки кутів 1 і 2
+    _renderWindowCornerLabel(svg, wA_x, wA_y, '1');
+    _renderWindowCornerLabel(svg, wB_x, wB_y, '2');
 
     // Розмір вікна над штриховою лінією
     const winLen = (el.end - el.start).toFixed(2);
@@ -877,6 +890,43 @@ window._redrawElementEditorCanvas = function () {
     _renderSvgPoint(svg, x1, y1, fromNum);
     _renderSvgPoint(svg, x2, y2, toNum);
 
+    // Малюємо лінію прив'язки (якщо задана)
+    const bp = appState.editingElementBinding;
+    if (bp && (bp.corner === 1 || bp.corner === 2) && bp.dist > 0) {
+        // Опорна точка вікна: corner=1 => wA, corner=2 => wB
+        const anchorX = bp.corner === 1 ? wA_x : wB_x;
+        const anchorY = bp.corner === 1 ? wA_y : wB_y;
+        // Напрямок уздовж лінії вікна (wA → wB)
+        const wdx = wB_x - wA_x, wdy = wB_y - wA_y;
+        const wlen = Math.sqrt(wdx * wdx + wdy * wdy);
+        let bx, by;
+        if (wlen > 0) {
+            // corner=1 (anchor=wA): нова точка протилежна до 2 → напрямок геть від wB = wA-wB = (-wdx,-wdy)
+            // corner=2 (anchor=wB): нова точка протилежна до 1 → напрямок геть від wA = wB-wA = (wdx,wdy)
+            const sign = bp.corner === 1 ? -1 : 1;
+            const wux = sign * wdx / wlen;
+            const wuy = sign * wdy / wlen;
+            bx = anchorX + wux * bp.dist * SCALE;
+            by = anchorY + wuy * bp.dist * SCALE;
+        } else {
+            bx = anchorX;
+            by = anchorY;
+        }
+        // Малюємо лінію від anchor до нової точки
+        _renderSvgLine(svg, anchorX, anchorY, bx, by);
+        // Розмір лінії прив'язки
+        drawLineDimension(anchorX, anchorY, bx, by, bp.dist, { dimensionVisible: true, dimensionRotated: false });
+        // Крапка нової точки (без номера — просто маркер)
+        const bCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        bCircle.setAttribute('cx', bx); bCircle.setAttribute('cy', by);
+        bCircle.setAttribute('r', '5'); bCircle.setAttribute('fill', '#FF9800');
+        svg.appendChild(bCircle);
+        // Додаємо координати нової точки до allX/allY через збереження в тимчасову змінну
+        appState._bindingPoint = { x: bx, y: by };
+    } else {
+        appState._bindingPoint = null;
+    }
+
     // Малюємо додані лінії
     if (G.elementEditorLines && G.elementEditorLines.length > 0) {
         const pts = G.elementEditorPoints;
@@ -893,6 +943,10 @@ window._redrawElementEditorCanvas = function () {
     // viewBox — тільки навколо хост-лінії, вікна і доданих точок
     const allX = [x1, x2, wA_x, wB_x];
     const allY = [y1, y2, wA_y, wB_y];
+    if (appState._bindingPoint) {
+        allX.push(appState._bindingPoint.x);
+        allY.push(appState._bindingPoint.y);
+    }
     if (G.elementEditorLines && G.elementEditorLines.length > 0) {
         G.elementEditorPoints.forEach(p => { allX.push(p.x); allY.push(p.y); });
     }
@@ -1016,77 +1070,4 @@ window._drawShapeLine = function (x1, y1, x2, y2, length, isClosing, lineData) {
     const numLen = typeof length === 'number' ? length : parseFloat(length);
     drawLineDimension(x1, y1, x2, y2, numLen, lineData);
     if (!isClosing) _renderSvgPoint(svg, x2, y2, G.pointCounter + 1);
-};
-
-/**
- * Розбирає рядок прив'язки типу "A 2,12" або "B 0.50".
- * Повертає { corner: 'A'|'B', dist: number } або null.
- */
-window._parseAnchorInput = function (raw) {
-    if (!raw) return null;
-    const parts = raw.trim().split(/\s+/);
-    if (parts.length < 2) return null;
-    const corner = parts[0].toUpperCase();
-    if (corner !== 'A' && corner !== 'B') return null;
-    const dist = parseFloat(parts[1].replace(',', '.'));
-    if (isNaN(dist) || dist <= 0) return null;
-    return { corner, dist };
-};
-
-/**
- * Відкриває звичайний редактор фігури з першою лінією прив'язаною до вікна.
- *
- * Геометрія:
- *   wA, wB — кути вікна на протилежному боці від хост-лінії (у SVG-координатах).
- *   anchor.corner = 'A', anchor.dist = d:
- *     - вектор вздовж вікна: u = normalize(wB - wA)
- *     - точка 1 = wA - u * d  (від wA у бік від wB)
- *     - точка 2 = pt1 + u * d (вздовж вікна, довжина = d)
- *   anchor.corner = 'B': симетрично від wB.
- * Лінія малюється на головному SVG полотні. Жодних перемикань режимів.
- */
-window._drawAnchorLineOnMainCanvas = function (anchor, wA, wB) {
-    const canvas = window.canvasManager?.canvases.find(
-        c => c.id === window.canvasManager?.activeCanvasId
-    );
-    if (!canvas) { showToast('Немає активного полотна', 'error'); return; }
-    const mainSvg = document.querySelector(`[data-canvas-id="${canvas.id}"] svg`);
-    if (!mainSvg) return;
-
-    // Вектор вздовж вікна A→B
-    const dx  = wB.x - wA.x, dy = wB.y - wA.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0) { showToast('Некоректні координати вікна', 'error'); return; }
-    const ux = dx / len, uy = dy / len;
-
-    const distPx = anchor.dist * SCALE;
-
-    // Точка 1: від кута вікна у напрямку від протилежного кута
-    let pt1x, pt1y;
-    if (anchor.corner === 'A') {
-        pt1x = wA.x - ux * distPx;
-        pt1y = wA.y - uy * distPx;
-    } else {
-        pt1x = wB.x + ux * distPx;
-        pt1y = wB.y + uy * distPx;
-    }
-
-    // Точка 2: від точки 1 вздовж вікна на відстань dist
-    const pt2x = pt1x + ux * distPx;
-    const pt2y = pt1y + uy * distPx;
-
-    // Малюємо лінію на головному полотні
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', pt1x); line.setAttribute('y1', pt1y);
-    line.setAttribute('x2', pt2x); line.setAttribute('y2', pt2y);
-    line.setAttribute('stroke', 'black');
-    line.setAttribute('stroke-width', '1');
-    line.setAttribute('vector-effect', 'non-scaling-stroke');
-    mainSvg.appendChild(line);
-
-    // Підпис розміру
-    const lineData = { dimensionVisible: true, dimensionRotated: false };
-    drawMainCanvasDimension(mainSvg, pt1x, pt1y, pt2x, pt2y, anchor.dist, lineData);
-
-    showToast(`Лінію прив'язки намальовано (${anchor.corner} ${anchor.dist} м)`, 'success');
 };

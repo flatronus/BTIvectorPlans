@@ -1,3 +1,10 @@
+/* ===== Активний інструмент ===== */
+.active-tool {
+    background-color: #dbeafe !important;
+    border-radius: 4px;
+    outline: 2px solid #2196F3;
+}
+
 /* ===== Загальний layout ===== */
 html, body {
     height: 100%;

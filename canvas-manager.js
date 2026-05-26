@@ -58,6 +58,9 @@ window.canvasManager = {
 
         container.appendChild(wrapper);
         this.attachCanvasEvents(wrapper.querySelector('svg'), canvas);
+        if (window.shapeTransform) {
+            window.shapeTransform.attachToSvg(wrapper.querySelector('svg'));
+        }
     },
 
     renderTab(canvas) {
@@ -172,6 +175,9 @@ window.canvasManager = {
         wrapper.innerHTML = svgContent;
         container.appendChild(wrapper);
         this.attachCanvasEvents(wrapper.querySelector('svg'), canvas);
+        if (window.shapeTransform) {
+            window.shapeTransform.attachToSvg(wrapper.querySelector('svg'));
+        }
     },
 
     closeCanvas(id) {
@@ -249,15 +255,19 @@ window.canvasManager = {
         let isDragging = false, startX, startY;
         let initialDistance = 0, initialViewBox = null;
 
+        // Перевіряє чи активний режим трансформації (не drag полотна)
+        const _isTransformMode = () =>
+            window.shapeTransform && window.shapeTransform.getMode() !== 'pan';
+
         svgElement.addEventListener('mousedown', (e) => {
-            if (e.button === 0) {
+            if (e.button === 0 && !_isTransformMode()) {
                 isDragging = true; startX = e.clientX; startY = e.clientY;
                 svgElement.style.cursor = 'grabbing';
             }
         });
 
         document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
+            if (!isDragging || _isTransformMode()) return;
             const dx = (startX - e.clientX) * (canvas.viewBox.width  / svgElement.clientWidth);
             const dy = (startY - e.clientY) * (canvas.viewBox.height / svgElement.clientHeight);
             canvas.viewBox.x += dx; canvas.viewBox.y += dy;
@@ -267,10 +277,12 @@ window.canvasManager = {
         });
 
         document.addEventListener('mouseup', () => {
-            isDragging = false; svgElement.style.cursor = 'grab';
+            isDragging = false;
+            if (!_isTransformMode()) svgElement.style.cursor = 'grab';
         });
 
         svgElement.addEventListener('touchstart', (e) => {
+            if (_isTransformMode()) return;
             if (e.touches.length === 1) {
                 isDragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
             } else if (e.touches.length === 2) {
