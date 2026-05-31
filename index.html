@@ -33,9 +33,14 @@
                             <span class="toolbar-label ml-1 text-sm">Відкрити</span>
                         </button>
 
-                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.saveActiveCanvas && window.saveActiveCanvas()" title="Зберегти (Ctrl+S)">
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.saveActiveCanvas && window.saveActiveCanvas()" title="Зберегти SVG (Ctrl+S)">
                             <i class="fas fa-save text-gray-700"></i>
                             <span class="toolbar-label ml-1 text-sm">Зберегти</span>
+                        </button>
+
+                        <button class="toolbar-button px-2 py-1 rounded hover:bg-gray-100 transition" onclick="window.saveDmfActiveCanvas && window.saveDmfActiveCanvas()" title="Зберегти DMF (Digitals Map File)">
+                            <i class="fas fa-file-export text-gray-700"></i>
+                            <span class="toolbar-label ml-1 text-sm">DMF</span>
                         </button>
                     </div>
 
@@ -376,6 +381,7 @@
     <script src="coord-modal.js"></script>     <!-- 12. Модалка координат -->
     <script src="lines-panel.js"></script>     <!-- 13. Панель ліній -->
     <script src="quick-shape.js"></script>     <!-- 14. Швидке створення фігур -->
-    <script src="main.js"></script>            <!-- 15. Ініціалізація (останній) -->
+    <script src="dmf-export.js"></script>    <!-- 15. Експорт у DMF (Digitals) -->
+    <script src="main.js"></script>            <!-- 16. Ініціалізація (останній) -->
 </body>
 </html>
