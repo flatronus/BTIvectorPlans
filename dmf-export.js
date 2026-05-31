@@ -345,31 +345,36 @@ window.exportCanvasToDmf = function (canvas, svgEl, mapName) {
 /* ── Публічна функція збереження DMF ── */
 
 window.saveDmfActiveCanvas = function () {
-    if (!window.canvasManager) return;
-    const canvas = window.canvasManager.canvases.find(
-        c => c.id === window.canvasManager.activeCanvasId
-    );
-    if (!canvas) { showToast('Немає активного полотна', 'error'); return; }
+    try {
+        if (!window.canvasManager) { showToast('canvasManager не знайдено', 'error'); return; }
+        const canvas = window.canvasManager.canvases.find(
+            c => c.id === window.canvasManager.activeCanvasId
+        );
+        if (!canvas) { showToast('Немає активного полотна', 'error'); return; }
 
-    const canvasEl = document.querySelector(`[data-canvas-id="${canvas.id}"]`);
-    const svgEl    = canvasEl ? canvasEl.querySelector('svg') : null;
-    if (!svgEl) { showToast('SVG не знайдено', 'error'); return; }
+        const canvasEl = document.querySelector(`[data-canvas-id="${canvas.id}"]`);
+        const svgEl    = canvasEl ? canvasEl.querySelector('svg') : null;
+        if (!svgEl) { showToast('SVG не знайдено', 'error'); return; }
 
-    const mapName   = (canvas.savedPath || canvas.name || 'Plan').replace(/\.(svg|dmf)$/i, '');
-    const dmfBuffer = exportCanvasToDmf(canvas, svgEl, mapName);
-    const blob      = new Blob([dmfBuffer], { type: 'application/octet-stream' });
+        const mapName   = (canvas.savedPath || canvas.name || 'Plan').replace(/\.(svg|dmf)$/i, '');
+        const dmfBuffer = exportCanvasToDmf(canvas, svgEl, mapName);
+        const blob      = new Blob([dmfBuffer], { type: 'application/octet-stream' });
 
-    const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isDesktop = !isMobile && 'showSaveFilePicker' in window;
+        const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isDesktop = !isMobile && 'showSaveFilePicker' in window;
 
-    if (isDesktop) {
-        _saveDmfWithFilePicker(canvas, blob, mapName);
-    } else {
-        _saveDmfWithDownload(canvas, blob, mapName);
+        if (isDesktop) {
+            _saveDmfWithFilePicker(blob, mapName);
+        } else {
+            _saveDmfWithDownload(canvas, blob, mapName);
+        }
+    } catch (err) {
+        showToast('Помилка DMF: ' + err.message, 'error');
+        console.error('saveDmfActiveCanvas error:', err);
     }
 };
 
-async function _saveDmfWithFilePicker(canvas, blob, mapName) {
+async function _saveDmfWithFilePicker(blob, mapName) {
     try {
         const handle = await window.showSaveFilePicker({
             suggestedName: `${mapName}.dmf`,
@@ -380,16 +385,18 @@ async function _saveDmfWithFilePicker(canvas, blob, mapName) {
         await writable.close();
         showToast(`Збережено DMF: ${handle.name}`, 'success');
     } catch (err) {
-        if (err.name !== 'AbortError') showToast('Помилка збереження DMF: ' + err.message, 'error');
+        if (err.name === 'AbortError') return;
+        // Якщо showSaveFilePicker не спрацював — fallback на download
+        console.warn('showSaveFilePicker failed, falling back to download:', err);
+        _saveDmfWithDownload(null, blob, mapName);
     }
 }
 
 function _saveDmfWithDownload(canvas, blob, mapName) {
     try {
-        let fileName = `${mapName}.dmf`;
-        const inputName = window.prompt('Введіть назву DMF файлу:', fileName);
-        if (!inputName) return;
-        fileName = inputName.endsWith('.dmf') ? inputName : `${inputName}.dmf`;
+        let fileName = canvas && canvas.savedPath
+            ? canvas.savedPath.replace(/\.(svg|dmf)$/i, '') + '.dmf'
+            : `${mapName}.dmf`;
 
         const url  = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -400,5 +407,6 @@ function _saveDmfWithDownload(canvas, blob, mapName) {
         showToast(`DMF збережено: ${fileName}`, 'success');
     } catch (err) {
         showToast('Помилка збереження DMF: ' + err.message, 'error');
+        console.error('_saveDmfWithDownload error:', err);
     }
 }
