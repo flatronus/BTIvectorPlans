@@ -2,46 +2,38 @@
  * dmf-export.js — Експорт активного полотна у бінарний формат DMF v1.10
  * (GeoSystem Digitals Map File, Version 1.10).
  *
- * Специфікація: GeoSystem DMF, Version 1.10
- * Структура файлу: Заголовок (946 байт) | Шари | Параметри | Символи | Об'єкти
+ * Джерело даних: G.hierarchyData канви (figureLines + shapePoints).
+ * Кожна фігура ієрархії → один об'єкт-полілінія з усіма точками контуру.
+ * Координати: SVG px ÷ SCALE = метри, вісь Y інвертується (SVG↓ → DMF↑).
  *
  * Залежності: constants.js, state.js, g.js, canvas-manager.js, toast.js
  */
 
-/* ── Низькорівневі хелпери для запису бінарних даних ── */
+/* ── Низькорівневі хелпери ── */
 
-/** Записує 32-бітне ціле (little-endian) у DataView */
 function _writeInt32(view, offset, value) {
-    view.setInt32(offset, value, true);
+    view.setInt32(offset, value >>> 0, true);
     return offset + 4;
 }
 
-/** Записує 16-бітне слово (little-endian) */
 function _writeWord(view, offset, value) {
     view.setUint16(offset, value, true);
     return offset + 2;
 }
 
-/** Записує 1 байт */
 function _writeByte(view, offset, value) {
     view.setUint8(offset, value);
     return offset + 1;
 }
 
-/**
- * Записує 80-бітне число з плаваючою точкою (Extended / Real10) у форматі
- * Pascal/Delphi (80-bit extended precision, little-endian).
- * DataView не має setFloat80, тому реалізуємо вручну через IEEE 754 extended.
- */
+/** 80-бітний Extended (Pascal/Delphi Real10), little-endian */
 function _writeReal10(view, offset, value) {
-    // Конвертуємо через 64-bit double → 80-bit extended (approximation)
     const buf = new ArrayBuffer(8);
     const dv  = new DataView(buf);
-    dv.setFloat64(0, value, false); // big-endian
+    dv.setFloat64(0, value, false); // big-endian double
     const hi = dv.getUint32(0, false);
     const lo = dv.getUint32(4, false);
 
-    // Розбираємо double: sign(1) exp(11) mantissa(52)
     const sign    = (hi >>> 31) & 1;
     const exp64   = (hi >>> 20) & 0x7FF;
     const mant_hi = hi & 0x000FFFFF;
@@ -50,45 +42,34 @@ function _writeReal10(view, offset, value) {
     let exp80, mant80_hi, mant80_lo;
 
     if (exp64 === 0 && mant_hi === 0 && mant_lo === 0) {
-        // Zero
         exp80 = 0; mant80_hi = 0; mant80_lo = 0;
     } else if (exp64 === 0x7FF) {
-        // Inf / NaN
-        exp80 = 0x7FFF;
+        exp80     = 0x7FFF;
         mant80_hi = 0x80000000 | (mant_hi << 11) | (mant_lo >>> 21);
-        mant80_lo = (mant_lo << 11);
+        mant80_lo = (mant_lo << 11) >>> 0;
     } else {
-        // Нормальне число: bias 1023 → 16383
-        exp80 = exp64 - 1023 + 16383;
-        // Явний integer bit = 1 для normalized
+        exp80     = exp64 - 1023 + 16383;
         mant80_hi = 0x80000000 | (mant_hi << 11) | (mant_lo >>> 21);
         mant80_lo = (mant_lo << 11) >>> 0;
     }
 
-    // Записуємо 10 байт little-endian: спочатку mant (8 байт), потім exp+sign (2 байти)
     view.setUint32(offset,     mant80_lo, true);
     view.setUint32(offset + 4, mant80_hi, true);
-    view.setUint16(offset + 8, ((sign << 15) | exp80), true);
+    view.setUint16(offset + 8, (sign << 15) | exp80, true);
     return offset + 10;
 }
 
-/**
- * Записує Pascal ShortString[N]: перший байт = фактична довжина, далі символи.
- * Загальна фізична довжина = N+1 байт (фіксована, решта — нулі).
- */
+/** ShortString[maxLen]: 1 байт довжини + maxLen байт тіла */
 function _writeShortString(view, offset, str, maxLen) {
-    const bytes = [];
-    for (let i = 0; i < Math.min(str.length, maxLen); i++) {
-        bytes.push(str.charCodeAt(i) & 0xFF);
-    }
-    view.setUint8(offset, bytes.length);
+    const actual = Math.min(str.length, maxLen);
+    view.setUint8(offset, actual);
     for (let i = 0; i < maxLen; i++) {
-        view.setUint8(offset + 1 + i, i < bytes.length ? bytes[i] : 0);
+        view.setUint8(offset + 1 + i, i < actual ? str.charCodeAt(i) & 0xFF : 0);
     }
     return offset + 1 + maxLen;
 }
 
-/** Записує ASCII-рядок фіксованої довжини (без лічильника байтів), решта — нулі */
+/** Рядок фіксованої довжини без лічильника (для сигнатури) */
 function _writeFixedString(view, offset, str, len) {
     for (let i = 0; i < len; i++) {
         view.setUint8(offset + i, i < str.length ? str.charCodeAt(i) & 0xFF : 0);
@@ -96,252 +77,220 @@ function _writeFixedString(view, offset, str, len) {
     return offset + len;
 }
 
-/* ── Основна функція генерації DMF ── */
+/* ── Збір контурних точок з figureLines + shapePoints ── */
 
 /**
- * Генерує бінарний DMF v1.10 з SVG активного полотна.
- * Витягує всі <line> з SVG, перетворює в поліліній-об'єкти (шар "Стіни").
- * Координати: SVG px → метри (÷ SCALE). Y інвертується (SVG↓ → DMF↑).
- *
- * @param {object} canvas   — об'єкт canvas з canvasManager.canvases
- * @param {SVGElement} svgEl — SVG-елемент полотна
- * @param {string} mapName  — назва карти
+ * Повертає масив {x, y} у порядку обходу контуру фігури.
+ * Кожна точка — у SVG-пікселях зі зміщенням offsetX/Y.
+ */
+function _buildContour(figureLines, shapePoints, offsetX, offsetY) {
+    const pts = [];
+    figureLines.forEach(line => {
+        if (line.isDiagonal || line.isPending) return;
+        const from = shapePoints.find(p => p.num === line.from);
+        if (!from) return;
+        pts.push({ x: from.x + offsetX, y: from.y + offsetY });
+    });
+    return pts;
+}
+
+/* ── Головна функція ── */
+
+/**
+ * Генерує бінарний DMF v1.10 з ієрархії активного полотна.
+ * @param {object}     canvas  — об'єкт з canvasManager.canvases
+ * @param {object[]}   hier    — G.hierarchyData канви
+ * @param {string}     mapName — назва карти
  * @returns {ArrayBuffer}
  */
-window.exportCanvasToDmf = function (canvas, svgEl, mapName) {
+window.exportCanvasToDmf = function (canvas, hier, mapName) {
 
-    /* ── 1. Збираємо відрізки з SVG ── */
-    const segments = [];
-    svgEl.querySelectorAll('line').forEach(el => {
-        if (el.closest('[data-highlight]')) return;
-        segments.push({
-            x1: parseFloat(el.getAttribute('x1')),
-            y1: parseFloat(el.getAttribute('y1')),
-            x2: parseFloat(el.getAttribute('x2')),
-            y2: parseFloat(el.getAttribute('y2')),
+    const px2m = v =>  v / SCALE;
+    const invY = y => -(y / SCALE);   // SVG Y вниз → DMF Y вгору
+
+    /* ── 1. Збираємо об'єкти з ієрархії ── */
+
+    /** Рекурсивно обходить ієрархію і збирає всі фігури */
+    function collectItems(items, result) {
+        items.forEach(item => {
+            if (item.figureLines && item.figureLines.length > 0) {
+                result.push(item);
+            }
+            if (item.children && item.children.length > 0) {
+                collectItems(item.children, result);
+            }
         });
-    });
+    }
 
-    // Кожен відрізок SVG → окремий об'єкт-полілінія (2 точки)
-    // px → метри, Y інвертується
-    const px2m = v => v / SCALE;
-    const invY = y => -(y / SCALE);
+    const allItems = [];
+    collectItems(hier || [], allItems);
 
-    /* ── 2. Розміри буфера ── */
+    /** Для кожного item будуємо масив точок контуру в метрах */
+    const objects = allItems.map(item => {
+        const offsetX = item._offsetX !== undefined ? item._offsetX : 0;
+        const offsetY = item._offsetY !== undefined ? item._offsetY : 0;
+        const contour = _buildContour(item.figureLines, item.shapePoints, offsetX, offsetY);
+        const pts = contour.map(p => ({ x: px2m(p.x), y: invY(p.y) }));
+        return { item, pts };
+    }).filter(o => o.pts.length >= 2);
 
-    // Заголовок карти: 32 (сигнатура) + 4 (HeaderSize) + 910 (тіло) = 946
+    /* ── 2. Константи секцій ── */
+
     const HEADER_TOTAL = 946;
 
-    // Шари: мінімальний список — 1 шар "Стіни"
-    // Заголовок списку шарів: 17 байт
-    // Кожен елемент шару: 4(Size)+4(Status)+4(ID)+4(MinScale)+4(MaxScale)+
-    //   4(PenColor)+4(PenWidth)+4(BrushColor)+4(FontColor)+4(FontSize)+
-    //   1(PenStyle)+1(BrushStyle)+1(FontStyle)+
-    //   Name(ShortString: 1+len)+FontName(ShortString:1+0)+
-    //   4(Reserve)+4(ParamLength)+0(Params)+4(Symbol)+Format(1+0)+
-    //   4(Reference)+4(PenWidth100)+4(FontSize10)
-    // Name = "Walls" (5 chars) → 6 байт; FontName = "" → 1 байт; Format="" → 1 байт
-    // Size поля елемента = все крім самого Size(4):
-    //   4+4+4+4+4+4+4+4+4+1+1+1+6+1+4+4+0+4+1+4+4 = 67
-    const LAYER_ELEM_SIZE_FIELD = 71;   // значення поля Size (без самого Size)
-    const LAYER_ELEM_TOTAL      = 4 + LAYER_ELEM_SIZE_FIELD; // 75 байт
-    const LAYERS_HEADER_SIZE    = 21;   // TotalSize(4)+HeaderSize(4)+Count(4)+Status(4)+MinService(4)+Reserve(1)
-    const LAYERS_COUNT          = 1;    // 1 шар
-    const LAYERS_TOTAL_SIZE     = LAYERS_HEADER_SIZE + LAYER_ELEM_TOTAL; // 96
+    // Шари: TotalSize(4)+HeaderSize(4)+Count(4)+Status(4)+MinService(4)+Reserve(1) = 21
+    // + 1 елемент: Size(4)+тіло(71) = 75
+    const LAYER_ELEM_BODY  = 71;   // поле Size елемента шару
+    const LAYER_ELEM_TOTAL = 4 + LAYER_ELEM_BODY;  // 75
+    const LAYERS_HDR       = 21;
+    const LAYERS_TOTAL     = LAYERS_HDR + LAYER_ELEM_TOTAL; // 96
 
-    // Параметри: порожній список (Size(4)+HeaderSize(4)+Count(4)+Status(4)+MinService(4)+Reserve(1)=21)
+    // Параметри: Size(4)+HeaderSize(4)+Count(4)+Status(4)+MinService(4)+Reserve(1) = 21
     const PARAMS_TOTAL = 21;
 
-    // Бібліотека символів: порожня
-    // Size(4) + Count(4) = 8
+    // Символи: Size(4)+Count(4) = 8
     const SYMBOLS_TOTAL = 8;
 
-    // Об'єкти:
-    // Кожен об'єкт (відрізок → полілінія з 2 точками):
-    // Заголовок: 54 байти
-    //   Size(4)+Format(2)+HeaderSize(4)+Count(4)+LayerID(4)+Kind(4)+
-    //   Layer(4)+ID(4)+Status(4)+Where(4)+Scale(4)+Group(4)+Parent(4)+SO(4)
-    //   = 54
-    // Параметри об'єкта: Size(4) + '' = 4 байти (порожній рядок)
-    // Точки: Count * (Status(4)+X(10)+Y(10)+Z(10)) = 2 * 34 = 68
-    // Разом на об'єкт: 4 + (54-4) + 4 + 68 = 126 (Size включно)
-    // Але Size = кількість байт після самого Size(4):
-    //   Format(2)+HeaderSize(4)+Count(4)+LayerID(4)+Kind(4)+Layer(4)+ID(4)+
-    //   Status(4)+Where(4)+Scale(4)+Group(4)+Parent(4)+SO(4) = 50
-    //   + Params(4) + Points(68) = 122
-    const OBJ_SIZE_FIELD  = 122;  // значення поля Size
-    const OBJ_TOTAL       = 4 + OBJ_SIZE_FIELD; // 126 байт
-    const OBJECTS_TOTAL   = segments.length * OBJ_TOTAL;
+    // Об'єкти: для N точок:
+    // Size(4) + Format(2)+HeaderSize(4)+Count(4)+LayerID(4)+Kind(4)+Layer(4)+ID(4)
+    // +Status(4)+Where(4)+Scale(4)+Group(4)+Parent(4)+SO(4) [=50 після Size]
+    // + ParamsSize(4) + N*(Status(4)+X(10)+Y(10)+Z(10))
+    // Size поле = 50 + 4 + N*34
+    const objSizeField  = N => 50 + 4 + N * 34;
+    const objTotalBytes = N => 4 + objSizeField(N);  // 58 + N*34
 
-    const TOTAL = HEADER_TOTAL + LAYERS_TOTAL_SIZE + PARAMS_TOTAL + SYMBOLS_TOTAL + OBJECTS_TOTAL;
+    const OBJECTS_TOTAL = objects.reduce((s, o) => s + objTotalBytes(o.pts.length), 0);
+
+    const TOTAL = HEADER_TOTAL + LAYERS_TOTAL + PARAMS_TOTAL + SYMBOLS_TOTAL + OBJECTS_TOTAL;
     const buf   = new ArrayBuffer(TOTAL);
     const view  = new DataView(buf);
     let   off   = 0;
 
     /* ── 3. Заголовок карти (946 байт) ── */
 
-    // Сигнатура 32 байти: "GeoSystem DMF, Version 1.10    " + chr(26)
-    const SIG = 'GeoSystem DMF, Version 1.10    ';
-    off = _writeFixedString(view, off, SIG, 31);
-    view.setUint8(off, 26); off++; // chr(26) = EOF marker
+    // Сигнатура: 31 байт тексту + chr(26)
+    off = _writeFixedString(view, off, 'GeoSystem DMF, Version 1.10    ', 31);
+    view.setUint8(off, 26); off++;
 
     // HeaderSize = 910
     off = _writeInt32(view, off, 910);
 
-    // Scale (Real10, 10 байт): знаменник масштабу (наприклад 100 для M1:100)
+    // Scale: знаменник масштабу
     off = _writeReal10(view, off, 100.0);
 
-    // Count (Integer, 4): кількість об'єктів
-    off = _writeInt32(view, off, segments.length);
+    // Count: кількість об'єктів
+    off = _writeInt32(view, off, objects.length);
 
-    // Units (Integer, 4): зарезервовано
+    // Units, Status: зарезервовано
+    off = _writeInt32(view, off, 0);
     off = _writeInt32(view, off, 0);
 
-    // Status (Integer, 4): зарезервовано
-    off = _writeInt32(view, off, 0);
-
-    // Frame (T3DFrame = 4 × T3D = 4 × 30 байт = 120 байт)
-    // Обчислюємо bounding box у метрах
+    // Frame: bounding box у метрах (4 кути, лівий нижній за годинниковою)
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    segments.forEach(s => {
-        const xs = [px2m(s.x1), px2m(s.x2)];
-        const ys = [invY(s.y1), invY(s.y2)];
-        xs.forEach(x => { if (x < minX) minX = x; if (x > maxX) maxX = x; });
-        ys.forEach(y => { if (y < minY) minY = y; if (y > maxY) maxY = y; });
-    });
+    objects.forEach(o => o.pts.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }));
     if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 10; maxY = 10; }
 
-    // 4 кути рамки: лівий нижній, правий нижній, правий верхній, лівий верхній
-    const corners = [
-        [minX, minY, 0], [maxX, minY, 0],
-        [maxX, maxY, 0], [minX, maxY, 0]
-    ];
-    corners.forEach(([x, y, z]) => {
+    [[minX,minY,0],[maxX,minY,0],[maxX,maxY,0],[minX,maxY,0]].forEach(([x,y,z]) => {
         off = _writeReal10(view, off, x);
         off = _writeReal10(view, off, y);
         off = _writeReal10(view, off, z);
     });
 
-    // Name (ShortString[255], 256 байт)
-    const nameStr = (mapName || canvas.name || 'Plan').substring(0, 255);
-    off = _writeShortString(view, off, nameStr, 255);
-
-    // LeftFile (ShortString[255], 256 байт)
+    // Name, LeftFile, RightFile: ShortString[255]
+    off = _writeShortString(view, off, (mapName || 'Plan').substring(0, 255), 255);
     off = _writeShortString(view, off, '', 255);
-
-    // RightFile (ShortString[255], 256 байт)
     off = _writeShortString(view, off, '', 255);
-
-    // Перевіряємо зміщення: має бути 946
-    // 32 + 4 + 10 + 4 + 4 + 4 + 120 + 256 + 256 + 256 = 946 ✓
+    // off === 946 ✓
 
     /* ── 4. Список шарів ── */
 
-    // Заголовок (21 байт): TotalSize+HeaderSize+Count+Status+MinService+Reserve
-    off = _writeInt32(view, off, LAYERS_TOTAL_SIZE);    // TotalSize
-    off = _writeInt32(view, off, 13);                    // HeaderSize
-    off = _writeInt32(view, off, LAYERS_COUNT);          // Count
-    off = _writeInt32(view, off, 0);                     // Status (reserve)
-    off = _writeInt32(view, off, 0);                     // MinService (немає службових шарів)
-    off = _writeByte(view, off, 0);                      // Reserve
+    off = _writeInt32(view, off, LAYERS_TOTAL);  // TotalSize
+    off = _writeInt32(view, off, 13);             // HeaderSize (=13)
+    off = _writeInt32(view, off, 1);              // Count
+    off = _writeInt32(view, off, 0);              // Status
+    off = _writeInt32(view, off, 0);              // MinService
+    off = _writeByte (view, off, 0);              // Reserve
 
-    // Елемент шару "Walls" (71 байт)
-    off = _writeInt32(view, off, LAYER_ELEM_SIZE_FIELD); // Size = 67
-    // Status: тип Polygon/polyline=1, стан редагований=0, локалізація=polilinii (bit0=0)
-    // Byte4(тип)=1, Byte3(стан)=0, Byte1=0 → Status = 0x01000000
-    off = _writeInt32(view, off, 0x01000000);
-    off = _writeInt32(view, off, 1);     // ID
-    off = _writeInt32(view, off, 0);     // MinScale
-    off = _writeInt32(view, off, 0);     // MaxScale
-    off = _writeInt32(view, off, 0x000000); // PenColor: чорний (RGB 0,0,0)
-    off = _writeInt32(view, off, 10);    // PenWidth: 1.0 мм = 10 десятих мм
-    off = _writeInt32(view, off, 0xFFFFFF); // BrushColor: білий
-    off = _writeInt32(view, off, 0x000000); // FontColor
-    off = _writeInt32(view, off, 10);    // FontSize (пунктів)
-    off = _writeByte(view, off, 0);      // PenStyle: суцільна (GDI PS_SOLID=0)
-    off = _writeByte(view, off, 1);      // BrushStyle: порожня (GDI BS_NULL=1)
-    off = _writeByte(view, off, 0);      // FontStyle
-    // Name: ShortString (1+5 = 6 байт)
-    off = _writeShortString(view, off, 'Walls', 5);
-    // FontName: ShortString (1+0 = 1 байт)
-    off = _writeShortString(view, off, '', 0);
-    off = _writeInt32(view, off, 0);     // Reserve
-    off = _writeInt32(view, off, 0);     // ParamLength
-    // Params: 0 байт
-    off = _writeInt32(view, off, 0);     // Symbol
-    // Format: ShortString (1+0 = 1 байт)
-    off = _writeShortString(view, off, '', 0);
-    off = _writeInt32(view, off, 0);     // Reference
-    off = _writeInt32(view, off, 0);     // PenWidth100
-    off = _writeInt32(view, off, 0);     // FontSize10
+    // Елемент шару «Стіни»
+    off = _writeInt32(view, off, LAYER_ELEM_BODY); // Size = 71
+    off = _writeInt32(view, off, 0x01000000);       // Status: тип=Polyline(1), стан=редагований(0)
+    off = _writeInt32(view, off, 1);                // ID
+    off = _writeInt32(view, off, 0);                // MinScale
+    off = _writeInt32(view, off, 0);                // MaxScale
+    off = _writeInt32(view, off, 0x000000);         // PenColor: чорний
+    off = _writeInt32(view, off, 10);               // PenWidth: 1.0 мм
+    off = _writeInt32(view, off, 0xFFFFFF);         // BrushColor: білий
+    off = _writeInt32(view, off, 0x000000);         // FontColor
+    off = _writeInt32(view, off, 10);               // FontSize
+    off = _writeByte (view, off, 0);                // PenStyle: суцільна
+    off = _writeByte (view, off, 1);                // BrushStyle: прозора (BS_NULL)
+    off = _writeByte (view, off, 0);                // FontStyle
+    off = _writeShortString(view, off, 'Walls', 5); // Name: ShortString[5] = 6 байт
+    off = _writeShortString(view, off, '', 0);      // FontName: ShortString[0] = 1 байт
+    off = _writeInt32(view, off, 0);                // Reserve
+    off = _writeInt32(view, off, 0);                // ParamLength
+    // Params: 0 байт (ParamLength=0)
+    off = _writeInt32(view, off, 0);                // Symbol
+    off = _writeShortString(view, off, '', 0);      // Format: ShortString[0] = 1 байт
+    off = _writeInt32(view, off, 0);                // Reference
+    off = _writeInt32(view, off, 0);                // PenWidth100
+    off = _writeInt32(view, off, 0);                // FontSize10
 
-    /* ── 5. Список параметрів (порожній, тільки заголовок) ── */
+    /* ── 5. Список параметрів (порожній) ── */
 
-    off = _writeInt32(view, off, PARAMS_TOTAL); // Size
+    off = _writeInt32(view, off, PARAMS_TOTAL); // Size = 21
     off = _writeInt32(view, off, 13);            // HeaderSize
     off = _writeInt32(view, off, 0);             // Count
     off = _writeInt32(view, off, 0);             // Status
     off = _writeInt32(view, off, 0);             // MinService
-    off = _writeByte(view, off, 0);              // Reserve
+    off = _writeByte (view, off, 0);             // Reserve
 
     /* ── 6. Бібліотека символів (порожня) ── */
 
-    off = _writeInt32(view, off, SYMBOLS_TOTAL); // Size
+    off = _writeInt32(view, off, SYMBOLS_TOTAL); // Size = 8
     off = _writeInt32(view, off, 0);              // Count
 
-    /* ── 7. Об'єкти (поліліній) ── */
+    /* ── 7. Об'єкти ── */
 
-    segments.forEach((seg, idx) => {
-        const x1m = px2m(seg.x1), y1m = invY(seg.y1);
-        const x2m = px2m(seg.x2), y2m = invY(seg.y2);
+    objects.forEach((obj, idx) => {
+        const pts = obj.pts;
+        const N   = pts.length;
+        const SF  = objSizeField(N); // поле Size
 
-        // Size
-        off = _writeInt32(view, off, OBJ_SIZE_FIELD); // 122
-        // Format (Word, 2)
-        off = _writeWord(view, off, 0);
-        // HeaderSize (Integer, 4): розмір заголовка об'єкта (=44, не враховуючи Size(4)+Format(2)=6)
-        // Специфікація: HeaderSize = 44
-        off = _writeInt32(view, off, 44);
-        // Count: 2 точки
-        off = _writeInt32(view, off, 2);
-        // LayerID: 1 (шар "Walls")
-        off = _writeInt32(view, off, 1);
-        // Kind: зарезервовано
-        off = _writeInt32(view, off, 0);
-        // Layer: 0 (індекс у списку шарів, 0-based — перший)
-        off = _writeInt32(view, off, 0);
-        // ID: унікальний номер об'єкта
-        off = _writeInt32(view, off, idx + 1);
-        // Status: 0 (звичайний, видимий)
-        off = _writeInt32(view, off, 0);
-        // Where: зарезервовано
-        off = _writeInt32(view, off, 0);
-        // Scale (Real Single, 4 байти): 0 = використовувати масштаб карти
-        view.setFloat32(off, 0, true); off += 4;
-        // Group: зарезервовано
-        off = _writeInt32(view, off, 0);
-        // Parent: зарезервовано
-        off = _writeInt32(view, off, 0);
-        // SO: кут повороту умовного знаку
-        off = _writeInt32(view, off, 0);
+        off = _writeInt32(view, off, SF);  // Size
+        off = _writeWord (view, off, 0);   // Format = 0
+        off = _writeInt32(view, off, 44);  // HeaderSize = 44
+        off = _writeInt32(view, off, N);   // Count
+        off = _writeInt32(view, off, 1);   // LayerID = 1 (код шару «Walls»)
+        off = _writeInt32(view, off, 0);   // Kind
+        off = _writeInt32(view, off, 0);   // Layer = 0 (індекс шару у списку)
+        off = _writeInt32(view, off, idx + 1); // ID
+        off = _writeInt32(view, off, 0);   // Status
+        off = _writeInt32(view, off, 0);   // Where
+        view.setFloat32(off, 0, true); off += 4; // Scale = 0
+        off = _writeInt32(view, off, 0);   // Group
+        off = _writeInt32(view, off, 0);   // Parent
+        off = _writeInt32(view, off, 0);   // SO
 
-        // Параметри об'єкта: Size(4) + порожній текст = 4 байти
-        off = _writeInt32(view, off, 0); // Size = 0 (немає параметрів)
+        // Параметри об'єкта: порожньо
+        off = _writeInt32(view, off, 0);   // Params Size = 0
 
-        // Точки (2 × 34 = 68 байт)
-        const points = [[x1m, y1m, 0], [x2m, y2m, 0]];
-        points.forEach(([x, y, z]) => {
-            off = _writeInt32(view, off, 0); // Status (reserve)
-            off = _writeReal10(view, off, x);
-            off = _writeReal10(view, off, y);
-            off = _writeReal10(view, off, z);
+        // Точки
+        pts.forEach(p => {
+            off = _writeInt32(view, off, 0);     // Status
+            off = _writeReal10(view, off, p.x);
+            off = _writeReal10(view, off, p.y);
+            off = _writeReal10(view, off, 0);    // Z = 0
         });
     });
 
     return buf;
 };
 
-/* ── Публічна функція збереження DMF ── */
+/* ── Збереження ── */
 
 window.saveDmfActiveCanvas = function () {
     try {
@@ -351,12 +300,14 @@ window.saveDmfActiveCanvas = function () {
         );
         if (!canvas) { showToast('Немає активного полотна', 'error'); return; }
 
-        const canvasEl = document.querySelector(`[data-canvas-id="${canvas.id}"]`);
-        const svgEl    = canvasEl ? canvasEl.querySelector('svg') : null;
-        if (!svgEl) { showToast('SVG не знайдено', 'error'); return; }
+        // Дані беремо з ієрархії канви, не з SVG
+        const hier = canvas.hierarchyData || G.hierarchyData || [];
+        if (hier.length === 0) {
+            showToast('Немає фігур для експорту', 'warning'); return;
+        }
 
         const mapName   = (canvas.savedPath || canvas.name || 'Plan').replace(/\.(svg|dmf)$/i, '');
-        const dmfBuffer = exportCanvasToDmf(canvas, svgEl, mapName);
+        const dmfBuffer = exportCanvasToDmf(canvas, hier, mapName);
         const blob      = new Blob([dmfBuffer], { type: 'application/octet-stream' });
 
         const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -385,7 +336,6 @@ async function _saveDmfWithFilePicker(blob, mapName) {
         showToast(`Збережено DMF: ${handle.name}`, 'success');
     } catch (err) {
         if (err.name === 'AbortError') return;
-        // Якщо showSaveFilePicker не спрацював — fallback на download
         console.warn('showSaveFilePicker failed, falling back to download:', err);
         _saveDmfWithDownload(null, blob, mapName);
     }
@@ -393,10 +343,9 @@ async function _saveDmfWithFilePicker(blob, mapName) {
 
 function _saveDmfWithDownload(canvas, blob, mapName) {
     try {
-        let fileName = canvas && canvas.savedPath
+        const fileName = canvas && canvas.savedPath
             ? canvas.savedPath.replace(/\.(svg|dmf)$/i, '') + '.dmf'
             : `${mapName}.dmf`;
-
         const url  = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url; link.download = fileName; link.style.display = 'none';
