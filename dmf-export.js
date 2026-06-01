@@ -152,12 +152,12 @@ window.exportCanvasToDmf = function (canvas, hier, mapName) {
     const SYMBOLS_TOTAL = 8;
 
     // Об'єкти: для N точок:
-    // Size(4) + Format(2)+HeaderSize(4)+Count(4)+LayerID(4)+Kind(4)+Layer(4)+ID(4)
+    // Size(4) включно з собою + Format(2)+HeaderSize(4)+Count(4)+LayerID(4)+Kind(4)+Layer(4)+ID(4)
     // +Status(4)+Where(4)+Scale(4)+Group(4)+Parent(4)+SO(4) [=50 після Size]
     // + ParamsSize(4) + N*(Status(4)+X(10)+Y(10)+Z(10))
-    // Size поле = 50 + 4 + N*34
-    const objSizeField  = N => 50 + 4 + N * 34;
-    const objTotalBytes = N => 4 + objSizeField(N);  // 58 + N*34
+    // Size = 4(Size) + 50 + 4 + N*34 = 58 + N*34   ← включає само поле Size(4)
+    const objSizeField  = N => 58 + N * 34;
+    const objTotalBytes = N => objSizeField(N);  // Size вже включає себе
 
     const OBJECTS_TOTAL = objects.reduce((s, o) => s + objTotalBytes(o.pts.length), 0);
 
