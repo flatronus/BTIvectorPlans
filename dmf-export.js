@@ -149,9 +149,8 @@ window.exportCanvasToDmf = function (canvas, svgEl, mapName) {
     const LAYERS_COUNT          = 1;    // 1 шар
     const LAYERS_TOTAL_SIZE     = LAYERS_HEADER_SIZE + LAYER_ELEM_TOTAL; // 96
 
-    // Параметри: порожній список (тільки заголовок)
-    const PARAMS_HEADER_SIZE = 17;
-    const PARAMS_TOTAL       = PARAMS_HEADER_SIZE; // 0 елементів
+    // Параметри: порожній список (Size(4)+HeaderSize(4)+Count(4)+Status(4)+MinService(4)+Reserve(1)=21)
+    const PARAMS_TOTAL = 21;
 
     // Бібліотека символів: порожня
     // Size(4) + Count(4) = 8
