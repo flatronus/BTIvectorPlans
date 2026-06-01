@@ -143,11 +143,11 @@ window.exportCanvasToDmf = function (canvas, svgEl, mapName) {
     // Name = "Walls" (5 chars) → 6 байт; FontName = "" → 1 байт; Format="" → 1 байт
     // Size поля елемента = все крім самого Size(4):
     //   4+4+4+4+4+4+4+4+4+1+1+1+6+1+4+4+0+4+1+4+4 = 67
-    const LAYER_ELEM_SIZE_FIELD = 67;   // значення поля Size (без самого Size)
-    const LAYER_ELEM_TOTAL      = 4 + LAYER_ELEM_SIZE_FIELD; // 71 байт
-    const LAYERS_HEADER_SIZE    = 17;
+    const LAYER_ELEM_SIZE_FIELD = 71;   // значення поля Size (без самого Size)
+    const LAYER_ELEM_TOTAL      = 4 + LAYER_ELEM_SIZE_FIELD; // 75 байт
+    const LAYERS_HEADER_SIZE    = 21;   // TotalSize(4)+HeaderSize(4)+Count(4)+Status(4)+MinService(4)+Reserve(1)
     const LAYERS_COUNT          = 1;    // 1 шар
-    const LAYERS_TOTAL_SIZE     = LAYERS_HEADER_SIZE + LAYER_ELEM_TOTAL; // 88
+    const LAYERS_TOTAL_SIZE     = LAYERS_HEADER_SIZE + LAYER_ELEM_TOTAL; // 96
 
     // Параметри: порожній список (тільки заголовок)
     const PARAMS_HEADER_SIZE = 17;
@@ -238,7 +238,7 @@ window.exportCanvasToDmf = function (canvas, svgEl, mapName) {
 
     /* ── 4. Список шарів ── */
 
-    // Заголовок (17 байт)
+    // Заголовок (21 байт): TotalSize+HeaderSize+Count+Status+MinService+Reserve
     off = _writeInt32(view, off, LAYERS_TOTAL_SIZE);    // TotalSize
     off = _writeInt32(view, off, 13);                    // HeaderSize
     off = _writeInt32(view, off, LAYERS_COUNT);          // Count
