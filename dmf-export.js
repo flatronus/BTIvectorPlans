@@ -306,8 +306,40 @@ window.saveDmfActiveCanvas = function () {
             showToast('Немає фігур для експорту', 'warning'); return;
         }
 
+        // Діагностика
+        console.log('=== DMF EXPORT DEBUG ===');
+        console.log('hier.length:', hier.length);
+        hier.forEach((item, i) => {
+            console.log(`item[${i}]: name="${item.name}" figureLines=${item.figureLines?.length} shapePoints=${item.shapePoints?.length} _offsetX=${item._offsetX} _offsetY=${item._offsetY}`);
+            if (item.shapePoints) item.shapePoints.forEach(p => console.log(`  pt${p.num}: x=${p.x} y=${p.y}`));
+            if (item.figureLines) item.figureLines.forEach(l => console.log(`  line from=${l.from} to=${l.to} isDiag=${l.isDiagonal} isPend=${l.isPending}`));
+        });
+
         const mapName   = (canvas.savedPath || canvas.name || 'Plan').replace(/\.(svg|dmf)$/i, '');
         const dmfBuffer = exportCanvasToDmf(canvas, hier, mapName);
+
+        // Hex-дамп перших 64 байт + байти біля об'єктів
+        const dv = new DataView(dmfBuffer);
+        let hexStr = 'HEADER bytes 0-63:\n';
+        for (let i = 0; i < 64; i++) hexStr += dv.getUint8(i).toString(16).padStart(2,'0') + ' ';
+        console.log(hexStr);
+        console.log('Buffer total size:', dmfBuffer.byteLength);
+        // Offset після fixed sections
+        const fixedEnd = 946 + 96 + 21 + 8;
+        console.log('First object starts at offset:', fixedEnd);
+        let objHex = `OBJ[0] bytes ${fixedEnd}-${fixedEnd+31}:\n`;
+        for (let i = fixedEnd; i < Math.min(fixedEnd+32, dmfBuffer.byteLength); i++) {
+            objHex += dv.getUint8(i).toString(16).padStart(2,'0') + ' ';
+        }
+        console.log(objHex);
+        console.log('OBJ[0] Size field (Int32LE):', dv.getInt32(fixedEnd, true));
+        console.log('OBJ[0] Format (Word):', dv.getUint16(fixedEnd+4, true));
+        console.log('OBJ[0] HeaderSize (Int32):', dv.getInt32(fixedEnd+6, true));
+        console.log('OBJ[0] Count (Int32):', dv.getInt32(fixedEnd+10, true));
+        console.log('OBJ[0] LayerID (Int32):', dv.getInt32(fixedEnd+14, true));
+        console.log('OBJ[0] Layer (Int32):', dv.getInt32(fixedEnd+22, true));
+        console.log('=== END DEBUG ===');
+
         const blob      = new Blob([dmfBuffer], { type: 'application/octet-stream' });
 
         const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
