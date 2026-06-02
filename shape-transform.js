@@ -200,10 +200,8 @@ window.shapeTransform = (function () {
             const { tx, ty, ra, rx, ry } = _parseGroupTransform(item.svgGroup);
             const newTx = tx + dx, newTy = ty + dy;
             item.svgGroup.setAttribute('transform', _buildTransformString(newTx, newTy, ra, rx, ry));
-            // Зберігаємо зміщення
             item._offsetX = (item._offsetX || 0) + dx;
             item._offsetY = (item._offsetY || 0) + dy;
-            _refreshHighlight();
         },
 
         /** Обертання вибраної фігури на кут (градуси) навколо її центру */
@@ -218,7 +216,6 @@ window.shapeTransform = (function () {
             const newAngle = (_currentRotation + angle);
             item.svgGroup.setAttribute('transform', _buildTransformString(tx, ty, newAngle, cx, cy));
             item._rotation = newAngle;
-            _refreshHighlight();
         }
     };
 

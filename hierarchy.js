@@ -98,39 +98,25 @@ window.selectHierarchyItem = function (item) {
     renderProperties(item);
 };
 
-/** Підсвічує SVG-групу вибраного елемента червоним контуром */
+/** Виділяє SVG-групу елемента: лінії стають червоними; попереднє виділення знімається */
 window._highlightSvgItem = function (item) {
-    // Знімаємо попереднє виділення
     const canvas = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
     const mainSvg = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
     if (mainSvg) {
-        mainSvg.querySelectorAll('[data-selection-highlight]').forEach(el => el.remove());
+        mainSvg.querySelectorAll('line[data-selected], polyline[data-selected], polygon[data-selected], path[data-selected]').forEach(el => {
+            el.setAttribute('stroke', el.getAttribute('data-orig-stroke') || 'black');
+            el.removeAttribute('data-selected');
+            el.removeAttribute('data-orig-stroke');
+        });
     }
-    if (!item || !item.svgGroup || !mainSvg) return;
+    if (!item || !item.svgGroup) return;
 
-    try {
-        const bbox = item.svgGroup.getBBox();
-        if (!bbox || (bbox.width === 0 && bbox.height === 0)) return;
-        const pad = 6;
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', bbox.x - pad);
-        rect.setAttribute('y', bbox.y - pad);
-        rect.setAttribute('width',  bbox.width  + pad * 2);
-        rect.setAttribute('height', bbox.height + pad * 2);
-        rect.setAttribute('fill', 'none');
-        rect.setAttribute('stroke', '#ef4444');
-        rect.setAttribute('stroke-width', '2');
-        rect.setAttribute('stroke-dasharray', '5 3');
-        rect.setAttribute('vector-effect', 'non-scaling-stroke');
-        rect.setAttribute('data-selection-highlight', '1');
-        rect.style.pointerEvents = 'none';
-        // Вставляємо безпосередньо після групи щоб не перекривати вміст
-        if (item.svgGroup.nextSibling) {
-            mainSvg.insertBefore(rect, item.svgGroup.nextSibling);
-        } else {
-            mainSvg.appendChild(rect);
-        }
-    } catch (e) {}
+    item.svgGroup.querySelectorAll('line, polyline, polygon, path').forEach(el => {
+        const orig = el.getAttribute('stroke') || 'black';
+        el.setAttribute('data-orig-stroke', orig);
+        el.setAttribute('data-selected', '1');
+        el.setAttribute('stroke', '#ef4444');
+    });
 };
 
 /** Рендерить панель Властивості для вибраного елемента */
