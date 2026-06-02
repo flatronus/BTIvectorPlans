@@ -159,17 +159,22 @@ window.shapeTransform = (function () {
         /** Скасувати вибір */
         deselect() {
             _selectedId = null;
-            _refreshHighlight();
+            if (window._highlightSvgItem) _highlightSvgItem(null);
+            G.selectedHierarchyItem = null;
             renderHierarchy();
+            if (window.renderProperties) renderProperties(null);
         },
 
         /** Вибрати елемент за id ієрархії */
         select(id) {
             _selectedId = id;
-            _refreshHighlight();
-            // Підсвітити в ієрархії
+            // Підсвічуємо на канві (червоний контур) через hierarchy.js
+            const item = findHierarchyItemById(id);
+            if (window._highlightSvgItem) _highlightSvgItem(item);
+            // Підсвічуємо в ієрархії (синій)
             G.selectedHierarchyItem = id;
             renderHierarchy();
+            if (window.renderProperties) renderProperties(item);
         },
 
         /** Підключити обробники подій до SVG головного полотна */
@@ -180,6 +185,8 @@ window.shapeTransform = (function () {
             document.addEventListener('mouseup',    _onMouseUp);
             document.addEventListener('touchmove',  _onTouchMove, { passive: false });
             document.addEventListener('touchend',   _onTouchEnd);
+            // Подвійний клік — відкрити редактор фігури
+            svg.addEventListener('dblclick', _onDblClick);
         },
 
         /** Оновити підсвічування (після zoom тощо) */
@@ -259,6 +266,15 @@ window.shapeTransform = (function () {
             _dragging = true;
             e.stopPropagation();
             e.preventDefault();
+        }
+    }
+
+    function _onDblClick(e) {
+        const item = _findItemByTarget(e.target);
+        if (item && window.openShapeModalForEdit) {
+            e.stopPropagation();
+            api.select(item.id);
+            openShapeModalForEdit(item);
         }
     }
 

@@ -85,6 +85,7 @@ window.renderHierarchy = function () {
     tree.innerHTML = '';
     if (G.hierarchyData.length === 0) {
         tree.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Немає елементів</div>';
+        renderProperties(null);
         return;
     }
     G.hierarchyData.forEach(item => tree.appendChild(createHierarchyItemElement(item)));
@@ -92,8 +93,98 @@ window.renderHierarchy = function () {
 
 window.selectHierarchyItem = function (item) {
     G.selectedHierarchyItem = item.id;
+    _highlightSvgItem(item);
     renderHierarchy();
-    openShapeModalForEdit(item);
+    renderProperties(item);
+};
+
+/** Підсвічує SVG-групу вибраного елемента червоним контуром */
+window._highlightSvgItem = function (item) {
+    // Знімаємо попереднє виділення
+    const canvas = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
+    const mainSvg = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
+    if (mainSvg) {
+        mainSvg.querySelectorAll('[data-selection-highlight]').forEach(el => el.remove());
+    }
+    if (!item || !item.svgGroup || !mainSvg) return;
+
+    try {
+        const bbox = item.svgGroup.getBBox();
+        if (!bbox || (bbox.width === 0 && bbox.height === 0)) return;
+        const pad = 6;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', bbox.x - pad);
+        rect.setAttribute('y', bbox.y - pad);
+        rect.setAttribute('width',  bbox.width  + pad * 2);
+        rect.setAttribute('height', bbox.height + pad * 2);
+        rect.setAttribute('fill', 'none');
+        rect.setAttribute('stroke', '#ef4444');
+        rect.setAttribute('stroke-width', '2');
+        rect.setAttribute('stroke-dasharray', '5 3');
+        rect.setAttribute('vector-effect', 'non-scaling-stroke');
+        rect.setAttribute('data-selection-highlight', '1');
+        rect.style.pointerEvents = 'none';
+        // Вставляємо безпосередньо після групи щоб не перекривати вміст
+        if (item.svgGroup.nextSibling) {
+            mainSvg.insertBefore(rect, item.svgGroup.nextSibling);
+        } else {
+            mainSvg.appendChild(rect);
+        }
+    } catch (e) {}
+};
+
+/** Рендерить панель Властивості для вибраного елемента */
+window.renderProperties = function (item) {
+    const body = document.getElementById('properties-body');
+    if (!body) return;
+    body.innerHTML = '';
+
+    if (!item) {
+        body.innerHTML = '<div style="color:#999;text-align:center;padding:16px;font-size:11px;">Оберіть елемент</div>';
+        return;
+    }
+
+    function row(label, value) {
+        const d = document.createElement('div');
+        d.style.cssText = 'display:flex;gap:4px;padding:4px 2px;border-bottom:1px solid #f0f0f0;font-size:11px;';
+        const l = document.createElement('span');
+        l.style.cssText = 'color:#6b7280;flex-shrink:0;width:80px;';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.style.cssText = 'color:#111827;word-break:break-all;';
+        v.textContent = value ?? '—';
+        d.appendChild(l); d.appendChild(v);
+        return d;
+    }
+
+    body.appendChild(row('Тип', item.type === 'building' ? 'Будівля' : 'Кімната'));
+    body.appendChild(row('Назва', item.name));
+    if (item.roomNumber) body.appendChild(row('№ приміщ.', item.roomNumber));
+    if (item.area)       body.appendChild(row('Площа', item.area + ' м²'));
+    body.appendChild(row('Ліній', (item.figureLines || []).length));
+    body.appendChild(row('Точок', (item.shapePoints || []).length));
+
+    const elems = (item.figureLines || []).flatMap(l => extractLineElements(l.elements || []));
+    if (elems.length > 0) {
+        const hdr = document.createElement('div');
+        hdr.style.cssText = 'margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:700;color:#374151;';
+        hdr.textContent = 'Елементи на лініях:';
+        body.appendChild(hdr);
+        elems.forEach(el => {
+            const name = ELEMENT_NAMES[el.code] || el.code;
+            body.appendChild(row(el.code, `${name} · ${el.start.toFixed(2)}–${el.end.toFixed(2)} м`));
+        });
+    }
+
+    if ((item.children || []).length > 0) {
+        const hdr = document.createElement('div');
+        hdr.style.cssText = 'margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:700;color:#374151;';
+        hdr.textContent = `Дочірні (${item.children.length}):`;
+        body.appendChild(hdr);
+        item.children.forEach(ch => {
+            body.appendChild(row('↳', ch.roomNumber || ch.name));
+        });
+    }
 };
 
 window.openShapeModalForEdit = function (item) {
@@ -161,7 +252,15 @@ window.createHierarchyItemElement = function (item) {
         itemDiv.appendChild(areaLabel);
     }
 
+    // Одиночний клік — виділення
     itemDiv.onclick = () => selectHierarchyItem(item);
+
+    // Подвійний клік — відкрити редактор фігури
+    itemDiv.ondblclick = (e) => {
+        e.stopPropagation();
+        openShapeModalForEdit(item);
+    };
+
     container.appendChild(itemDiv);
 
     if (item.expanded) {
@@ -173,7 +272,6 @@ window.createHierarchyItemElement = function (item) {
                 extractLineElements(line.elements || []).forEach(el => {
                     const row = document.createElement('div');
                     row.style.cssText = 'display: flex; align-items: center; gap: 5px; padding: 2px 4px; font-size: 11px; color: #555; cursor: pointer; border-radius: 3px;';
-                    row.title = 'Відкрити елемент у редакторі';
                     row.onmouseenter = () => { row.style.background = '#f3e5f5'; };
                     row.onmouseleave = () => { row.style.background = ''; };
 

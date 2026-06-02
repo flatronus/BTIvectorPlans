@@ -32,28 +32,98 @@ body {
     }
 }
 
-/* ===== Панель ієрархії ===== */
+/* ===== Бічна панель (Елементи + Властивості) ===== */
 .hierarchy-panel {
-    width: 256px;          /* w-64 */
+    width: 256px;
     flex-shrink: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    transition: width 0.2s ease, padding 0.2s ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.2s ease;
 }
-
-/* Вузька прокрутка для панелі ієрархії */
-.hierarchy-panel::-webkit-scrollbar        { width: 4px; }
-.hierarchy-panel::-webkit-scrollbar-track  { background: transparent; }
-.hierarchy-panel::-webkit-scrollbar-thumb  { background: #bbb; border-radius: 2px; }
-.hierarchy-panel::-webkit-scrollbar-thumb:hover { background: #888; }
-.hierarchy-panel                           { scrollbar-width: thin; scrollbar-color: #bbb transparent; }
 
 /* Прихована панель */
 .hierarchy-panel--hidden {
     width: 0;
-    padding: 0;
     border: none;
     overflow: hidden;
+}
+
+/* Секція панелі */
+.panel-section {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 60px;
+}
+
+/* Заголовок секції */
+.panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.panel-header-icon {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+/* Тіло секції з прокруткою */
+.panel-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px;
+}
+
+/* Вузька прокрутка */
+.panel-body::-webkit-scrollbar        { width: 4px; }
+.panel-body::-webkit-scrollbar-track  { background: transparent; }
+.panel-body::-webkit-scrollbar-thumb  { background: #bbb; border-radius: 2px; }
+.panel-body::-webkit-scrollbar-thumb:hover { background: #888; }
+.panel-body                           { scrollbar-width: thin; scrollbar-color: #bbb transparent; }
+
+/* Розділювач між панелями */
+.panel-divider {
+    height: 5px;
+    background: #e5e7eb;
+    cursor: row-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    position: relative;
+}
+
+.panel-divider::after {
+    content: '';
+    display: block;
+    width: 32px;
+    height: 3px;
+    background: #9ca3af;
+    border-radius: 2px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.panel-divider:hover,
+.panel-divider.dragging {
+    background: #bfdbfe;
+}
+
+/* Елементи ієрархії */
+.hierarchy-item.selected-canvas {
+    outline: 2px solid #ef4444;
+    outline-offset: -2px;
 }
 
 /* На мобільних — не ширше 2/3 екрану */

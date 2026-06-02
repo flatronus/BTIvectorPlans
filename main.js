@@ -9,6 +9,61 @@ document.addEventListener('DOMContentLoaded', function () {
     /* ── Ініціалізація першого полотна ── */
     window.canvasManager.createCanvas();
 
+    /* ── Розділювач панелей Елементи / Властивості ── */
+    (function initPanelDivider() {
+        const divider    = document.getElementById('panel-divider');
+        const panelEl    = document.getElementById('panel-elements');
+        const panelPr    = document.getElementById('panel-properties');
+        const container  = document.getElementById('hierarchy-panel');
+        if (!divider || !panelEl || !panelPr) return;
+
+        let dragging = false;
+        let startY   = 0;
+        let startH   = 0;
+
+        function onStart(clientY) {
+            dragging = true;
+            startY   = clientY;
+            startH   = panelEl.getBoundingClientRect().height;
+            divider.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+        }
+
+        function onMove(clientY) {
+            if (!dragging) return;
+            const totalH  = container.getBoundingClientRect().height;
+            const divH    = divider.getBoundingClientRect().height;
+            const delta   = clientY - startY;
+            const minH    = 50;
+            const maxH    = totalH - divH - minH;
+            const newH    = Math.max(minH, Math.min(maxH, startH + delta));
+            panelEl.style.flex = 'none';
+            panelEl.style.height = newH + 'px';
+            panelPr.style.flex = '1';
+        }
+
+        function onEnd() {
+            if (!dragging) return;
+            dragging = false;
+            divider.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+
+        divider.addEventListener('mousedown',  e => { e.preventDefault(); onStart(e.clientY); });
+        document.addEventListener('mousemove', e => onMove(e.clientY));
+        document.addEventListener('mouseup',   () => onEnd());
+
+        divider.addEventListener('touchstart', e => { e.preventDefault(); onStart(e.touches[0].clientY); }, { passive: false });
+        document.addEventListener('touchmove',  e => { if (dragging) { e.preventDefault(); onMove(e.touches[0].clientY); } }, { passive: false });
+        document.addEventListener('touchend',   () => onEnd());
+
+        // Рівний розподіл за замовчуванням
+        panelEl.style.flex = '1';
+        panelPr.style.flex = '1';
+    })();
+
     /* ── Модалка фігур ── */
     window.openShapeModal = function () {
         appState.editingHierarchyItemId = null;
