@@ -111,28 +111,22 @@ window._highlightSvgItem = function (item) {
     }
     if (!item || !item.svgGroup) return;
 
-    // Вибираємо тільки прямі дочірні SVG-елементи групи, не заходячи в дочірні <g data-hierarchy-id>
-    item.svgGroup.childNodes.forEach(child => {
-        if (child.nodeType !== 1) return;
-        // Пропускаємо дочірні групи з data-hierarchy-id (окремі фігури ієрархії)
-        if (child.tagName === 'g' && child.hasAttribute('data-hierarchy-id')) return;
-        const tag = child.tagName;
-        if (tag === 'line' || tag === 'polyline' || tag === 'polygon' || tag === 'path') {
-            const orig = child.getAttribute('stroke') || 'black';
-            child.setAttribute('data-orig-stroke', orig);
-            child.setAttribute('data-selected', '1');
-            child.setAttribute('stroke', '#ef4444');
-        }
-        // Якщо це <g> без data-hierarchy-id (наприклад обгортка розмірів чи елементів) — заходимо в неї
-        if (tag === 'g' && !child.hasAttribute('data-hierarchy-id')) {
-            child.querySelectorAll('line, polyline, polygon, path').forEach(el => {
-                const orig = el.getAttribute('stroke') || 'black';
-                el.setAttribute('data-orig-stroke', orig);
-                el.setAttribute('data-selected', '1');
-                el.setAttribute('stroke', '#ef4444');
-            });
-        }
-    });
+    // Вибираємо лінії тільки в межах цієї групи, не заходячи в дочірні <g data-hierarchy-id>
+    function collectLines(node) {
+        node.childNodes.forEach(child => {
+            if (child.nodeType !== 1) return;
+            if (child.tagName === 'g' && child.hasAttribute('data-hierarchy-id')) return;
+            const tag = child.tagName;
+            if (tag === 'line' || tag === 'polyline' || tag === 'polygon' || tag === 'path') {
+                const orig = child.getAttribute('stroke') || 'black';
+                child.setAttribute('data-orig-stroke', orig);
+                child.setAttribute('data-selected', '1');
+                child.setAttribute('stroke', '#ef4444');
+            }
+            if (tag === 'g') collectLines(child);
+        });
+    }
+    collectLines(item.svgGroup);
 };
 
 /** Рендерить панель Властивості для вибраного елемента */
