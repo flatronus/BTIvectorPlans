@@ -60,7 +60,7 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
  * реєструє їх як дочірні елементи ієрархії батьківської фігури.
  */
 window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, parentGroup, overrideThickness, parentHierarchyItem) {
-    const thickness = (overrideThickness !== undefined ? overrideThickness : ELEMENT_THICKNESS) * scale;
+    const lineThickness = (overrideThickness !== undefined ? overrideThickness : ELEMENT_THICKNESS);
     const dx = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) return;
@@ -126,7 +126,11 @@ window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, pare
             parentGroup.appendChild(elGroup);
 
             if (code === 'WI1') {
-                _drawWI1inGroup(elGroup, sx, sy, ux, uy, px, py, elen, thickness, side);
+                // Товщина: індивідуальна для елемента > загальна для лінії > константа
+                const elThickness = (elItem && elItem.elThickness != null)
+                    ? elItem.elThickness
+                    : lineThickness;
+                _drawWI1inGroup(elGroup, sx, sy, ux, uy, px, py, elen, elThickness * scale, side);
             }
 
             i += 2;

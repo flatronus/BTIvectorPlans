@@ -349,11 +349,6 @@ function _syncElementToParentAndRedraw(elItem) {
             i += 2;
         }
     }
-    // Товщина
-    if (elItem.elThickness != null) {
-        lineData._elementThickness = elItem.elThickness;
-    }
-
     // Перемальовуємо SVG-групу батька
     var offsetX = parent._anchorOnCanvas ? parent._anchorOnCanvas.x - START_X : (parent._offsetX || 0);
     var offsetY = parent._anchorOnCanvas ? parent._anchorOnCanvas.y - START_Y : (parent._offsetY || 0);
