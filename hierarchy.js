@@ -172,6 +172,102 @@ window._highlightSvgItem = function (item) {
     }
 };
 
+/**
+ * Визначення схем властивостей для кожного типу елемента.
+ * Кожна властивість: { key, label, type, readOnly, options, group, hint }
+ * type: 'string' | 'number' | 'select' | 'bool' | 'info'
+ */
+const PROP_SCHEMA = {
+    building: [
+        { group: 'Ідентифікація' },
+        { key: 'type',       label: 'Тип',          type: 'info',   readOnly: true  },
+        { key: 'name',       label: 'Назва',         type: 'string', readOnly: false },
+        { key: 'roomNumber', label: '№ приміщення',  type: 'string', readOnly: false, hint: 'Формат: 1-1' },
+        { group: 'Геометрія' },
+        { key: '_lineCount', label: 'Ліній',         type: 'info',   readOnly: true  },
+        { key: '_ptCount',   label: 'Точок',         type: 'info',   readOnly: true  },
+        { group: 'Відображення' },
+        { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
+        { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
+    ],
+    room: [
+        { group: 'Ідентифікація' },
+        { key: 'type',       label: 'Тип',           type: 'info',   readOnly: true  },
+        { key: 'name',       label: 'Назва',         type: 'string', readOnly: false },
+        { key: 'roomNumber', label: '№ приміщення',  type: 'string', readOnly: false, hint: 'Формат: 1-1' },
+        { group: 'Площа' },
+        { key: 'area',       label: 'Площа (м²)',    type: 'number', readOnly: false, hint: 'Автоматично або вручну' },
+        { group: 'Геометрія' },
+        { key: '_lineCount', label: 'Ліній',         type: 'info',   readOnly: true  },
+        { key: '_ptCount',   label: 'Точок',         type: 'info',   readOnly: true  },
+        { group: 'Позиція' },
+        { key: '_offsetX',   label: 'Зміщення X',    type: 'info',   readOnly: true  },
+        { key: '_offsetY',   label: 'Зміщення Y',    type: 'info',   readOnly: true  },
+        { group: 'Відображення' },
+        { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
+    ],
+    element: [
+        { group: 'Ідентифікація' },
+        { key: 'type',    label: 'Тип',        type: 'info',   readOnly: true  },
+        { key: 'elCode',  label: 'Код',        type: 'info',   readOnly: true  },
+        { key: 'name',    label: 'Назва',      type: 'string', readOnly: false },
+        { group: 'Розміщення' },
+        { key: '_lineDef', label: 'Лінія',     type: 'info',   readOnly: true  },
+        { key: 'elStart',  label: 'Від (м)',   type: 'number', readOnly: false },
+        { key: 'elEnd',    label: 'До (м)',    type: 'number', readOnly: false },
+        { key: 'elSide',   label: 'Сторона',   type: 'select', readOnly: false, options: [{ v: 1, l: 'Права (1)' }, { v: -1, l: 'Ліва (-1)' }] },
+        { group: 'Відображення' },
+        { key: 'visible',  label: 'Видимий',   type: 'bool',   readOnly: false },
+    ],
+};
+
+/** Зчитує значення властивості з item (зі спеціальними ключами) */
+function _propGet(item, key) {
+    if (key === 'type') {
+        const m = { building: 'Будівля', room: 'Кімната', element: 'Елемент' };
+        return m[item.type] || item.type;
+    }
+    if (key === '_lineCount') return (item.figureLines || []).length;
+    if (key === '_ptCount')   return (item.shapePoints || []).length;
+    if (key === '_lineDef')   return (item.lineFrom ?? '?') + ' → ' + (item.lineTo ?? '?');
+    if (key === '_offsetX')   return item._offsetX != null ? item._offsetX.toFixed(1) : '—';
+    if (key === '_offsetY')   return item._offsetY != null ? item._offsetY.toFixed(1) : '—';
+    if (key === 'visible')    return item.visible !== false;
+    return item[key] ?? '';
+}
+
+/** Записує значення властивості в item і застосовує побічні ефекти */
+function _propSet(item, key, value) {
+    if (key === 'visible') {
+        item.visible = value;
+        if (item.svgGroup) item.svgGroup.style.display = value ? '' : 'none';
+        return;
+    }
+    if (key === 'name' || key === 'roomNumber') {
+        item[key] = value;
+        renderHierarchy();
+        return;
+    }
+    if (key === 'area') {
+        item.area = value;
+        renderHierarchy();
+        return;
+    }
+    if (key === 'elStart' || key === 'elEnd') {
+        item[key] = parseFloat(value) || 0;
+        return;
+    }
+    if (key === 'elSide') {
+        item.elSide = parseInt(value);
+        return;
+    }
+    if (key === 'dimensionsOutside') {
+        item.dimensionsOutside = value;
+        return;
+    }
+    item[key] = value;
+}
+
 /** Рендерить панель Властивості для вибраного елемента */
 window.renderProperties = function (item) {
     const body = document.getElementById('properties-body');
@@ -179,60 +275,240 @@ window.renderProperties = function (item) {
     body.innerHTML = '';
 
     if (!item) {
-        body.innerHTML = '<div style="color:#999;text-align:center;padding:16px;font-size:11px;">Оберіть елемент</div>';
+        body.innerHTML =
+            '<div style="color:#aaa;text-align:center;padding:20px 8px;font-size:11px;line-height:1.6;">' +
+            '<div style="font-size:18px;margin-bottom:6px;">📋</div>' +
+            'Оберіть елемент<br>у панелі вище</div>';
         return;
     }
 
-    function row(label, value) {
-        const d = document.createElement('div');
-        d.style.cssText = 'display:flex;gap:4px;padding:4px 2px;border-bottom:1px solid #f0f0f0;font-size:11px;';
-        const l = document.createElement('span');
-        l.style.cssText = 'color:#6b7280;flex-shrink:0;width:80px;';
-        l.textContent = label;
-        const v = document.createElement('span');
-        v.style.cssText = 'color:#111827;word-break:break-all;';
-        v.textContent = value ?? '—';
-        d.appendChild(l); d.appendChild(v);
-        return d;
-    }
+    const schema = PROP_SCHEMA[item.type] || PROP_SCHEMA.room;
 
-    const typeLabel = item.type === 'building' ? 'Будівля' : item.type === 'element' ? 'Елемент' : 'Кімната';
-    body.appendChild(row('Тип', typeLabel));
-    body.appendChild(row('Назва', item.name));
-    if (item.roomNumber) body.appendChild(row('№ приміщ.', item.roomNumber));
-    if (item.area)       body.appendChild(row('Площа', item.area + ' м²'));
-    if (item.type === 'element') {
-        body.appendChild(row('Код', item.elCode || '—'));
-        body.appendChild(row('Лінія', (item.lineFrom ?? '?') + '–' + (item.lineTo ?? '?')));
-        body.appendChild(row('Від', (item.elStart ?? '').toString() + ' м'));
-        body.appendChild(row('До', (item.elEnd ?? '').toString() + ' м'));
-        return;
-    }
-    body.appendChild(row('Ліній', (item.figureLines || []).length));
-    body.appendChild(row('Точок', (item.shapePoints || []).length));
+    /* ── Заголовок панелі (як у VB: назва об'єкта) ── */
+    const titleBar = document.createElement('div');
+    titleBar.style.cssText = [
+        'background:#1e40af;color:#fff;font-size:11px;font-weight:700;',
+        'padding:4px 8px;margin-bottom:0;letter-spacing:0.3px;',
+        'border-bottom:2px solid #1e3a8a;',
+    ].join('');
+    const typeIcon = item.type === 'building' ? '🏢' : item.type === 'element' ? '🪟' : '🚪';
+    titleBar.textContent = typeIcon + ' ' + (item.roomNumber || item.name || 'Без назви');
+    body.appendChild(titleBar);
 
-    const elems = (item.figureLines || []).flatMap(l => extractLineElements(l.elements || []));
-    if (elems.length > 0) {
-        const hdr = document.createElement('div');
-        hdr.style.cssText = 'margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:700;color:#374151;';
-        hdr.textContent = 'Елементи на лініях:';
-        body.appendChild(hdr);
-        elems.forEach(el => {
-            const name = ELEMENT_NAMES[el.code] || el.code;
-            body.appendChild(row(el.code, `${name} · ${el.start.toFixed(2)}–${el.end.toFixed(2)} м`));
+    /* ── Таблиця властивостей ── */
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;';
+
+    schema.forEach(function(prop) {
+        /* Заголовок групи */
+        if (prop.group) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 2;
+            td.style.cssText = [
+                'background:#dbeafe;color:#1e40af;font-weight:700;',
+                'padding:3px 6px;font-size:10px;letter-spacing:0.5px;',
+                'text-transform:uppercase;border-top:1px solid #bfdbfe;',
+                'border-bottom:1px solid #bfdbfe;user-select:none;',
+            ].join('');
+            td.textContent = prop.group;
+            tr.appendChild(td);
+            table.appendChild(tr);
+            return;
+        }
+
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom:1px solid #f0f0f0;';
+
+        /* Ліва колонка — назва властивості */
+        const tdLabel = document.createElement('td');
+        tdLabel.style.cssText = [
+            'color:#374151;padding:3px 6px;width:46%;',
+            'background:#f9fafb;border-right:1px solid #e5e7eb;',
+            'vertical-align:middle;white-space:nowrap;overflow:hidden;',
+            'text-overflow:ellipsis;',
+        ].join('');
+        tdLabel.title = prop.hint || prop.label;
+        tdLabel.textContent = prop.label;
+        tr.appendChild(tdLabel);
+
+        /* Права колонка — значення / контрол */
+        const tdVal = document.createElement('td');
+        tdVal.style.cssText = 'padding:1px 2px;vertical-align:middle;';
+
+        const val = _propGet(item, prop.key);
+        const ctrl = _makeControl(prop, val, item);
+        tdVal.appendChild(ctrl);
+        tr.appendChild(tdVal);
+
+        table.appendChild(tr);
+    });
+
+    body.appendChild(table);
+
+    /* ── Додаткові секції: елементи на лініях ── */
+    if (item.type !== 'element') {
+        const elems = (item.figureLines || []).flatMap(function(l) {
+            return extractLineElements(l.elements || []);
         });
-    }
+        if (elems.length > 0) {
+            const hdr = _makeGroupHeader('Елементи на лініях (' + elems.length + ')');
+            body.appendChild(hdr);
+            const tbl2 = document.createElement('table');
+            tbl2.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;';
+            elems.forEach(function(el) {
+                const name = ELEMENT_NAMES[el.code] || el.code;
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #f0f0f0';
+                const td1 = document.createElement('td');
+                td1.style.cssText = 'color:#9C27B0;font-weight:700;padding:3px 6px;width:46%;background:#f9fafb;border-right:1px solid #e5e7eb;';
+                td1.textContent = el.code;
+                const td2 = document.createElement('td');
+                td2.style.cssText = 'color:#374151;padding:3px 6px;';
+                td2.textContent = name + '  ' + el.start.toFixed(2) + '–' + el.end.toFixed(2) + ' м';
+                tr.appendChild(td1); tr.appendChild(td2);
+                tbl2.appendChild(tr);
+            });
+            body.appendChild(tbl2);
+        }
 
-    if ((item.children || []).length > 0) {
-        const hdr = document.createElement('div');
-        hdr.style.cssText = 'margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:700;color:#374151;';
-        hdr.textContent = `Дочірні (${item.children.length}):`;
-        body.appendChild(hdr);
-        item.children.forEach(ch => {
-            body.appendChild(row('↳', ch.roomNumber || ch.name));
-        });
+        const kids = item.children || [];
+        if (kids.length > 0) {
+            body.appendChild(_makeGroupHeader('Дочірні (' + kids.length + ')'));
+            const tbl3 = document.createElement('table');
+            tbl3.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;';
+            kids.forEach(function(ch) {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #f0f0f0';
+                const td1 = document.createElement('td');
+                td1.style.cssText = 'color:#6b7280;padding:3px 6px;width:46%;background:#f9fafb;border-right:1px solid #e5e7eb;';
+                td1.textContent = '↳ ' + (ch.roomNumber || ch.name);
+                const td2 = document.createElement('td');
+                td2.style.cssText = 'color:#374151;padding:3px 6px;';
+                td2.textContent = ch.type === 'element' ? (ELEMENT_NAMES[ch.elCode] || ch.elCode || '—') : (ch.area ? ch.area + ' м²' : '—');
+                tr.appendChild(td1); tr.appendChild(td2);
+                tbl3.appendChild(tr);
+            });
+            body.appendChild(tbl3);
+        }
     }
 };
+
+/** Створює контрол для властивості */
+function _makeControl(prop, val, item) {
+    const BASE_STYLE = [
+        'width:100%;box-sizing:border-box;font-size:11px;',
+        'border:none;background:transparent;',
+        'padding:2px 4px;color:#111827;',
+        'outline:none;',
+    ].join('');
+
+    if (prop.type === 'info') {
+        const span = document.createElement('span');
+        span.style.cssText = 'font-size:11px;color:#374151;padding:2px 6px;display:block;';
+        span.textContent = val !== '' && val != null ? String(val) : '—';
+        return span;
+    }
+
+    if (prop.type === 'bool') {
+        const wrap = document.createElement('label');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 4px;cursor:pointer;';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = !!val;
+        chk.disabled = !!prop.readOnly;
+        chk.style.cssText = 'width:13px;height:13px;cursor:pointer;accent-color:#2196F3;';
+        chk.onchange = function() { _propSet(item, prop.key, chk.checked); };
+        const lbl = document.createElement('span');
+        lbl.style.cssText = 'font-size:11px;color:#374151;user-select:none;';
+        lbl.textContent = chk.checked ? 'Так' : 'Ні';
+        chk.onchange = function() {
+            lbl.textContent = chk.checked ? 'Так' : 'Ні';
+            _propSet(item, prop.key, chk.checked);
+        };
+        wrap.appendChild(chk); wrap.appendChild(lbl);
+        return wrap;
+    }
+
+    if (prop.type === 'select') {
+        const sel = document.createElement('select');
+        sel.style.cssText = BASE_STYLE + 'cursor:pointer;';
+        sel.disabled = !!prop.readOnly;
+        (prop.options || []).forEach(function(opt) {
+            const o = document.createElement('option');
+            o.value = opt.v;
+            o.textContent = opt.l;
+            if (String(val) === String(opt.v)) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.onchange = function() { _propSet(item, prop.key, sel.value); };
+        _applyFocusStyle(sel);
+        return sel;
+    }
+
+    if (prop.type === 'string') {
+        if (prop.readOnly) {
+            const span = document.createElement('span');
+            span.style.cssText = 'font-size:11px;color:#374151;padding:2px 6px;display:block;';
+            span.textContent = val || '—';
+            return span;
+        }
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = val || '';
+        inp.placeholder = prop.hint || '';
+        inp.style.cssText = BASE_STYLE;
+        inp.onchange = function() { _propSet(item, prop.key, inp.value.trim()); };
+        _applyFocusStyle(inp);
+        return inp;
+    }
+
+    if (prop.type === 'number') {
+        if (prop.readOnly) {
+            const span = document.createElement('span');
+            span.style.cssText = 'font-size:11px;color:#374151;padding:2px 6px;display:block;';
+            span.textContent = val !== '' && val != null ? String(val) : '—';
+            return span;
+        }
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.inputMode = 'decimal';
+        inp.step = '0.01';
+        inp.value = val !== '' && val != null ? val : '';
+        inp.placeholder = prop.hint || '0';
+        inp.style.cssText = BASE_STYLE;
+        inp.onchange = function() { _propSet(item, prop.key, inp.value); };
+        _applyFocusStyle(inp);
+        return inp;
+    }
+
+    const span = document.createElement('span');
+    span.textContent = String(val ?? '—');
+    return span;
+}
+
+function _applyFocusStyle(el) {
+    el.onfocus = function() {
+        el.style.background = '#eff6ff';
+        el.style.outline = '1px solid #2196F3';
+    };
+    el.onblur = function() {
+        el.style.background = 'transparent';
+        el.style.outline = 'none';
+    };
+}
+
+function _makeGroupHeader(text) {
+    const div = document.createElement('div');
+    div.style.cssText = [
+        'background:#dbeafe;color:#1e40af;font-weight:700;',
+        'padding:3px 6px;font-size:10px;letter-spacing:0.5px;',
+        'text-transform:uppercase;border-top:1px solid #bfdbfe;',
+        'border-bottom:1px solid #bfdbfe;user-select:none;',
+    ].join('');
+    div.textContent = text;
+    return div;
+}
 
 window.openShapeModalForEdit = function (item) {
     appState.viewingElementMode    = false;
