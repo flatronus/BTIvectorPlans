@@ -308,6 +308,18 @@ function _findParentItemById(childId, items, parent) {
 }
 
 /**
+ * Перебудовує рядок lineData.code з масиву elements.
+ * Формат: direction\nlineType\nval1\nval2\ncode\n...
+ */
+function _rebuildLineCode(elements, direction, lineType) {
+    var lines = [direction || 'free', lineType || 'line'];
+    (elements || []).forEach(function(el) {
+        lines.push(el.type === 'number' ? String(el.value) : el.value);
+    });
+    return lines.join('\n');
+}
+
+/**
  * Після редагування властивостей елемента (WI1): оновлює lineData батьківської фігури
  * і перемальовує SVG-групу батька з новими значеннями.
  */
@@ -345,6 +357,8 @@ function _syncElementToParentAndRedraw(elItem) {
             var newCode  = newSide === -1 ? ('-' + code) : code;
             elements[i+2].value   = newCode;
             elItem._elKey = 'wi_' + lineData.from + '_' + (lineData.to ?? 'c') + '_' + code + '_' + elItem.elStart;
+            // Перебудовуємо lineData.code щоб модалка координат показувала актуальні числа
+            lineData.code = _rebuildLineCode(lineData.elements, lineData.direction, lineData.lineType);
             break;
             i += 2;
         }
