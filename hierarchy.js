@@ -111,14 +111,14 @@ window._highlightSvgItem = function (item) {
     }
     if (!item || !item.svgGroup) return;
 
-    // Вибираємо лінії тільки в межах цієї групи, не заходячи в дочірні <g data-hierarchy-id>
+    // Виділяємо тільки елементи цієї групи, не заходячи в дочірні <g data-hierarchy-id>
     function collectLines(node) {
-        node.childNodes.forEach(child => {
+        node.childNodes.forEach(function(child) {
             if (child.nodeType !== 1) return;
             if (child.tagName === 'g' && child.hasAttribute('data-hierarchy-id')) return;
-            const tag = child.tagName;
+            var tag = child.tagName;
             if (tag === 'line' || tag === 'polyline' || tag === 'polygon' || tag === 'path') {
-                const orig = child.getAttribute('stroke') || 'black';
+                var orig = child.getAttribute('stroke') || 'black';
                 child.setAttribute('data-orig-stroke', orig);
                 child.setAttribute('data-selected', '1');
                 child.setAttribute('stroke', '#ef4444');
@@ -153,10 +153,18 @@ window.renderProperties = function (item) {
         return d;
     }
 
-    body.appendChild(row('Тип', item.type === 'building' ? 'Будівля' : 'Кімната'));
+    const typeLabel = item.type === 'building' ? 'Будівля' : item.type === 'element' ? 'Елемент' : 'Кімната';
+    body.appendChild(row('Тип', typeLabel));
     body.appendChild(row('Назва', item.name));
     if (item.roomNumber) body.appendChild(row('№ приміщ.', item.roomNumber));
     if (item.area)       body.appendChild(row('Площа', item.area + ' м²'));
+    if (item.type === 'element') {
+        body.appendChild(row('Код', item.elCode || '—'));
+        body.appendChild(row('Лінія', (item.lineFrom ?? '?') + '–' + (item.lineTo ?? '?')));
+        body.appendChild(row('Від', (item.elStart ?? '').toString() + ' м'));
+        body.appendChild(row('До', (item.elEnd ?? '').toString() + ' м'));
+        return;
+    }
     body.appendChild(row('Ліній', (item.figureLines || []).length));
     body.appendChild(row('Точок', (item.shapePoints || []).length));
 
@@ -208,13 +216,9 @@ window.createHierarchyItemElement = function (item) {
     const itemDiv   = document.createElement('div');
     itemDiv.className = 'hierarchy-item' + (G.selectedHierarchyItem === item.id ? ' selected' : '');
 
-    const linesWithElements = (item.figureLines || []).filter(l =>
-        extractLineElements(l.elements || []).length > 0
-    );
-    const hasChildren = item.children.length > 0;
-    const hasDetails  = linesWithElements.length > 0;
+    const hasChildren = (item.children || []).length > 0;
 
-    if (hasChildren || hasDetails) {
+    if (hasChildren) {
         const toggle = document.createElement('span');
         toggle.className = 'hierarchy-toggle';
         toggle.textContent = item.expanded ? '▼' : '▶';
@@ -231,8 +235,8 @@ window.createHierarchyItemElement = function (item) {
     }
 
     const icon = document.createElement('i');
-    icon.className = 'fas icon ' + (item.type === 'building' ? 'fa-building' : 'fa-door-open');
-    icon.style.color = item.type === 'building' ? '#2196F3' : '#4CAF50';
+    icon.className = 'fas icon ' + (item.type === 'building' ? 'fa-building' : item.type === 'element' ? 'fa-window-maximize' : 'fa-door-open');
+    icon.style.color = item.type === 'building' ? '#2196F3' : item.type === 'element' ? '#9C27B0' : '#4CAF50';
     itemDiv.appendChild(icon);
 
     const label = document.createElement('span');
@@ -251,49 +255,17 @@ window.createHierarchyItemElement = function (item) {
     // Одиночний клік — виділення
     itemDiv.onclick = () => selectHierarchyItem(item);
 
-    // Подвійний клік — відкрити редактор фігури
-    itemDiv.ondblclick = (e) => {
-        e.stopPropagation();
-        openShapeModalForEdit(item);
-    };
+    // Подвійний клік — відкрити редактор фігури (тільки для кімнат і будівель)
+    if (item.type !== 'element') {
+        itemDiv.ondblclick = (e) => {
+            e.stopPropagation();
+            openShapeModalForEdit(item);
+        };
+    }
 
     container.appendChild(itemDiv);
 
     if (item.expanded) {
-        if (hasDetails) {
-            const detailsWrap = document.createElement('div');
-            detailsWrap.style.cssText = 'margin-left: 20px; padding: 4px 0 4px 8px; border-left: 1px solid #ddd;';
-
-            linesWithElements.forEach(line => {
-                extractLineElements(line.elements || []).forEach(el => {
-                    const row = document.createElement('div');
-                    row.style.cssText = 'display: flex; align-items: center; gap: 5px; padding: 2px 4px; font-size: 11px; color: #555; cursor: pointer; border-radius: 3px;';
-                    row.onmouseenter = () => { row.style.background = '#f3e5f5'; };
-                    row.onmouseleave = () => { row.style.background = ''; };
-
-                    const elIcon = document.createElement('i');
-                    elIcon.className = 'fas fa-window-maximize';
-                    elIcon.style.cssText = 'font-size: 10px; color: #9C27B0; flex-shrink: 0;';
-                    row.appendChild(elIcon);
-
-                    const elLabel = document.createElement('span');
-                    const name    = ELEMENT_NAMES[el.code] || el.code;
-                    const lineNum = `Л${line.from}-${line.to ?? '?'}`;
-                    elLabel.textContent = `${el.code} (${name}) · ${lineNum} · ${el.start.toFixed(2)}–${el.end.toFixed(2)}м`;
-                    row.appendChild(elLabel);
-
-                    row.onclick = (e) => {
-                        e.stopPropagation();
-                        showToast('Редагування елементів через панель ієрархії вимкнено', 'info');
-                    };
-
-                    detailsWrap.appendChild(row);
-                });
-            });
-
-            container.appendChild(detailsWrap);
-        }
-
         if (hasChildren) {
             const childWrap = document.createElement('div');
             childWrap.className = 'hierarchy-children';

@@ -4,7 +4,7 @@
  */
 
 /** Заповнює SVG-групу лініями, розмірами та елементами поточної фігури */
-window._fillSvgGroup = function (group, offsetX, offsetY) {
+window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
     G.figureLines.forEach(lineData => {
         const fromPoint = G.shapePoints.find(p => p.num === lineData.from);
         const toPoint   = lineData.isClosing ? G.shapePoints[0] : G.shapePoints.find(p => p.num === lineData.to);
@@ -24,22 +24,13 @@ window._fillSvgGroup = function (group, offsetX, offsetY) {
         line.setAttribute('vector-effect', 'non-scaling-stroke');
         group.appendChild(line);
 
-        // Невидима широка лінія для зручності кліку/дотику
-        const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        hitLine.setAttribute('x1', x1); hitLine.setAttribute('y1', y1);
-        hitLine.setAttribute('x2', x2); hitLine.setAttribute('y2', y2);
-        hitLine.setAttribute('stroke', 'transparent');
-        hitLine.setAttribute('stroke-width', '12');
-        hitLine.setAttribute('vector-effect', 'non-scaling-stroke');
-        group.appendChild(hitLine);
-
         drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData);
 
         if (lineData.elements && lineData.elements.length > 0) {
             const elThickness = typeof lineData._elementThickness === 'number'
                 ? lineData._elementThickness
                 : undefined;
-            drawElementsOnLine(lineData, x1, y1, x2, y2, SCALE, group, elThickness);
+            _drawElementsIntoGroups(lineData, x1, y1, x2, y2, SCALE, group, elThickness, parentHierarchyItem);
         }
     });
 
@@ -52,10 +43,117 @@ window._fillSvgGroup = function (group, offsetX, offsetY) {
     }
 };
 
+/**
+ * Малює елементи лінії (WI1 тощо) кожен у власну <g data-hierarchy-id>,
+ * реєструє їх як дочірні елементи ієрархії батьківської фігури.
+ */
+window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, parentGroup, overrideThickness, parentHierarchyItem) {
+    const thickness = (overrideThickness !== undefined ? overrideThickness : ELEMENT_THICKNESS) * scale;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return;
+    const ux = dx / len, uy = dy / len;
+    const px = uy, py = -ux;
+    const elements = lineData.elements || [];
+
+    for (let i = 0; i < elements.length; i++) {
+        if (elements[i]?.type     === 'number' &&
+            elements[i+1]?.type   === 'number' &&
+            elements[i+2]?.type   === 'element') {
+
+            const start = elements[i].value   * scale;
+            const end   = elements[i+1].value * scale;
+            let code    = elements[i+2].value;
+            let side    = 1;
+            if (code.startsWith('-')) { side = -1; code = code.substring(1); }
+
+            const sx   = x1 + ux * start;
+            const sy   = y1 + uy * start;
+            const elen = end - start;
+
+            // Шукаємо існуючий дочірній елемент ієрархії для цього WI1
+            const elKey = `wi_${lineData.from}_${lineData.to ?? 'c'}_${code}_${elements[i].value}`;
+            let elItem = null;
+            if (parentHierarchyItem) {
+                elItem = (parentHierarchyItem.children || []).find(c => c._elKey === elKey && c.type === 'element');
+            }
+
+            // SVG-група для елемента
+            const elGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+            if (elItem) {
+                // Оновлюємо існуючий: перереєструємо групу
+                elGroup.setAttribute('data-hierarchy-id', elItem.id);
+                elItem.svgGroup = elGroup;
+            } else {
+                // Новий елемент ієрархії
+                const newId = G.hierarchyIdCounter++;
+                elGroup.setAttribute('data-hierarchy-id', newId);
+                if (parentHierarchyItem) {
+                    const newEl = {
+                        id:       newId,
+                        type:     'element',
+                        name:     (code === 'WI1' ? 'Вікно' : code),
+                        _elKey:   elKey,
+                        elCode:   code,
+                        elStart:  elements[i].value,
+                        elEnd:    elements[i+1].value,
+                        lineFrom: lineData.from,
+                        lineTo:   lineData.to,
+                        svgGroup: elGroup,
+                        children: [],
+                        expanded: false,
+                        parentId: parentHierarchyItem.id
+                    };
+                    parentHierarchyItem.children.push(newEl);
+                    elItem = newEl;
+                }
+            }
+
+            parentGroup.appendChild(elGroup);
+
+            if (code === 'WI1') {
+                _drawWI1inGroup(elGroup, sx, sy, ux, uy, px, py, elen, thickness, side);
+            }
+
+            i += 2;
+        }
+    }
+};
+
+/** Малює WI1 у вказану групу (виділено з elements-on-line.js для використання тут) */
+function _drawWI1inGroup(target, sx, sy, ux, uy, px, py, elen, thickness, side) {
+    const c1x = sx,             c1y = sy;
+    const c2x = sx + ux * elen, c2y = sy + uy * elen;
+    const c3x = c2x + px * thickness * side, c3y = c2y + py * thickness * side;
+    const c4x = sx  + px * thickness * side, c4y = sy  + py * thickness * side;
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    rect.setAttribute('points', `${c1x},${c1y} ${c2x},${c2y} ${c3x},${c3y} ${c4x},${c4y}`);
+    rect.setAttribute('fill', 'none');
+    rect.setAttribute('stroke', 'black');
+    rect.setAttribute('stroke-width', '1');
+    rect.setAttribute('vector-effect', 'non-scaling-stroke');
+    target.appendChild(rect);
+
+    const midStartX = sx  + px * (thickness / 2) * side;
+    const midStartY = sy  + py * (thickness / 2) * side;
+    const midEndX   = c2x + px * (thickness / 2) * side;
+    const midEndY   = c2y + py * (thickness / 2) * side;
+
+    const midLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    midLine.setAttribute('x1', midStartX); midLine.setAttribute('y1', midStartY);
+    midLine.setAttribute('x2', midEndX);   midLine.setAttribute('y2', midEndY);
+    midLine.setAttribute('stroke', 'black');
+    midLine.setAttribute('stroke-width', '1');
+    midLine.setAttribute('vector-effect', 'non-scaling-stroke');
+    target.appendChild(midLine);
+}
+
 /** Очищає групу і перебудовує її вміст (для режиму редагування) */
-window._rebuildSvgGroup = function (group, offsetX, offsetY) {
+window._rebuildSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
     while (group.firstChild) group.removeChild(group.firstChild);
-    _fillSvgGroup(group, offsetX, offsetY);
+    _fillSvgGroup(group, offsetX, offsetY, parentHierarchyItem);
 };
 
 /** Розміри на головному полотні */
@@ -124,7 +222,7 @@ window.transferFigureToMainCanvas = function () {
                 useOffsetY = offsetY;
             }
 
-            _rebuildSvgGroup(existingItem.svgGroup, useOffsetX, useOffsetY);
+            _rebuildSvgGroup(existingItem.svgGroup, useOffsetX, useOffsetY, existingItem);
 
             existingItem.figureLines = JSON.parse(JSON.stringify(G.figureLines));
             existingItem.shapePoints = JSON.parse(JSON.stringify(G.shapePoints));
@@ -148,7 +246,6 @@ window.transferFigureToMainCanvas = function () {
 
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     group.setAttribute('data-hierarchy-id', G.hierarchyIdCounter);
-    _fillSvgGroup(group, offsetX, offsetY);
     mainSvg.appendChild(group);
 
     const newItem = addToHierarchy({
@@ -161,6 +258,7 @@ window.transferFigureToMainCanvas = function () {
         svgGroup:    group,
         parentId:    G.selectedHierarchyItem
     });
+    _fillSvgGroup(group, offsetX, offsetY, newItem);
     // Зберігаємо offset щоб при повторному редагуванні фігура не зміщувалась
     newItem._offsetX = offsetX;
     newItem._offsetY = offsetY;
