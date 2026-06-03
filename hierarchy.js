@@ -204,6 +204,7 @@ const PROP_SCHEMA = {
         { key: '_offsetX',   label: 'Зміщення X',    type: 'info',   readOnly: true  },
         { key: '_offsetY',   label: 'Зміщення Y',    type: 'info',   readOnly: true  },
         { group: 'Відображення' },
+        { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
     element: [
@@ -215,7 +216,7 @@ const PROP_SCHEMA = {
         { key: '_lineDef',    label: 'Лінія',        type: 'info',   readOnly: true  },
         { key: 'elStart',     label: 'Від (м)',      type: 'number', readOnly: false },
         { key: 'elEnd',       label: 'До (м)',       type: 'number', readOnly: false },
-        { key: 'elThickness', label: 'Товщина (м)',  type: 'number', readOnly: false, hint: 'За замовчуванням 0.20' },
+        { key: '_thickness',  label: 'Товщина (м)',  type: 'number', readOnly: false, hint: 'За замовчуванням 0.20' },
         { key: 'elSide',      label: 'Сторона',      type: 'select', readOnly: false, options: [{ v: 1, l: 'Права (1)' }, { v: -1, l: 'Ліва (-1)' }] },
         { group: 'Відображення' },
         { key: 'visible',     label: 'Видимий',      type: 'bool',   readOnly: false },
@@ -693,13 +694,24 @@ function _makeControl(prop, val, item) {
             return span;
         }
         const inp = document.createElement('input');
-        inp.type = 'number';
+        inp.type = 'text';
         inp.inputMode = 'decimal';
-        inp.step = '0.01';
         inp.value = val !== '' && val != null ? val : '';
         inp.placeholder = prop.hint || '0';
         inp.style.cssText = BASE_STYLE;
-        inp.onchange = function() { _propSet(item, prop.key, inp.value); };
+        inp.oninput = function() {
+            // Нормалізуємо кому в крапку під час введення
+            const pos = inp.selectionStart;
+            const hadComma = inp.value.includes(',');
+            if (hadComma) {
+                inp.value = inp.value.replace(',', '.');
+                try { inp.setSelectionRange(pos, pos); } catch(e) {}
+            }
+        };
+        inp.onchange = function() {
+            inp.value = inp.value.replace(',', '.');
+            _propSet(item, prop.key, inp.value);
+        };
         _applyFocusStyle(inp);
         return inp;
     }
