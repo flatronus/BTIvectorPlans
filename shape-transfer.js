@@ -105,11 +105,12 @@ window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, pare
                     const newEl = {
                         id:       newId,
                         type:     'element',
-                        name:     (code === 'WI1' ? 'Вікно' : code),
+                        name:     (code === 'WI1' ? 'Вікно' : code) + ' ' + lineData.from + '-' + (lineData.to ?? 'c'),
                         _elKey:   elKey,
                         elCode:   code,
                         elStart:  elements[i].value,
                         elEnd:    elements[i+1].value,
+                        elSide:   side,
                         lineFrom: lineData.from,
                         lineTo:   lineData.to,
                         svgGroup: elGroup,
@@ -139,6 +140,14 @@ function _drawWI1inGroup(target, sx, sy, ux, uy, px, py, elen, thickness, side) 
     const c2x = sx + ux * elen, c2y = sy + uy * elen;
     const c3x = c2x + px * thickness * side, c3y = c2y + py * thickness * side;
     const c4x = sx  + px * thickness * side, c4y = sy  + py * thickness * side;
+
+    // Прозорий полігон — вся площа WI1 клікабельна
+    const hitPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    hitPoly.setAttribute('points', c1x+','+c1y+' '+c2x+','+c2y+' '+c3x+','+c3y+' '+c4x+','+c4y);
+    hitPoly.setAttribute('fill', 'transparent');
+    hitPoly.setAttribute('stroke', 'none');
+    hitPoly.setAttribute('data-hit-area', '1');
+    target.appendChild(hitPoly);
 
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     rect.setAttribute('points', `${c1x},${c1y} ${c2x},${c2y} ${c3x},${c3y} ${c4x},${c4y}`);
