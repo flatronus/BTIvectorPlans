@@ -24,6 +24,15 @@ window._fillSvgGroup = function (group, offsetX, offsetY) {
         line.setAttribute('vector-effect', 'non-scaling-stroke');
         group.appendChild(line);
 
+        // Невидима широка лінія для зручності кліку/дотику
+        const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        hitLine.setAttribute('x1', x1); hitLine.setAttribute('y1', y1);
+        hitLine.setAttribute('x2', x2); hitLine.setAttribute('y2', y2);
+        hitLine.setAttribute('stroke', 'transparent');
+        hitLine.setAttribute('stroke-width', '12');
+        hitLine.setAttribute('vector-effect', 'non-scaling-stroke');
+        group.appendChild(hitLine);
+
         drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData);
 
         if (lineData.elements && lineData.elements.length > 0) {

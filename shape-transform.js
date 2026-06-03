@@ -231,7 +231,7 @@ window.shapeTransform = (function () {
 
         const pt = _clientToSvg(svg, e.clientX, e.clientY);
 
-        if (_mode === 'select') {
+        if (_mode === 'select' || _mode === 'pan') {
             const item = _findItemByTarget(e.target);
             if (item) {
                 api.select(item.id);
@@ -239,6 +239,8 @@ window.shapeTransform = (function () {
             } else {
                 api.deselect();
             }
+            // У режимі pan — дозволяємо подальшу обробку для перетягування полотна
+            if (_mode === 'pan') return;
             return;
         }
 
