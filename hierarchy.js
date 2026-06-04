@@ -192,6 +192,9 @@ const PROP_SCHEMA = {
         { key: '_lineCount', label: 'Ліній',         type: 'info',   readOnly: true  },
         { key: '_ptCount',   label: 'Точок',         type: 'info',   readOnly: true  },
         { group: 'Відображення' },
+        { key: 'showRoomLabel',  label: 'Показати підпис',    type: 'bool',   readOnly: false },
+        { key: 'roomLabelStyle', label: 'Вид підпису',        type: 'select', readOnly: false,
+          options: [{ v: 'inline', l: 'Традиційний (всередині)' }, { v: 'leader', l: 'Виносний' }] },
         { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
@@ -212,6 +215,9 @@ const PROP_SCHEMA = {
         { key: '_offsetX',   label: 'Зміщення X',    type: 'info',   readOnly: true  },
         { key: '_offsetY',   label: 'Зміщення Y',    type: 'info',   readOnly: true  },
         { group: 'Відображення' },
+        { key: 'showRoomLabel',  label: 'Показати підпис',    type: 'bool',   readOnly: false },
+        { key: 'roomLabelStyle', label: 'Вид підпису',        type: 'select', readOnly: false,
+          options: [{ v: 'inline', l: 'Традиційний (всередині)' }, { v: 'leader', l: 'Виносний' }] },
         { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
@@ -236,6 +242,8 @@ function _propGet(item, key) {
     if (key === 'type') return item.type || 'room';
     if (key === 'customArea')    return item.customArea   ?? '';
     if (key === 'useCustomArea') return item.useCustomArea === true;
+    if (key === 'showRoomLabel')  return item.showRoomLabel !== false;
+    if (key === 'roomLabelStyle') return item.roomLabelStyle || 'inline';
     if (key === '_lineCount') return (item.figureLines || []).length;
     if (key === '_ptCount')   return (item.shapePoints || []).length;
     if (key === '_lineDef')   return (item.lineFrom ?? '?') + ' → ' + (item.lineTo ?? '?');
@@ -288,22 +296,14 @@ function _propSet(item, key, value) {
         renderHierarchy();
         return;
     }
+    if (key === 'showRoomLabel' || key === 'roomLabelStyle') {
+        item[key] = value;
+        _redrawItemSvgGroup(item);
+        return;
+    }
     if (key === 'dimensionsOutside') {
         item.dimensionsOutside = value;
-        // Перемальовуємо фігуру якщо є svgGroup
-        if (item.svgGroup) {
-            const offsetX = item._anchorOnCanvas ? item._anchorOnCanvas.x - START_X : (item._offsetX || 0);
-            const offsetY = item._anchorOnCanvas ? item._anchorOnCanvas.y - START_Y : (item._offsetY || 0);
-            const savedLines = G.figureLines, savedPoints = G.shapePoints;
-            const savedDO = G.dimensionsOutside;
-            G.figureLines = JSON.parse(JSON.stringify(item.figureLines));
-            G.shapePoints = JSON.parse(JSON.stringify(item.shapePoints));
-            G.dimensionsOutside = value;
-            _rebuildSvgGroup(item.svgGroup, offsetX, offsetY, item);
-            G.figureLines = savedLines;
-            G.shapePoints = savedPoints;
-            G.dimensionsOutside = savedDO;
-        }
+        _redrawItemSvgGroup(item);
         return;
     }
     if (key === 'elStart' || key === 'elEnd' || key === 'elSide' || key === '_thickness') {
@@ -316,6 +316,26 @@ function _propSet(item, key, value) {
         return;
     }
     item[key] = value;
+}
+
+/** Перемальовує SVG-групу item зі збереженням і відновленням G */
+function _redrawItemSvgGroup(item) {
+    if (!item || !item.svgGroup) return;
+    const offsetX = item._anchorOnCanvas ? item._anchorOnCanvas.x - START_X : (item._offsetX || 0);
+    const offsetY = item._anchorOnCanvas ? item._anchorOnCanvas.y - START_Y : (item._offsetY || 0);
+    const savedLines = G.figureLines, savedPoints = G.shapePoints;
+    const savedDO = G.dimensionsOutside, savedRoom = G.roomNumber, savedBuild = G.isBuilding;
+    G.figureLines = JSON.parse(JSON.stringify(item.figureLines));
+    G.shapePoints = JSON.parse(JSON.stringify(item.shapePoints));
+    G.dimensionsOutside = item.dimensionsOutside === true;
+    G.roomNumber  = item.roomNumber || '';
+    G.isBuilding  = item.type === 'building';
+    _rebuildSvgGroup(item.svgGroup, offsetX, offsetY, item);
+    G.figureLines = savedLines;
+    G.shapePoints = savedPoints;
+    G.dimensionsOutside = savedDO;
+    G.roomNumber  = savedRoom;
+    G.isBuilding  = savedBuild;
 }
 
 /** Знаходить батьківський item за id дочірнього (по всьому дереву) */

@@ -100,3 +100,92 @@ window.buildRoomNumberText = function (cx, cy, number) {
 
     return text;
 };
+
+/**
+ * Будує конструкцію-дріб: номер кімнати / площа.
+ * @param {number} cx, cy — центр кімнати (SVG-координати)
+ * @param {string} number  — номер кімнати (напр. "1-1")
+ * @param {string|number} area — площа кімнати (напр. "12.3")
+ * @param {'inline'|'leader'} style — 'inline' (всередині кімнати) або 'leader' (виносна)
+ * @param {number} leaderDx, leaderDy — зміщення виносної точки від центру (px), лише для 'leader'
+ * @returns {SVGElement} — <g> з усіма елементами конструкції
+ */
+window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderDy) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const g  = document.createElementNS(NS, 'g');
+    g.setAttribute('data-room-label', '1');
+
+    const fontSize  = 12;
+    const lineH     = fontSize + 2;   // висота рядка
+    const lineLen   = 28;             // довжина розділової риски (px)
+
+    // Якщо немає площі — просто номер кімнати по центру
+    if (!area) {
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', cx); t.setAttribute('y', cy);
+        t.setAttribute('font-size', fontSize);
+        t.setAttribute('font-weight', 'bold');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('dominant-baseline', 'middle');
+        t.setAttribute('fill', '#e53935');
+        t.textContent = number;
+        g.appendChild(t);
+        return g;
+    }
+
+    // Позиція підпису: при виносному стилі — зміщення
+    let lx = cx, ly = cy;
+    if (style === 'leader') {
+        lx = cx + (leaderDx || 40);
+        ly = cy + (leaderDy || -30);
+        // Виносна лінія від центру кімнати до підпису
+        const line = document.createElementNS(NS, 'line');
+        line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+        line.setAttribute('x2', lx); line.setAttribute('y2', ly);
+        line.setAttribute('stroke', '#333');
+        line.setAttribute('stroke-width', '0.8');
+        line.setAttribute('vector-effect', 'non-scaling-stroke');
+        g.appendChild(line);
+        // Кружок у центрі кімнати
+        const dot = document.createElementNS(NS, 'circle');
+        dot.setAttribute('cx', cx); dot.setAttribute('cy', cy);
+        dot.setAttribute('r', '2');
+        dot.setAttribute('fill', '#333');
+        g.appendChild(dot);
+    }
+
+    // Номер кімнати (зверху)
+    const numText = document.createElementNS(NS, 'text');
+    numText.setAttribute('x', lx);
+    numText.setAttribute('y', ly - lineH / 2 - 1);
+    numText.setAttribute('font-size', fontSize);
+    numText.setAttribute('font-weight', 'bold');
+    numText.setAttribute('text-anchor', 'middle');
+    numText.setAttribute('dominant-baseline', 'auto');
+    numText.setAttribute('fill', '#e53935');
+    numText.textContent = number;
+    g.appendChild(numText);
+
+    // Розділова риска
+    const ruler = document.createElementNS(NS, 'line');
+    ruler.setAttribute('x1', lx - lineLen / 2); ruler.setAttribute('y1', ly);
+    ruler.setAttribute('x2', lx + lineLen / 2); ruler.setAttribute('y2', ly);
+    ruler.setAttribute('stroke', 'black');
+    ruler.setAttribute('stroke-width', '0.8');
+    ruler.setAttribute('vector-effect', 'non-scaling-stroke');
+    g.appendChild(ruler);
+
+    // Площа (знизу)
+    const areaText = document.createElementNS(NS, 'text');
+    areaText.setAttribute('x', lx);
+    areaText.setAttribute('y', ly + lineH / 2 + 1);
+    areaText.setAttribute('font-size', fontSize);
+    areaText.setAttribute('font-weight', 'bold');
+    areaText.setAttribute('text-anchor', 'middle');
+    areaText.setAttribute('dominant-baseline', 'hanging');
+    areaText.setAttribute('fill', 'black');
+    areaText.textContent = String(area);
+    g.appendChild(areaText);
+
+    return g;
+};

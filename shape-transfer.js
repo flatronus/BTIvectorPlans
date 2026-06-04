@@ -46,12 +46,29 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
         }
     });
 
-    if (G.roomNumber && G.shapePoints.length >= 3) {
+    if (G.roomNumber && G.shapePoints.length >= 2) {
         const validPoints = G.shapePoints.filter(p => !p.isTemp);
         let cx = 0, cy = 0;
         validPoints.forEach(p => { cx += p.x + offsetX; cy += p.y + offsetY; });
         cx /= validPoints.length; cy /= validPoints.length;
-        group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber));
+
+        // Визначаємо налаштування підпису з parentHierarchyItem
+        const phi = parentHierarchyItem;
+        const showLabel  = !phi || phi.showRoomLabel !== false;
+        const labelStyle = (phi && phi.roomLabelStyle === 'leader') ? 'leader' : 'inline';
+        const displayArea = phi && phi.useCustomArea && phi.customArea
+            ? phi.customArea
+            : (phi ? phi.area : null);
+
+        if (showLabel) {
+            if (displayArea) {
+                group.appendChild(buildRoomLabel(cx, cy, G.roomNumber, displayArea, labelStyle,
+                    phi && phi.leaderDx != null ? phi.leaderDx : 40,
+                    phi && phi.leaderDy != null ? phi.leaderDy : -30));
+            } else {
+                group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber));
+            }
+        }
     }
 };
 
