@@ -192,32 +192,106 @@ window.shapeTransform = (function () {
         /** Оновити підсвічування (після zoom тощо) */
         refreshHighlight: _refreshHighlight,
 
-        /** Переміщення вибраної фігури на dx,dy пікселів SVG */
+        /** Переміщення вибраної фігури на dx,dy пікселів SVG разом з усіма дочірніми */
         moveSelected(dx, dy) {
             if (!_selectedId) return;
             const item = findHierarchyItemById(_selectedId);
             if (!item || !item.svgGroup) return;
-            const { tx, ty, ra, rx, ry } = _parseGroupTransform(item.svgGroup);
-            const newTx = tx + dx, newTy = ty + dy;
-            item.svgGroup.setAttribute('transform', _buildTransformString(newTx, newTy, ra, rx, ry));
-            item._offsetX = (item._offsetX || 0) + dx;
-            item._offsetY = (item._offsetY || 0) + dy;
+            _moveItemAndChildren(item, dx, dy);
         },
 
-        /** Обертання вибраної фігури на кут (градуси) навколо її центру */
+        /** Обертання вибраної фігури навколо спільного центру мас разом з усіма дочірніми */
         rotateSelected(angle) {
             if (!_selectedId) return;
             const item = findHierarchyItemById(_selectedId);
             if (!item || !item.svgGroup) return;
-            const bbox = _groupBBox(item.svgGroup);
-            const cx = bbox.x + bbox.width  / 2;
-            const cy = bbox.y + bbox.height / 2;
-            const { tx, ty } = _parseGroupTransform(item.svgGroup);
-            const newAngle = (_currentRotation + angle);
-            item.svgGroup.setAttribute('transform', _buildTransformString(tx, ty, newAngle, cx, cy));
-            item._rotation = newAngle;
+            // Обчислюємо спільний центр мас (bbox всіх груп)
+            const { cx, cy } = _getGroupTreeCenter(item);
+            _rotateItemAndChildren(item, angle, cx, cy);
+            _currentRotation = (_currentRotation + angle);
         }
     };
+
+    /* ── Рекурсивне переміщення/обертання дерева ── */
+
+    /**
+     * Переміщує item.svgGroup і всі дочірні svgGroup на (dx, dy).
+     * Оновлює _offsetX/_offsetY та _anchorOnCanvas.
+     */
+    function _moveItemAndChildren(item, dx, dy) {
+        if (!item || !item.svgGroup) return;
+        const { tx, ty, ra, rx, ry } = _parseGroupTransform(item.svgGroup);
+        item.svgGroup.setAttribute('transform', _buildTransformString(tx + dx, ty + dy, ra, rx, ry));
+        // Оновлюємо збережену позицію
+        if (item._anchorOnCanvas) {
+            item._anchorOnCanvas = { x: item._anchorOnCanvas.x + dx, y: item._anchorOnCanvas.y + dy };
+        } else {
+            item._offsetX = (item._offsetX || 0) + dx;
+            item._offsetY = (item._offsetY || 0) + dy;
+        }
+        // Рекурсивно переміщуємо дочірні елементи
+        (item.children || []).forEach(child => _moveItemAndChildren(child, dx, dy));
+    }
+
+    /**
+     * Обертає item.svgGroup і всі дочірні svgGroup на angle градусів навколо (cx, cy).
+     * Оновлює _offsetX/_offsetY та _anchorOnCanvas з урахуванням нових позицій.
+     */
+    function _rotateItemAndChildren(item, angle, cx, cy) {
+        if (!item || !item.svgGroup) return;
+        const rad = angle * Math.PI / 180;
+        const cosA = Math.cos(rad), sinA = Math.sin(rad);
+
+        const { tx, ty, ra, rx, ry } = _parseGroupTransform(item.svgGroup);
+        const newAngle = ra + angle;
+
+        // Новий center обертання — трансформований відносно поточного translate
+        // Для compose: спочатку translate(tx,ty) потім rotate навколо (cx,cy)
+        item.svgGroup.setAttribute('transform', _buildTransformString(tx, ty, newAngle, cx - tx, cy - ty));
+
+        // Оновлюємо збережену позицію: повертаємо точку (offsetX+START_X, offsetY+START_Y) навколо (cx, cy)
+        if (item._anchorOnCanvas) {
+            const nx = cx + (item._anchorOnCanvas.x - cx) * cosA - (item._anchorOnCanvas.y - cy) * sinA;
+            const ny = cy + (item._anchorOnCanvas.x - cx) * sinA + (item._anchorOnCanvas.y - cy) * cosA;
+            item._anchorOnCanvas = { x: nx, y: ny };
+        } else {
+            const px = (item._offsetX || 0) + (typeof START_X !== 'undefined' ? START_X : 400);
+            const py = (item._offsetY || 0) + (typeof START_Y !== 'undefined' ? START_Y : 300);
+            const nx = cx + (px - cx) * cosA - (py - cy) * sinA;
+            const ny = cy + (px - cy) * sinA + (py - cy) * cosA;
+            item._offsetX = nx - (typeof START_X !== 'undefined' ? START_X : 400);
+            item._offsetY = ny - (typeof START_Y !== 'undefined' ? START_Y : 300);
+        }
+
+        // Рекурсивно обертаємо дочірні елементи навколо того ж центру
+        (item.children || []).forEach(child => _rotateItemAndChildren(child, angle, cx, cy));
+    }
+
+    /**
+     * Обчислює спільний центр мас (центр bbox) усіх svgGroup в дереві item.
+     */
+    function _getGroupTreeCenter(item) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        function _collect(node) {
+            if (!node || !node.svgGroup) return;
+            try {
+                const b = node.svgGroup.getBBox();
+                if (b.width > 0 || b.height > 0) {
+                    if (b.x           < minX) minX = b.x;
+                    if (b.y           < minY) minY = b.y;
+                    if (b.x + b.width  > maxX) maxX = b.x + b.width;
+                    if (b.y + b.height > maxY) maxY = b.y + b.height;
+                }
+            } catch(e) {}
+            (node.children || []).forEach(_collect);
+        }
+        _collect(item);
+        if (!isFinite(minX)) {
+            const b = _groupBBox(item.svgGroup);
+            return { cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+        }
+        return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+    }
 
     /* ── Обробники миші/дотику ── */
 
@@ -251,9 +325,9 @@ window.shapeTransform = (function () {
         if (_mode === 'rotate' && _selectedId) {
             const item = findHierarchyItemById(_selectedId);
             if (!item || !item.svgGroup) return;
-            const bbox = _groupBBox(item.svgGroup);
-            _rotateCenterX = bbox.x + bbox.width  / 2;
-            _rotateCenterY = bbox.y + bbox.height / 2;
+            const { cx, cy } = _getGroupTreeCenter(item);
+            _rotateCenterX = cx;
+            _rotateCenterY = cy;
             _rotateStartAngle = Math.atan2(pt.y - _rotateCenterY, pt.x - _rotateCenterX) * 180 / Math.PI;
             const { ra } = _parseGroupTransform(item.svgGroup);
             _currentRotation = ra;
@@ -288,7 +362,6 @@ window.shapeTransform = (function () {
             const delta = angle - _rotateStartAngle;
             api.rotateSelected(delta);
             _rotateStartAngle = angle;
-            _currentRotation  = _currentRotation + delta;
         }
     }
 
