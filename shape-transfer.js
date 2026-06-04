@@ -62,9 +62,16 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
 
         if (showLabel) {
             if (displayArea) {
+                const ldx = phi && phi.leaderDx != null ? phi.leaderDx : 40;
+                const ldy = phi && phi.leaderDy != null ? phi.leaderDy : -30;
+                // onMove: зберігаємо нове зміщення в phi і не перемальовуємо всю групу —
+                // сам buildRoomLabel оновлює свою <g> через _rebuild
+                const onMove = phi ? function(ndx, ndy) {
+                    phi.leaderDx = ndx;
+                    phi.leaderDy = ndy;
+                } : null;
                 group.appendChild(buildRoomLabel(cx, cy, G.roomNumber, displayArea, labelStyle,
-                    phi && phi.leaderDx != null ? phi.leaderDx : 40,
-                    phi && phi.leaderDy != null ? phi.leaderDy : -30));
+                    ldx, ldy, onMove));
             } else {
                 group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber));
             }
