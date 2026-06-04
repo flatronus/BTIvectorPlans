@@ -180,9 +180,14 @@ window._highlightSvgItem = function (item) {
 const PROP_SCHEMA = {
     building: [
         { group: 'Ідентифікація' },
-        { key: 'type',       label: 'Тип',          type: 'info',   readOnly: true  },
+        { key: 'type',       label: 'Тип',          type: 'select', readOnly: false,
+          options: [{ v: 'room', l: 'Кімната' }, { v: 'building', l: 'Будинок' }, { v: 'contour', l: 'Контур' }] },
         { key: 'name',       label: 'Назва',         type: 'string', readOnly: false },
         { key: 'roomNumber', label: '№ приміщення',  type: 'string', readOnly: false, hint: 'Формат: 1-1' },
+        { group: 'Площа' },
+        { key: 'area',         label: 'Площа реальна (м²)',   type: 'number', readOnly: false, hint: 'Автоматично або вручну' },
+        { key: 'customArea',   label: "Площа редагована (м²)", type: 'number', readOnly: false, hint: 'Налаштована вручну площа' },
+        { key: 'useCustomArea',label: 'Використовувати редаговану', type: 'bool', readOnly: false },
         { group: 'Геометрія' },
         { key: '_lineCount', label: 'Ліній',         type: 'info',   readOnly: true  },
         { key: '_ptCount',   label: 'Точок',         type: 'info',   readOnly: true  },
@@ -192,11 +197,14 @@ const PROP_SCHEMA = {
     ],
     room: [
         { group: 'Ідентифікація' },
-        { key: 'type',       label: 'Тип',           type: 'info',   readOnly: true  },
+        { key: 'type',       label: 'Тип',           type: 'select', readOnly: false,
+          options: [{ v: 'room', l: 'Кімната' }, { v: 'building', l: 'Будинок' }, { v: 'contour', l: 'Контур' }] },
         { key: 'name',       label: 'Назва',         type: 'string', readOnly: false },
         { key: 'roomNumber', label: '№ приміщення',  type: 'string', readOnly: false, hint: 'Формат: 1-1' },
         { group: 'Площа' },
-        { key: 'area',       label: 'Площа (м²)',    type: 'number', readOnly: false, hint: 'Автоматично або вручну' },
+        { key: 'area',         label: 'Площа реальна (м²)',    type: 'number', readOnly: false, hint: 'Автоматично або вручну' },
+        { key: 'customArea',   label: "Площа редагована (м²)", type: 'number', readOnly: false, hint: 'Налаштована вручну площа' },
+        { key: 'useCustomArea',label: 'Використовувати редаговану', type: 'bool', readOnly: false },
         { group: 'Геометрія' },
         { key: '_lineCount', label: 'Ліній',         type: 'info',   readOnly: true  },
         { key: '_ptCount',   label: 'Точок',         type: 'info',   readOnly: true  },
@@ -225,10 +233,9 @@ const PROP_SCHEMA = {
 
 /** Зчитує значення властивості з item (зі спеціальними ключами) */
 function _propGet(item, key) {
-    if (key === 'type') {
-        const m = { building: 'Будівля', room: 'Кімната', element: 'Елемент' };
-        return m[item.type] || item.type;
-    }
+    if (key === 'type') return item.type || 'room';
+    if (key === 'customArea')    return item.customArea   ?? '';
+    if (key === 'useCustomArea') return item.useCustomArea === true;
     if (key === '_lineCount') return (item.figureLines || []).length;
     if (key === '_ptCount')   return (item.shapePoints || []).length;
     if (key === '_lineDef')   return (item.lineFrom ?? '?') + ' → ' + (item.lineTo ?? '?');
@@ -237,7 +244,6 @@ function _propGet(item, key) {
     if (key === 'visible')    return item.visible !== false;
     if (key === '_thickness') {
         if (item.elThickness != null) return item.elThickness;
-        // Спробувати взяти з lineData батьківської фігури
         const parent = _findParentItemById(item.id);
         if (parent) {
             const ld = (parent.figureLines || []).find(l => l.id === item._hostLineId);
@@ -251,6 +257,12 @@ function _propGet(item, key) {
 
 /** Записує значення властивості в item і застосовує побічні ефекти */
 function _propSet(item, key, value) {
+    if (key === 'type') {
+        item.type = value;
+        renderHierarchy();
+        renderProperties(item);
+        return;
+    }
     if (key === 'visible') {
         item.visible = value;
         if (item.svgGroup) item.svgGroup.style.display = value ? '' : 'none';
@@ -263,6 +275,16 @@ function _propSet(item, key, value) {
     }
     if (key === 'area') {
         item.area = value;
+        renderHierarchy();
+        return;
+    }
+    if (key === 'customArea') {
+        item.customArea = value;
+        renderHierarchy();
+        return;
+    }
+    if (key === 'useCustomArea') {
+        item.useCustomArea = value;
         renderHierarchy();
         return;
     }
@@ -405,7 +427,7 @@ window.renderProperties = function (item) {
         'padding:4px 8px;display:flex;align-items:center;justify-content:space-between;',
         'border-bottom:2px solid #1e3a8a;',
     ].join('');
-    const typeIcon = item.type === 'building' ? '🏢' : item.type === 'element' ? '🪟' : '🚪';
+    const typeIcon = item.type === 'building' ? '🏢' : item.type === 'element' ? '🪟' : item.type === 'contour' ? '⬡' : '🚪';
     const titleText = document.createElement('span');
     titleText.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     titleText.textContent = typeIcon + ' ' + (item.roomNumber || item.name || 'Без назви');
@@ -805,8 +827,8 @@ window.createHierarchyItemElement = function (item) {
     }
 
     const icon = document.createElement('i');
-    icon.className = 'fas icon ' + (item.type === 'building' ? 'fa-building' : item.type === 'element' ? 'fa-window-maximize' : 'fa-door-open');
-    icon.style.color = item.type === 'building' ? '#2196F3' : item.type === 'element' ? '#9C27B0' : '#4CAF50';
+    icon.className = 'fas icon ' + (item.type === 'building' ? 'fa-building' : item.type === 'element' ? 'fa-window-maximize' : item.type === 'contour' ? 'fa-draw-polygon' : 'fa-door-open');
+    icon.style.color = item.type === 'building' ? '#2196F3' : item.type === 'element' ? '#9C27B0' : item.type === 'contour' ? '#9E9E9E' : '#4CAF50';
     itemDiv.appendChild(icon);
 
     const label = document.createElement('span');
@@ -816,11 +838,13 @@ window.createHierarchyItemElement = function (item) {
         : (item.roomNumber || item.name);
     itemDiv.appendChild(label);
 
-    if (item.area) {
+    const displayArea = (item.useCustomArea && item.customArea) ? item.customArea : item.area;
+    if (displayArea) {
         const areaLabel = document.createElement('span');
         areaLabel.style.fontSize = '10px';
-        areaLabel.style.color    = '#999';
-        areaLabel.textContent    = `${item.area}м²`;
+        areaLabel.style.color    = item.useCustomArea && item.customArea ? '#FF9800' : '#999';
+        areaLabel.title = item.useCustomArea && item.customArea ? "Редагована площа" : "Реальна площа";
+        areaLabel.textContent    = `${displayArea}м²`;
         itemDiv.appendChild(areaLabel);
     }
 
