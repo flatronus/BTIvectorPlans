@@ -124,11 +124,21 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
     const NS = 'http://www.w3.org/2000/svg';
     const g  = document.createElementNS(NS, 'g');
     g.setAttribute('data-room-label', '1');
+    // Зберігаємо початковий центр фігури для counter-rotate при обертанні
+    g.setAttribute('data-label-cx', cx);
+    g.setAttribute('data-label-cy', cy);
     g.style.cursor = 'move';
 
     const fontSize = 12;
     const lineH    = fontSize + 2;
     const lineLen  = 28;
+
+    // Поточне зміщення підпису (може змінюватись drag-ом)
+    let _curDx = leaderDx || 0;
+    let _curDy = leaderDy || 0;
+    // Поточний центр фігури (може оновлюватись після rotate через _updateCenter)
+    let _cx = cx;
+    let _cy = cy;
 
     // Якщо немає площі — просто номер кімнати
     if (!area) {
@@ -146,16 +156,18 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
     }
 
     function _rebuild(dx, dy) {
+        _curDx = dx;
+        _curDy = dy;
         // Очищаємо групу і перебудовуємо з новими координатами
         while (g.firstChild) g.removeChild(g.firstChild);
 
-        const lx = cx + dx;
-        const ly = cy + dy;
+        const lx = _cx + dx;
+        const ly = _cy + dy;
 
         if (style === 'leader') {
             // Кружок у центрі кімнати
             const dot = document.createElementNS(NS, 'circle');
-            dot.setAttribute('cx', cx); dot.setAttribute('cy', cy);
+            dot.setAttribute('cx', _cx); dot.setAttribute('cy', _cy);
             dot.setAttribute('r', '2');
             dot.setAttribute('fill', '#555');
             dot.style.pointerEvents = 'none';
@@ -164,7 +176,7 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
             // Виносна лінія: від центру кімнати до ЛІВОГО кінця риски
             const rulerLeft = lx - lineLen / 2;
             const leaderLine = document.createElementNS(NS, 'line');
-            leaderLine.setAttribute('x1', cx);       leaderLine.setAttribute('y1', cy);
+            leaderLine.setAttribute('x1', _cx);       leaderLine.setAttribute('y1', _cy);
             leaderLine.setAttribute('x2', rulerLeft); leaderLine.setAttribute('y2', ly);
             leaderLine.setAttribute('stroke', '#555');
             leaderLine.setAttribute('stroke-width', '0.8');
@@ -219,6 +231,18 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
         hit.setAttribute('stroke', 'none');
         g.appendChild(hit);
     }
+
+    /**
+     * Оновлює центр фігури (при обертанні/переміщенні) і перебудовує вміст.
+     * newCx, newCy — новий центр в локальній системі групи.
+     */
+    g._updateCenter = function(newCx, newCy) {
+        _cx = newCx;
+        _cy = newCy;
+        g.setAttribute('data-label-cx', newCx);
+        g.setAttribute('data-label-cy', newCy);
+        _rebuild(_curDx, _curDy);
+    };
 
     _rebuild(leaderDx || 0, leaderDy || 0);
     _attachRoomLabelDrag(g, cx, cy, leaderDx || 0, leaderDy || 0, onMove, _rebuild);

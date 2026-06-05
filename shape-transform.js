@@ -192,6 +192,63 @@ window.shapeTransform = (function () {
 
     function _refreshPoints(item) {
         if (window._highlightSvgItem) _highlightSvgItem(item);
+        _updateRoomLabelsTree(item);
+    }
+
+    /**
+     * Рекурсивно оновлює counter-rotate на всіх [data-room-label] в дереві.
+     */
+    function _updateRoomLabelsTree(item) {
+        if (!item || !item.svgGroup) return;
+        _applyRoomLabelCounterRotate(item);
+        (item.children || []).forEach(ch => {
+            if (ch.type !== 'element') _updateRoomLabelsTree(ch);
+        });
+    }
+
+    /**
+     * Виставляє counter-rotate на [data-room-label] всередині svgGroup:
+     * підпис завжди залишається горизонтальним.
+     * Для leader — оновлює центр ніжки через _updateCenter.
+     */
+    function _applyRoomLabelCounterRotate(item) {
+        if (!item || !item.svgGroup) return;
+        const { ra, tx, ty } = _parseTransform(item.svgGroup);
+
+        const labelEl = item.svgGroup.querySelector('[data-room-label]');
+        if (!labelEl) return;
+
+        // Центр мас фігури в локальній системі групи (без transform)
+        let lcx = 0, lcy = 0;
+        if (item.shapePoints && item.shapePoints.length > 0) {
+            const ox = item._offsetX || 0;
+            const oy = item._offsetY || 0;
+            const valid = item.shapePoints.filter(p => !p.isTemp);
+            if (valid.length > 0) {
+                valid.forEach(p => { lcx += p.x + ox; lcy += p.y + oy; });
+                lcx /= valid.length;
+                lcy /= valid.length;
+            }
+        }
+
+        if (ra === 0) {
+            // Немає обертання — знімаємо counter-rotate
+            labelEl.removeAttribute('transform');
+            // Оновлюємо центр якщо переміщували
+            if (typeof labelEl._updateCenter === 'function') {
+                labelEl._updateCenter(lcx, lcy);
+            }
+            return;
+        }
+
+        // Counter-rotate навколо lcx,lcy в локальній системі групи
+        labelEl.setAttribute('transform',
+            `rotate(${(-ra).toFixed(4)},${lcx.toFixed(3)},${lcy.toFixed(3)})`);
+
+        // Для leader — оновлюємо центр ніжки (він має тримати lcx,lcy)
+        if (typeof labelEl._updateCenter === 'function') {
+            labelEl._updateCenter(lcx, lcy);
+        }
     }
 
     /* ── Публічний API ── */
