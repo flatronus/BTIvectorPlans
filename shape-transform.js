@@ -244,10 +244,27 @@ window.shapeTransform = (function () {
         if (_mode === 'move' && _selectedId) {
             const selItem = findHierarchyItemById(_selectedId);
             if (selItem && selItem.svgGroup) {
-                const { tx, ty } = _parseTransform(selItem.svgGroup);
-                // Запам'ятовуємо зміщення курсора відносно поточного translate групи
-                _anchorDx = pt.x - tx;
-                _anchorDy = pt.y - ty;
+                // Отримуємо фактичну SVG-позицію початку координат групи через CTM.
+                // Це правильно навіть після rotate, бо CTM враховує всі трансформації.
+                const svg = _getMainSvg();
+                try {
+                    const svgCTM = svg.getScreenCTM();
+                    const grpCTM = selItem.svgGroup.getScreenCTM();
+                    if (svgCTM && grpCTM) {
+                        const m = svgCTM.inverse().multiply(grpCTM);
+                        // m.e, m.f — це SVG-координати точки (0,0) локальної системи групи
+                        _anchorDx = pt.x - m.e;
+                        _anchorDy = pt.y - m.f;
+                    } else {
+                        const { tx, ty } = _parseTransform(selItem.svgGroup);
+                        _anchorDx = pt.x - tx;
+                        _anchorDy = pt.y - ty;
+                    }
+                } catch(e) {
+                    const { tx, ty } = _parseTransform(selItem.svgGroup);
+                    _anchorDx = pt.x - tx;
+                    _anchorDy = pt.y - ty;
+                }
             }
             _dragging = true;
             e.stopPropagation();
@@ -285,12 +302,28 @@ window.shapeTransform = (function () {
         if (_mode === 'move') {
             const item = findHierarchyItemById(_selectedId);
             if (!item || !item.svgGroup) return;
-            // Абсолютна нова позиція translate = курсор - anchor
-            const newTx = pt.x - _anchorDx;
-            const newTy = pt.y - _anchorDy;
-            const { tx, ty } = _parseTransform(item.svgGroup);
-            const dx = newTx - tx;
-            const dy = newTy - ty;
+            // Фактична SVG-позиція (0,0) локальної системи групи через CTM
+            let originX = 0, originY = 0;
+            try {
+                const svgCTM = svg.getScreenCTM();
+                const grpCTM = item.svgGroup.getScreenCTM();
+                if (svgCTM && grpCTM) {
+                    const m = svgCTM.inverse().multiply(grpCTM);
+                    originX = m.e;
+                    originY = m.f;
+                } else {
+                    const { tx, ty } = _parseTransform(item.svgGroup);
+                    originX = tx; originY = ty;
+                }
+            } catch(e) {
+                const { tx, ty } = _parseTransform(item.svgGroup);
+                originX = tx; originY = ty;
+            }
+            // Нова позиція origin = cursor - anchor
+            const targetX = pt.x - _anchorDx;
+            const targetY = pt.y - _anchorDy;
+            const dx = targetX - originX;
+            const dy = targetY - originY;
             if (dx !== 0 || dy !== 0) {
                 _moveTree(item, dx, dy);
                 _refreshPoints(item);
