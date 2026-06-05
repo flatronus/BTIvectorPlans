@@ -132,7 +132,7 @@ window._highlightSvgItem = function (item) {
 
     // Малюємо номери точок по кутах фігури
     if (item.shapePoints && item.shapePoints.length > 0 && mainSvg) {
-        // Базове зміщення (offset) фігури в локальній системі координат групи
+        // Зміщення точок у локальній системі групи (початковий offset при малюванні)
         var offsetX = item._offsetX || 0;
         var offsetY = item._offsetY || 0;
         if (item._anchorOnCanvas) {
@@ -140,33 +140,34 @@ window._highlightSvgItem = function (item) {
             offsetY = item._anchorOnCanvas.y - (typeof START_Y !== 'undefined' ? START_Y : 300);
         }
 
-        // Отримуємо матрицю трансформації групи відносно SVG-кореня.
-        // Це автоматично враховує будь-який transform (translate, rotate тощо).
-        var groupMatrix = null;
+        // CTM групи: перетворює локальні координати групи → SVG-координати.
+        // Автоматично враховує translate + rotate на групі (і при drag, і після).
+        var groupCTM = null;
         try {
-            var screenCTM    = item.svgGroup.getScreenCTM();
             var svgScreenCTM = mainSvg.getScreenCTM();
-            if (screenCTM && svgScreenCTM) {
-                groupMatrix = svgScreenCTM.inverse().multiply(screenCTM);
+            var grpScreenCTM = item.svgGroup.getScreenCTM();
+            if (svgScreenCTM && grpScreenCTM) {
+                groupCTM = svgScreenCTM.inverse().multiply(grpScreenCTM);
             }
-        } catch(e) { groupMatrix = null; }
+        } catch(e) {}
 
         item.shapePoints.forEach(function(pt) {
             var cx, cy;
-            if (groupMatrix) {
-                // Перетворюємо локальну точку через матрицю групи → SVG-координати
-                var svgPt = mainSvg.createSVGPoint();
-                svgPt.x = pt.x + offsetX;
-                svgPt.y = pt.y + offsetY;
-                var transformed = svgPt.matrixTransform(groupMatrix);
-                cx = transformed.x;
-                cy = transformed.y;
+            if (groupCTM) {
+                // Локальна координата точки в системі групи = pt + offset
+                // (саме так намальовані лінії всередині групи)
+                var p = mainSvg.createSVGPoint();
+                p.x = pt.x + offsetX;
+                p.y = pt.y + offsetY;
+                var r = p.matrixTransform(groupCTM);
+                cx = r.x;
+                cy = r.y;
             } else {
-                // Fallback: тільки translate без rotate
+                // Fallback: тільки translate (без rotate)
                 var tx = 0, ty = 0;
-                var tr = item.svgGroup.getAttribute('transform') || '';
-                var tm = tr.match(/translate\(([^,)]+),([^)]+)\)/);
-                if (tm) { tx = parseFloat(tm[1]) || 0; ty = parseFloat(tm[2]) || 0; }
+                var tmr = (item.svgGroup.getAttribute('transform') || '')
+                              .match(/translate\(([^,)]+),([^)]+)\)/);
+                if (tmr) { tx = parseFloat(tmr[1]) || 0; ty = parseFloat(tmr[2]) || 0; }
                 cx = pt.x + offsetX + tx;
                 cy = pt.y + offsetY + ty;
             }
