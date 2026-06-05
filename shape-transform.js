@@ -13,17 +13,13 @@ window.shapeTransform = (function () {
     /* ── Стан ── */
     let _mode       = 'pan';      // 'pan' | 'select' | 'move' | 'rotate'
     let _selectedId = null;       // id ієрархічного елемента
-    let _highlight  = null;       // SVG-rect підсвічування
 
     let _dragging   = false;
     let _dragStartX = 0;
     let _dragStartY = 0;
-    let _dragOffsetX = 0;
-    let _dragOffsetY = 0;
     let _rotateStartAngle = 0;
     let _rotateCenterX    = 0;
     let _rotateCenterY    = 0;
-    let _currentRotation  = 0;   // накопичений кут обертання елемента (градуси)
 
     /* ── Допоміжні ── */
 
@@ -40,100 +36,190 @@ window.shapeTransform = (function () {
         return pt.matrixTransform(svg.getScreenCTM().inverse());
     }
 
-    /** Повертає bbox групи у SVG-координатах */
     function _groupBBox(group) {
-        try {
-            const bbox = group.getBBox();
-            return bbox;
-        } catch (e) {
-            return { x: 0, y: 0, width: 0, height: 0 };
-        }
+        try { return group.getBBox(); }
+        catch (e) { return { x: 0, y: 0, width: 0, height: 0 }; }
     }
 
-    /** Знаходить ієрархічний елемент за SVG-групою або дочірнім елементом */
+    /** Знаходить ієрархічний елемент за SVG-групою або дочірнім елементом.
+     *  Повертає КОРЕНЕВУ фігуру (room/building/contour), не element. */
     function _findItemByTarget(target) {
-        // Знайти найближчий <g data-hierarchy-id>
         let el = target;
         while (el && el !== document) {
             if (el.tagName === 'g' && el.hasAttribute('data-hierarchy-id')) {
-                const hid = parseInt(el.getAttribute('data-hierarchy-id'));
-                return findHierarchyItemById(hid);
+                const hid  = parseInt(el.getAttribute('data-hierarchy-id'));
+                const item = findHierarchyItemById(hid);
+                if (item) {
+                    // Якщо це element (вікно) — повертаємо батьківську фігуру
+                    if (item.type === 'element') {
+                        const parent = _findParentRoomOf(item.id);
+                        return parent || item;
+                    }
+                    return item;
+                }
             }
             el = el.parentElement;
         }
         return null;
     }
 
-    /** Малює прямокутник підсвічування навколо вибраної групи */
-    function _drawHighlight(svg, group) {
-        _removeHighlight(svg);
-        const bbox = _groupBBox(group);
-        if (!bbox || bbox.width === 0 && bbox.height === 0) return;
-
-        const pad = 5;
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', bbox.x - pad);
-        rect.setAttribute('y', bbox.y - pad);
-        rect.setAttribute('width',  bbox.width  + pad * 2);
-        rect.setAttribute('height', bbox.height + pad * 2);
-        rect.setAttribute('fill', 'none');
-        rect.setAttribute('stroke', '#2196F3');
-        rect.setAttribute('stroke-width', '2');
-        rect.setAttribute('stroke-dasharray', '6 3');
-        rect.setAttribute('vector-effect', 'non-scaling-stroke');
-        rect.setAttribute('data-highlight', '1');
-        rect.style.pointerEvents = 'none';
-        svg.appendChild(rect);
-        _highlight = rect;
-    }
-
-    function _removeHighlight(svg) {
-        if (_highlight && _highlight.parentNode) {
-            _highlight.parentNode.removeChild(_highlight);
+    /** Знаходить батьківський room/building для елемента */
+    function _findParentRoomOf(childId, items, parent) {
+        items = items || G.hierarchyData;
+        for (const it of items) {
+            if (it.id === childId) return parent || null;
+            const found = _findParentRoomOf(childId, it.children || [], it);
+            if (found !== undefined) return found;
         }
-        _highlight = null;
-        if (svg) {
-            svg.querySelectorAll('[data-highlight]').forEach(el => el.remove());
-        }
+        return undefined;
     }
 
-    /** Оновлює підсвічування для поточно вибраного елемента */
-    function _refreshHighlight() {
-        const svg = _getMainSvg();
-        if (!svg) return;
-        if (!_selectedId) { _removeHighlight(svg); return; }
-        const item = findHierarchyItemById(_selectedId);
-        if (!item || !item.svgGroup) { _removeHighlight(svg); return; }
-        _drawHighlight(svg, item.svgGroup);
-    }
-
-    /** Отримує поточний transform групи або розбирає з attribute */
-    function _parseGroupTransform(group) {
+    /** Парсить translate з атрибута transform */
+    function _getTranslate(group) {
         const tr = group.getAttribute('transform') || '';
-        const translateMatch = tr.match(/translate\(([^,)]+),([^)]+)\)/);
-        const rotateMatch    = tr.match(/rotate\(([^,)]+),([^,)]+),([^)]+)\)/);
-        const tx = translateMatch ? parseFloat(translateMatch[1]) : 0;
-        const ty = translateMatch ? parseFloat(translateMatch[2]) : 0;
-        const ra = rotateMatch    ? parseFloat(rotateMatch[1])    : 0;
-        const rx = rotateMatch    ? parseFloat(rotateMatch[2])    : 0;
-        const ry = rotateMatch    ? parseFloat(rotateMatch[3])    : 0;
-        return { tx, ty, ra, rx, ry };
+        const m  = tr.match(/translate\(([^,)]+),([^)]+)\)/);
+        return m ? { tx: parseFloat(m[1]), ty: parseFloat(m[2]) } : { tx: 0, ty: 0 };
     }
 
-    function _buildTransformString(tx, ty, ra, rx, ry) {
-        let s = `translate(${tx.toFixed(2)},${ty.toFixed(2)})`;
-        if (ra !== 0) s += ` rotate(${ra.toFixed(2)},${rx.toFixed(2)},${ry.toFixed(2)})`;
-        return s;
+    /** Парсить rotate(angle,cx,cy) з атрибута transform */
+    function _getRotate(group) {
+        const tr = group.getAttribute('transform') || '';
+        const m  = tr.match(/rotate\(([^,)]+),([^,)]+),([^)]+)\)/);
+        return m ? { ra: parseFloat(m[1]), rx: parseFloat(m[2]), ry: parseFloat(m[3]) } : { ra: 0, rx: 0, ry: 0 };
+    }
+
+    /**
+     * Застосовує translate(tx,ty) rotate(ra,rx,ry) до групи.
+     * translate йде першим — це найпростіша форма без compose-помилок.
+     */
+    function _applyTransform(group, tx, ty, ra, rx, ry) {
+        let s = `translate(${tx.toFixed(3)},${ty.toFixed(3)})`;
+        if (ra !== 0) s += ` rotate(${ra.toFixed(4)},${rx.toFixed(3)},${ry.toFixed(3)})`;
+        group.setAttribute('transform', s);
+    }
+
+    /**
+     * Обчислює спільний центр мас (bbox) батьківської групи + всіх окремих
+     * дочірніх svgGroup що є room/contour/building (не element — вони всередині батька).
+     */
+    function _computeTreeCenter(item) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        function _expand(b) {
+            if (!b || (b.width === 0 && b.height === 0)) return;
+            if (b.x            < minX) minX = b.x;
+            if (b.y            < minY) minY = b.y;
+            if (b.x + b.width  > maxX) maxX = b.x + b.width;
+            if (b.y + b.height > maxY) maxY = b.y + b.height;
+        }
+
+        function _collect(node) {
+            if (!node || !node.svgGroup) return;
+            _expand(_groupBBox(node.svgGroup));
+            // Заходимо тільки в дочірні що є окремими групами (room/building/contour)
+            (node.children || []).forEach(ch => {
+                if (ch.type !== 'element') _collect(ch);
+            });
+        }
+
+        _collect(item);
+        if (!isFinite(minX)) {
+            const b = _groupBBox(item.svgGroup);
+            return { cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+        }
+        return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+    }
+
+    /**
+     * Переміщує SVG-групу item на (dx, dy) і рекурсивно робить те саме
+     * для всіх дочірніх room/building/contour (element-и всередині батька рухаються автоматично).
+     * Оновлює _offsetX/_offsetY та _anchorOnCanvas в ієрархічних даних.
+     */
+    function _moveTree(item, dx, dy) {
+        if (!item || !item.svgGroup) return;
+
+        // Читаємо поточний translate і rotate окремо
+        const { tx, ty } = _getTranslate(item.svgGroup);
+        const { ra, rx, ry } = _getRotate(item.svgGroup);
+
+        // Переміщуємо тільки translate; rotate (center) теж зсуваємо
+        const newRx = ra !== 0 ? rx + dx : rx;
+        const newRy = ra !== 0 ? ry + dy : ry;
+        _applyTransform(item.svgGroup, tx + dx, ty + dy, ra, newRx, newRy);
+
+        // Оновлюємо збережену позицію в ієрархії
+        if (item._anchorOnCanvas) {
+            item._anchorOnCanvas = { x: item._anchorOnCanvas.x + dx, y: item._anchorOnCanvas.y + dy };
+        } else {
+            item._offsetX = (item._offsetX || 0) + dx;
+            item._offsetY = (item._offsetY || 0) + dy;
+        }
+
+        // Рекурсивно рухаємо лише окремі групи (не element — вони вже всередині батьківської <g>)
+        (item.children || []).forEach(ch => {
+            if (ch.type !== 'element') _moveTree(ch, dx, dy);
+        });
+    }
+
+    /**
+     * Обертає SVG-групу item навколо (cx, cy) на angle градусів і рекурсивно
+     * робить те саме для дочірніх room/building/contour.
+     * Оновлює _offsetX/_offsetY та _anchorOnCanvas.
+     */
+    function _rotateTree(item, angle, cx, cy) {
+        if (!item || !item.svgGroup) return;
+
+        const rad  = angle * Math.PI / 180;
+        const cosA = Math.cos(rad), sinA = Math.sin(rad);
+
+        const { tx, ty } = _getTranslate(item.svgGroup);
+        const { ra }     = _getRotate(item.svgGroup);
+
+        const newAngle = ra + angle;
+
+        // rotate(angle, cx, cy) в системі ПІСЛЯ translate(tx,ty) —
+        // точка (cx,cy) є в глобальних SVG-координатах, тому для rotate треба:
+        // rotate center у локальній системі після translate = (cx-tx, cy-ty)
+        _applyTransform(item.svgGroup, tx, ty, newAngle, cx - tx, cy - ty);
+
+        // Оновлюємо збережену позицію — обертаємо відповідну опорну точку навколо (cx,cy)
+        if (item._anchorOnCanvas) {
+            const ox = item._anchorOnCanvas.x - cx;
+            const oy = item._anchorOnCanvas.y - cy;
+            item._anchorOnCanvas = {
+                x: cx + ox * cosA - oy * sinA,
+                y: cy + ox * sinA + oy * cosA
+            };
+        } else {
+            // Опорна точка — там де фактично лежить START_X/Y після offsetX/Y
+            const px = (item._offsetX || 0) + START_X;
+            const py = (item._offsetY || 0) + START_Y;
+            const ox = px - cx, oy = py - cy;
+            const nx = cx + ox * cosA - oy * sinA;
+            const ny = cy + ox * sinA + oy * cosA;
+            item._offsetX = nx - START_X;
+            item._offsetY = ny - START_Y;
+        }
+
+        // Рекурсивно обертаємо лише окремі групи
+        (item.children || []).forEach(ch => {
+            if (ch.type !== 'element') _rotateTree(ch, angle, cx, cy);
+        });
+    }
+
+    /** Перемальовує точки виділення після переміщення/обертання */
+    function _refreshPointLabels(item) {
+        if (window._highlightSvgItem) {
+            _highlightSvgItem(item);
+        }
     }
 
     /* ── Публічний API ── */
 
     const api = {
 
-        /** Поточний режим */
         getMode() { return _mode; },
 
-        /** Встановити режим ('pan' | 'select' | 'move' | 'rotate') */
         setMode(mode) {
             _mode = mode;
             const svg = _getMainSvg();
@@ -143,7 +229,6 @@ window.shapeTransform = (function () {
                 else if (mode === 'select') svg.style.cursor = 'pointer';
                 else                        svg.style.cursor = 'grab';
             }
-            // Оновити кнопки тулбара
             ['btn-mode-pan','btn-mode-select','btn-mode-move','btn-mode-rotate'].forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) btn.classList.remove('active-tool');
@@ -156,7 +241,6 @@ window.shapeTransform = (function () {
             if (activeBtn) activeBtn.classList.add('active-tool');
         },
 
-        /** Скасувати вибір */
         deselect() {
             _selectedId = null;
             if (window._highlightSvgItem) _highlightSvgItem(null);
@@ -165,19 +249,15 @@ window.shapeTransform = (function () {
             if (window.renderProperties) renderProperties(null);
         },
 
-        /** Вибрати елемент за id ієрархії */
         select(id) {
             _selectedId = id;
-            // Підсвічуємо на канві (червоний контур) через hierarchy.js
             const item = findHierarchyItemById(id);
             if (window._highlightSvgItem) _highlightSvgItem(item);
-            // Підсвічуємо в ієрархії (синій)
             G.selectedHierarchyItem = id;
             renderHierarchy();
             if (window.renderProperties) renderProperties(item);
         },
 
-        /** Підключити обробники подій до SVG головного полотна */
         attachToSvg(svg) {
             svg.addEventListener('mousedown',  _onMouseDown);
             svg.addEventListener('touchstart', _onTouchStart, { passive: false });
@@ -185,19 +265,17 @@ window.shapeTransform = (function () {
             document.addEventListener('mouseup',    _onMouseUp);
             document.addEventListener('touchmove',  _onTouchMove, { passive: false });
             document.addEventListener('touchend',   _onTouchEnd);
-            // Подвійний клік — відкрити редактор фігури
             svg.addEventListener('dblclick', _onDblClick);
         },
 
-        /** Оновити підсвічування (після zoom тощо) */
-        refreshHighlight: _refreshHighlight,
-
-        /** Переміщення вибраної фігури на dx,dy пікселів SVG разом з усіма дочірніми */
+        /** Переміщення вибраної фігури на dx,dy разом з усіма дочірніми */
         moveSelected(dx, dy) {
             if (!_selectedId) return;
             const item = findHierarchyItemById(_selectedId);
             if (!item || !item.svgGroup) return;
-            _moveItemAndChildren(item, dx, dy);
+            _moveTree(item, dx, dy);
+            // Перемальовуємо точки виділення щоб іти за фігурою
+            _refreshPointLabels(item);
         },
 
         /** Обертання вибраної фігури навколо спільного центру мас разом з усіма дочірніми */
@@ -205,105 +283,18 @@ window.shapeTransform = (function () {
             if (!_selectedId) return;
             const item = findHierarchyItemById(_selectedId);
             if (!item || !item.svgGroup) return;
-            // Обчислюємо спільний центр мас (bbox всіх груп)
-            const { cx, cy } = _getGroupTreeCenter(item);
-            _rotateItemAndChildren(item, angle, cx, cy);
-            _currentRotation = (_currentRotation + angle);
+            _rotateTree(item, angle, _rotateCenterX, _rotateCenterY);
+            _refreshPointLabels(item);
         }
     };
 
-    /* ── Рекурсивне переміщення/обертання дерева ── */
-
-    /**
-     * Переміщує item.svgGroup і всі дочірні svgGroup на (dx, dy).
-     * Оновлює _offsetX/_offsetY та _anchorOnCanvas.
-     */
-    function _moveItemAndChildren(item, dx, dy) {
-        if (!item || !item.svgGroup) return;
-        const { tx, ty, ra, rx, ry } = _parseGroupTransform(item.svgGroup);
-        item.svgGroup.setAttribute('transform', _buildTransformString(tx + dx, ty + dy, ra, rx, ry));
-        // Оновлюємо збережену позицію
-        if (item._anchorOnCanvas) {
-            item._anchorOnCanvas = { x: item._anchorOnCanvas.x + dx, y: item._anchorOnCanvas.y + dy };
-        } else {
-            item._offsetX = (item._offsetX || 0) + dx;
-            item._offsetY = (item._offsetY || 0) + dy;
-        }
-        // Рекурсивно переміщуємо дочірні елементи
-        (item.children || []).forEach(child => _moveItemAndChildren(child, dx, dy));
-    }
-
-    /**
-     * Обертає item.svgGroup і всі дочірні svgGroup на angle градусів навколо (cx, cy).
-     * Оновлює _offsetX/_offsetY та _anchorOnCanvas з урахуванням нових позицій.
-     */
-    function _rotateItemAndChildren(item, angle, cx, cy) {
-        if (!item || !item.svgGroup) return;
-        const rad = angle * Math.PI / 180;
-        const cosA = Math.cos(rad), sinA = Math.sin(rad);
-
-        const { tx, ty, ra, rx, ry } = _parseGroupTransform(item.svgGroup);
-        const newAngle = ra + angle;
-
-        // Новий center обертання — трансформований відносно поточного translate
-        // Для compose: спочатку translate(tx,ty) потім rotate навколо (cx,cy)
-        item.svgGroup.setAttribute('transform', _buildTransformString(tx, ty, newAngle, cx - tx, cy - ty));
-
-        // Оновлюємо збережену позицію: повертаємо точку (offsetX+START_X, offsetY+START_Y) навколо (cx, cy)
-        if (item._anchorOnCanvas) {
-            const nx = cx + (item._anchorOnCanvas.x - cx) * cosA - (item._anchorOnCanvas.y - cy) * sinA;
-            const ny = cy + (item._anchorOnCanvas.x - cx) * sinA + (item._anchorOnCanvas.y - cy) * cosA;
-            item._anchorOnCanvas = { x: nx, y: ny };
-        } else {
-            const px = (item._offsetX || 0) + (typeof START_X !== 'undefined' ? START_X : 400);
-            const py = (item._offsetY || 0) + (typeof START_Y !== 'undefined' ? START_Y : 300);
-            const nx = cx + (px - cx) * cosA - (py - cy) * sinA;
-            const ny = cy + (px - cy) * sinA + (py - cy) * cosA;
-            item._offsetX = nx - (typeof START_X !== 'undefined' ? START_X : 400);
-            item._offsetY = ny - (typeof START_Y !== 'undefined' ? START_Y : 300);
-        }
-
-        // Рекурсивно обертаємо дочірні елементи навколо того ж центру
-        (item.children || []).forEach(child => _rotateItemAndChildren(child, angle, cx, cy));
-    }
-
-    /**
-     * Обчислює спільний центр мас (центр bbox) усіх svgGroup в дереві item.
-     */
-    function _getGroupTreeCenter(item) {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        function _collect(node) {
-            if (!node || !node.svgGroup) return;
-            try {
-                const b = node.svgGroup.getBBox();
-                if (b.width > 0 || b.height > 0) {
-                    if (b.x           < minX) minX = b.x;
-                    if (b.y           < minY) minY = b.y;
-                    if (b.x + b.width  > maxX) maxX = b.x + b.width;
-                    if (b.y + b.height > maxY) maxY = b.y + b.height;
-                }
-            } catch(e) {}
-            (node.children || []).forEach(_collect);
-        }
-        _collect(item);
-        if (!isFinite(minX)) {
-            const b = _groupBBox(item.svgGroup);
-            return { cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
-        }
-        return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
-    }
-
     /* ── Обробники миші/дотику ── */
-
-    function _clientToSvg(svg, clientX, clientY) {
-        return _svgPoint(svg, clientX, clientY);
-    }
 
     function _onMouseDown(e) {
         if (e.button !== 0) return;
         const svg = _getMainSvg(); if (!svg) return;
 
-        const pt = _clientToSvg(svg, e.clientX, e.clientY);
+        const pt = _svgPoint(svg, e.clientX, e.clientY);
 
         // Виділення працює в будь-якому режимі
         const item = _findItemByTarget(e.target);
@@ -314,23 +305,22 @@ window.shapeTransform = (function () {
         }
 
         if (_mode === 'move' && _selectedId) {
-            _dragging    = true;
-            _dragStartX  = pt.x;
-            _dragStartY  = pt.y;
+            _dragging   = true;
+            _dragStartX = pt.x;
+            _dragStartY = pt.y;
             e.stopPropagation();
             e.preventDefault();
             return;
         }
 
         if (_mode === 'rotate' && _selectedId) {
-            const item = findHierarchyItemById(_selectedId);
-            if (!item || !item.svgGroup) return;
-            const { cx, cy } = _getGroupTreeCenter(item);
-            _rotateCenterX = cx;
-            _rotateCenterY = cy;
-            _rotateStartAngle = Math.atan2(pt.y - _rotateCenterY, pt.x - _rotateCenterX) * 180 / Math.PI;
-            const { ra } = _parseGroupTransform(item.svgGroup);
-            _currentRotation = ra;
+            const selItem = findHierarchyItemById(_selectedId);
+            if (!selItem || !selItem.svgGroup) return;
+            // Центр обертання — спільний центр мас дерева фігур
+            const { cx, cy } = _computeTreeCenter(selItem);
+            _rotateCenterX    = cx;
+            _rotateCenterY    = cy;
+            _rotateStartAngle = Math.atan2(pt.y - cy, pt.x - cx) * 180 / Math.PI;
             _dragging = true;
             e.stopPropagation();
             e.preventDefault();
@@ -349,7 +339,7 @@ window.shapeTransform = (function () {
     function _onMouseMove(e) {
         if (!_dragging) return;
         const svg = _getMainSvg(); if (!svg) return;
-        const pt = _clientToSvg(svg, e.clientX, e.clientY);
+        const pt  = _svgPoint(svg, e.clientX, e.clientY);
 
         if (_mode === 'move') {
             const dx = pt.x - _dragStartX;
@@ -365,9 +355,7 @@ window.shapeTransform = (function () {
         }
     }
 
-    function _onMouseUp() {
-        _dragging = false;
-    }
+    function _onMouseUp() { _dragging = false; }
 
     /* ── Touch ── */
     function _onTouchStart(e) {
