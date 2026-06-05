@@ -17,6 +17,8 @@ window.shapeTransform = (function () {
     let _dragging         = false;
     let _dragStartX       = 0;
     let _dragStartY       = 0;
+    let _anchorDx         = 0;   // зміщення курсора відносно поточного translate.x групи при mousedown
+    let _anchorDy         = 0;   // зміщення курсора відносно поточного translate.y групи при mousedown
     let _rotateStartAngle = 0;
     let _rotateCenterX    = 0;
     let _rotateCenterY    = 0;
@@ -240,9 +242,14 @@ window.shapeTransform = (function () {
         }
 
         if (_mode === 'move' && _selectedId) {
-            _dragging   = true;
-            _dragStartX = pt.x;
-            _dragStartY = pt.y;
+            const selItem = findHierarchyItemById(_selectedId);
+            if (selItem && selItem.svgGroup) {
+                const { tx, ty } = _parseTransform(selItem.svgGroup);
+                // Запам'ятовуємо зміщення курсора відносно поточного translate групи
+                _anchorDx = pt.x - tx;
+                _anchorDy = pt.y - ty;
+            }
+            _dragging = true;
             e.stopPropagation();
             e.preventDefault();
             return;
@@ -276,11 +283,18 @@ window.shapeTransform = (function () {
         const pt  = _svgPoint(svg, e.clientX, e.clientY);
 
         if (_mode === 'move') {
-            const dx = pt.x - _dragStartX;
-            const dy = pt.y - _dragStartY;
-            api.moveSelected(dx, dy);
-            _dragStartX = pt.x;
-            _dragStartY = pt.y;
+            const item = findHierarchyItemById(_selectedId);
+            if (!item || !item.svgGroup) return;
+            // Абсолютна нова позиція translate = курсор - anchor
+            const newTx = pt.x - _anchorDx;
+            const newTy = pt.y - _anchorDy;
+            const { tx, ty } = _parseTransform(item.svgGroup);
+            const dx = newTx - tx;
+            const dy = newTy - ty;
+            if (dx !== 0 || dy !== 0) {
+                _moveTree(item, dx, dy);
+                _refreshPoints(item);
+            }
         } else if (_mode === 'rotate') {
             const angle = Math.atan2(pt.y - _rotateCenterY, pt.x - _rotateCenterX) * 180 / Math.PI;
             const delta = angle - _rotateStartAngle;
