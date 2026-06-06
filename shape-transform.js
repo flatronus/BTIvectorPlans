@@ -95,19 +95,14 @@ window.shapeTransform = (function () {
         return { x: tx, y: ty };
     }
 
-    /** Знаходить кореневу фігуру (room/building/contour) за кліком */
+    /** Знаходить елемент ієрархії (фігуру або вікно) за кліком */
     function _findItemByTarget(target) {
         let el = target;
         while (el && el !== document) {
             if (el.tagName === 'g' && el.hasAttribute('data-hierarchy-id')) {
                 const hid  = parseInt(el.getAttribute('data-hierarchy-id'));
                 const item = findHierarchyItemById(hid);
-                if (item) {
-                    if (item.type === 'element') {
-                        return _findParentRoomOf(item.id) || item;
-                    }
-                    return item;
-                }
+                if (item) return item;
             }
             el = el.parentElement;
         }
