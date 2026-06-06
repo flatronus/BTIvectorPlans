@@ -218,6 +218,8 @@ const PROP_SCHEMA = {
         { key: 'showRoomLabel',  label: 'Показати підпис',    type: 'bool',   readOnly: false },
         { key: 'roomLabelStyle', label: 'Вид підпису',        type: 'select', readOnly: false,
           options: [{ v: 'inline', l: 'Традиційний (всередині)' }, { v: 'leader', l: 'Виносний' }] },
+        { key: 'labelFontSize',     label: 'Шрифт підпису (пт)',   type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
+        { key: 'dimensionFontSize', label: 'Шрифт розмірів (пт)',  type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
         { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
@@ -241,6 +243,8 @@ const PROP_SCHEMA = {
         { key: 'showRoomLabel',  label: 'Показати підпис',    type: 'bool',   readOnly: false },
         { key: 'roomLabelStyle', label: 'Вид підпису',        type: 'select', readOnly: false,
           options: [{ v: 'inline', l: 'Традиційний (всередині)' }, { v: 'leader', l: 'Виносний' }] },
+        { key: 'labelFontSize',     label: 'Шрифт підпису (пт)',   type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
+        { key: 'dimensionFontSize', label: 'Шрифт розмірів (пт)',  type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
         { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
@@ -282,6 +286,8 @@ function _propGet(item, key) {
         }
         return ELEMENT_THICKNESS;
     }
+    if (key === 'labelFontSize')     return item.labelFontSize     != null ? item.labelFontSize     : '';
+    if (key === 'dimensionFontSize') return item.dimensionFontSize != null ? item.dimensionFontSize : '';
     if (key === 'dimensionsOutside') return item.dimensionsOutside === true;
     return item[key] ?? '';
 }
@@ -321,6 +327,12 @@ function _propSet(item, key, value) {
     }
     if (key === 'showRoomLabel' || key === 'roomLabelStyle') {
         item[key] = value;
+        _redrawItemSvgGroup(item);
+        return;
+    }
+    if (key === 'labelFontSize' || key === 'dimensionFontSize') {
+        const v = parseFloat(value);
+        item[key] = isNaN(v) ? null : v;
         _redrawItemSvgGroup(item);
         return;
     }

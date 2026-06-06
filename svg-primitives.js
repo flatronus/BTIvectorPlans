@@ -40,10 +40,10 @@ window._renderSvgPoint = function (svg, x, y, num) {
     svg.appendChild(text);
 };
 
-window._makeSvgText = function (x, y, content, rotateAngle) {
+window._makeSvgText = function (x, y, content, rotateAngle, fontSize) {
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('x', x); text.setAttribute('y', y);
-    text.setAttribute('font-size', '12');
+    text.setAttribute('font-size', fontSize != null ? String(fontSize) : '12');
     text.setAttribute('fill', 'black');
     text.setAttribute('font-weight', 'bold');
     text.setAttribute('text-anchor', 'middle');
@@ -76,12 +76,12 @@ window.resetSvgCanvas = function (svg) {
     renderStartPoint(svg);
 };
 
-window.buildRoomNumberText = function (cx, cy, number) {
+window.buildRoomNumberText = function (cx, cy, number, fontSize) {
     const parts = number.split('-');
     const text  = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('id', 'room-number');
     text.setAttribute('x', cx); text.setAttribute('y', cy);
-    text.setAttribute('font-size', '12');
+    text.setAttribute('font-size', fontSize != null ? String(fontSize) : '12');
     text.setAttribute('font-weight', 'bold');
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('dominant-baseline', 'middle');
@@ -120,7 +120,7 @@ window.buildRoomNumberText = function (cx, cy, number) {
  * @param {function} onMove(dx,dy) — callback при drag; отримує АБСОЛЮТНЕ зміщення від cx,cy
  * @returns {SVGGElement}
  */
-window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderDy, onMove) {
+window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderDy, onMove, fontSize) {
     const NS = 'http://www.w3.org/2000/svg';
     const g  = document.createElementNS(NS, 'g');
     g.setAttribute('data-room-label', '1');
@@ -129,9 +129,9 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
     g.setAttribute('data-label-cy', cy);
     g.style.cursor = 'move';
 
-    const fontSize = 12;
-    const lineH    = fontSize + 2;
-    const lineLen  = 28;
+    const _fs  = fontSize != null ? fontSize : 12;
+    const lineH    = _fs + 2;
+    const lineLen  = Math.max(20, _fs * 2.3 | 0);
 
     // Поточне зміщення підпису (може змінюватись drag-ом)
     let _curDx = leaderDx || 0;
@@ -144,7 +144,7 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
     if (!area) {
         const t = document.createElementNS(NS, 'text');
         t.setAttribute('x', cx); t.setAttribute('y', cy);
-        t.setAttribute('font-size', fontSize);
+        t.setAttribute('font-size', _fs);
         t.setAttribute('font-weight', 'bold');
         t.setAttribute('text-anchor', 'middle');
         t.setAttribute('dominant-baseline', 'middle');
@@ -189,7 +189,7 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
         const numText = document.createElementNS(NS, 'text');
         numText.setAttribute('x', lx);
         numText.setAttribute('y', ly - lineH / 2 - 1);
-        numText.setAttribute('font-size', fontSize);
+        numText.setAttribute('font-size', _fs);
         numText.setAttribute('font-weight', 'bold');
         numText.setAttribute('text-anchor', 'middle');
         numText.setAttribute('dominant-baseline', 'auto');
@@ -212,7 +212,7 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
         const areaText = document.createElementNS(NS, 'text');
         areaText.setAttribute('x', lx);
         areaText.setAttribute('y', ly + lineH / 2 + 1);
-        areaText.setAttribute('font-size', fontSize);
+        areaText.setAttribute('font-size', _fs);
         areaText.setAttribute('font-weight', 'bold');
         areaText.setAttribute('text-anchor', 'middle');
         areaText.setAttribute('dominant-baseline', 'hanging');

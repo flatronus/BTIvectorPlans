@@ -36,7 +36,9 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
         line.setAttribute('vector-effect', 'non-scaling-stroke');
         group.appendChild(line);
 
-        drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData);
+        drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData,
+            parentHierarchyItem && parentHierarchyItem.dimensionFontSize != null
+                ? parentHierarchyItem.dimensionFontSize : undefined);
 
         if (lineData.elements && lineData.elements.length > 0) {
             const elThickness = typeof lineData._elementThickness === 'number'
@@ -61,19 +63,18 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
             : (phi ? phi.area : null);
 
         if (showLabel) {
+            const lfs = phi && phi.labelFontSize != null ? phi.labelFontSize : undefined;
             if (displayArea) {
                 const ldx = phi && phi.leaderDx != null ? phi.leaderDx : 40;
                 const ldy = phi && phi.leaderDy != null ? phi.leaderDy : -30;
-                // onMove: зберігаємо нове зміщення в phi і не перемальовуємо всю групу —
-                // сам buildRoomLabel оновлює свою <g> через _rebuild
                 const onMove = phi ? function(ndx, ndy) {
                     phi.leaderDx = ndx;
                     phi.leaderDy = ndy;
                 } : null;
                 group.appendChild(buildRoomLabel(cx, cy, G.roomNumber, displayArea, labelStyle,
-                    ldx, ldy, onMove));
+                    ldx, ldy, onMove, lfs));
             } else {
-                group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber));
+                group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber, lfs));
             }
         }
     }
@@ -206,7 +207,7 @@ window._rebuildSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem
 };
 
 /** Розміри на головному полотні */
-window.drawMainCanvasDimension = function (group, x1, y1, x2, y2, lengthInMeters, lineData) {
+window.drawMainCanvasDimension = function (group, x1, y1, x2, y2, lengthInMeters, lineData, fontSize) {
     if (lineData && lineData.dimensionVisible === false) return;
 
     const dx = x2 - x1, dy = y2 - y1;
@@ -228,7 +229,7 @@ window.drawMainCanvasDimension = function (group, x1, y1, x2, y2, lengthInMeters
     if (lineData && lineData.dimensionRotated) angle += 180;
 
     const numLen = typeof lengthInMeters === 'number' ? lengthInMeters : parseFloat(lengthInMeters);
-    group.appendChild(_makeSvgText(textX, textY, numLen.toFixed(2), angle));
+    group.appendChild(_makeSvgText(textX, textY, numLen.toFixed(2), angle, fontSize));
 };
 
 /** Перенос / оновлення фігури на головному полотні */
