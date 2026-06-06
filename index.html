@@ -118,28 +118,39 @@
         <!-- Полотно -->
         <div id="canvas-container" class="flex-1 overflow-auto"></div>
 
-        <!-- Бічна панель (Елементи + Властивості) -->
+        <!-- Бічна панель (акордеон: Елементи / Властивості / Конструктиви) -->
         <div id="hierarchy-panel" class="hierarchy-panel bg-white border-l border-gray-200">
-            <!-- Верхня панель: Елементи -->
-            <div id="panel-elements" class="panel-section">
-                <div class="panel-header">
+
+            <!-- Панель: Елементи -->
+            <div id="panel-elements" class="panel-section accordion-section accordion-open">
+                <div class="panel-header accordion-header" onclick="toggleAccordion('panel-elements')">
                     <i class="fas fa-layer-group panel-header-icon"></i>
                     <span>Елементи</span>
+                    <i class="fas fa-chevron-down accordion-chevron"></i>
                 </div>
                 <div id="hierarchy-tree" class="panel-body text-sm"></div>
             </div>
 
-            <!-- Розділювач (перетягується) -->
-            <div id="panel-divider" class="panel-divider" title="Перетягніть щоб змінити висоту"></div>
-
-            <!-- Нижня панель: Властивості -->
-            <div id="panel-properties" class="panel-section">
-                <div class="panel-header">
+            <!-- Панель: Властивості -->
+            <div id="panel-properties" class="panel-section accordion-section">
+                <div class="panel-header accordion-header" onclick="toggleAccordion('panel-properties')">
                     <i class="fas fa-info-circle panel-header-icon"></i>
                     <span>Властивості</span>
+                    <i class="fas fa-chevron-down accordion-chevron"></i>
                 </div>
                 <div id="properties-body" class="panel-body text-sm"></div>
             </div>
+
+            <!-- Панель: Конструктиви -->
+            <div id="panel-constructs" class="panel-section accordion-section">
+                <div class="panel-header accordion-header" onclick="toggleAccordion('panel-constructs')">
+                    <i class="fas fa-drafting-compass panel-header-icon"></i>
+                    <span>Конструктиви</span>
+                    <i class="fas fa-chevron-down accordion-chevron"></i>
+                </div>
+                <div id="constructs-body" class="panel-body text-sm"></div>
+            </div>
+
         </div>
     </div>
 

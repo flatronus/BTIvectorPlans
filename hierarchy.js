@@ -96,6 +96,7 @@ window.selectHierarchyItem = function (item) {
     _highlightSvgItem(item);
     renderHierarchy();
     renderProperties(item);
+    if (typeof toggleAccordion === 'function') toggleAccordion('panel-properties');
 };
 
 /** Виділяє SVG-групу елемента: лінії стають червоними; попереднє виділення знімається */

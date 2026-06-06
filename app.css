@@ -92,32 +92,59 @@ body {
 .panel-body::-webkit-scrollbar-thumb:hover { background: #888; }
 .panel-body                           { scrollbar-width: thin; scrollbar-color: #bbb transparent; }
 
-/* Розділювач між панелями */
-.panel-divider {
-    height: 5px;
-    background: #e5e7eb;
-    cursor: row-resize;
-    flex-shrink: 0;
-    transition: background 0.15s;
-    position: relative;
+/* Розділювач між панелями — прибрано (замінено акордеоном) */
+
+/* ===== Акордеон бічної панелі ===== */
+
+/* Секція акордеону — за замовчуванням закрита: body прихований */
+.accordion-section .panel-body {
+    display: none;
+    flex: 0 0 auto;
 }
 
-.panel-divider::after {
-    content: '';
-    display: block;
-    width: 32px;
-    height: 3px;
-    background: #9ca3af;
-    border-radius: 2px;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+/* Відкрита секція — body розтягується на вільний простір */
+.accordion-section.accordion-open .panel-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 60px;
+    overflow-y: auto;
 }
 
-.panel-divider:hover,
-.panel-divider.dragging {
-    background: #bfdbfe;
+/* Відкрита секція займає весь вільний простір */
+.accordion-section.accordion-open {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Закрита секція — тільки заголовок */
+.accordion-section:not(.accordion-open) {
+    flex: 0 0 auto;
+}
+
+/* Заголовок акордеону — курсор і стрілка */
+.accordion-header {
+    cursor: pointer;
+    justify-content: space-between;
+    user-select: none;
+}
+
+.accordion-header:hover {
+    background: #e9eaf0;
+}
+
+/* Стрілка шеврону */
+.accordion-chevron {
+    font-size: 10px;
+    color: #9ca3af;
+    transition: transform 0.2s ease;
+    margin-left: auto;
+}
+
+.accordion-open .accordion-chevron {
+    transform: rotate(180deg);
 }
 
 /* Елементи ієрархії */
