@@ -723,6 +723,63 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
     G.figureLines[lineIdx].direction  = 'free';
     G.figureLines[lineIdx]._cachedEnd = { x: newPt2.x, y: newPt2.y };
 
+    // Фіксуємо всі лінії після pt2 як _cachedEnd на основі поточних G.shapePoints.
+    // Без цього _rebuildChainPoints перераховує їх відносно нового (скошеного) вектора
+    // лінії X→pt2, що спричиняє «прокручування» решти фігури.
+    // Спочатку вставляємо нову позицію pt2 у G.shapePoints щоб наступні лінії
+    // рахувались від правильної точки.
+    const pt2Idx = G.shapePoints.findIndex(function(p) { return p.num === pt2Num; });
+    if (pt2Idx !== -1) {
+        G.shapePoints[pt2Idx].x = newPt2.x;
+        G.shapePoints[pt2Idx].y = newPt2.y;
+    }
+
+    // Перебудовуємо позиції точок після pt2 ланцюгово зі збереженням їхніх довжин і напрямків
+    // (вектор від попередньої точки до наступної зберігається, тільки прив'язується до нової pt2)
+    // Для цього фіксуємо всі не-діагональні, не-замикаючі лінії після lineIdx як _cachedEnd.
+    let prevX = newPt2.x, prevY = newPt2.y;
+    for (let i = lineIdx + 1; i < G.figureLines.length; i++) {
+        const l = G.figureLines[i];
+        if (l.isDiagonal || l.isClosing || l.isPending) continue;
+
+        // Поточний кінець лінії з G.shapePoints (ще не оновлений після зміни pt2)
+        const toPt = G.shapePoints.find(function(p) { return p.num === l.to; });
+        if (!toPt) continue;
+
+        // Зберігаємо напрямок (вектор) від старого початку до старого кінця
+        const fromPt = G.shapePoints.find(function(p) { return p.num === l.from; });
+        if (!fromPt) continue;
+
+        const oldDx = toPt.x - fromPt.x;
+        const oldDy = toPt.y - fromPt.y;
+        const oldLen = Math.sqrt(oldDx * oldDx + oldDy * oldDy);
+
+        let newEndX, newEndY;
+        if (oldLen > 0) {
+            // Зберігаємо напрямок, рахуємо нову кінцеву точку від prevX/prevY
+            newEndX = prevX + (oldDx / oldLen) * l.length * SCALE;
+            newEndY = prevY + (oldDy / oldLen) * l.length * SCALE;
+        } else {
+            newEndX = prevX + l.length * SCALE;
+            newEndY = prevY;
+        }
+
+        l.direction  = 'free';
+        l._cachedEnd = { x: newEndX, y: newEndY };
+
+        // Оновлюємо G.shapePoints для цієї точки щоб наступна лінія рахувалась правильно
+        if (pt2Idx !== -1) {
+            const endPtIdx = G.shapePoints.findIndex(function(p) { return p.num === l.to; });
+            if (endPtIdx !== -1) {
+                G.shapePoints[endPtIdx].x = newEndX;
+                G.shapePoints[endPtIdx].y = newEndY;
+            }
+        }
+
+        prevX = newEndX;
+        prevY = newEndY;
+    }
+
     // Зберігаємо/оновлюємо діагональну (штрихову) лінію pt1↔pt2 в G.figureLines
     const existDiagIdx = G.figureLines.findIndex(function(l) {
         return l.isDiagonal &&
