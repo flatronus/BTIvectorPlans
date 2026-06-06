@@ -36,9 +36,10 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
         line.setAttribute('vector-effect', 'non-scaling-stroke');
         group.appendChild(line);
 
+        const dimFsMm = parentHierarchyItem && parentHierarchyItem.dimensionFontSize != null
+            ? parentHierarchyItem.dimensionFontSize : DEFAULT_FONT_SIZE_MM;
         drawMainCanvasDimension(group, x1, y1, x2, y2, lineData.length, lineData,
-            parentHierarchyItem && parentHierarchyItem.dimensionFontSize != null
-                ? parentHierarchyItem.dimensionFontSize : undefined);
+            dimFsMm * FONT_MM_TO_PX);
 
         if (lineData.elements && lineData.elements.length > 0) {
             const elThickness = typeof lineData._elementThickness === 'number'
@@ -63,7 +64,8 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
             : (phi ? phi.area : null);
 
         if (showLabel) {
-            const lfs = phi && phi.labelFontSize != null ? phi.labelFontSize : undefined;
+            const lfsMm = phi && phi.labelFontSize != null ? phi.labelFontSize : DEFAULT_FONT_SIZE_MM;
+            const lfsPx = lfsMm * FONT_MM_TO_PX;
             if (displayArea) {
                 const ldx = phi && phi.leaderDx != null ? phi.leaderDx : 40;
                 const ldy = phi && phi.leaderDy != null ? phi.leaderDy : -30;
@@ -72,9 +74,9 @@ window._fillSvgGroup = function (group, offsetX, offsetY, parentHierarchyItem) {
                     phi.leaderDy = ndy;
                 } : null;
                 group.appendChild(buildRoomLabel(cx, cy, G.roomNumber, displayArea, labelStyle,
-                    ldx, ldy, onMove, lfs));
+                    ldx, ldy, onMove, lfsPx));
             } else {
-                group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber, lfs));
+                group.appendChild(buildRoomNumberText(cx, cy, G.roomNumber, lfsPx));
             }
         }
     }
@@ -216,7 +218,8 @@ window.drawMainCanvasDimension = function (group, x1, y1, x2, y2, lengthInMeters
 
     const ux = dx / len, uy = dy / len;
     const px = uy, py = -ux;
-    const offset = 7.5;
+    const fs     = fontSize != null ? fontSize : DEFAULT_FONT_SIZE_MM * FONT_MM_TO_PX;
+    const offset = fs / 2 + 2;
     const dir    = G.dimensionsOutside ? 1 : -1;
     const cx     = (x1 + x2) / 2;
     const cy     = (y1 + y2) / 2;

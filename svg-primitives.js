@@ -43,7 +43,7 @@ window._renderSvgPoint = function (svg, x, y, num) {
 window._makeSvgText = function (x, y, content, rotateAngle, fontSize) {
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('x', x); text.setAttribute('y', y);
-    text.setAttribute('font-size', fontSize != null ? String(fontSize) : '12');
+    text.setAttribute('font-size', fontSize != null ? String(fontSize) : String(DEFAULT_FONT_SIZE_MM * FONT_MM_TO_PX));
     text.setAttribute('fill', 'black');
     text.setAttribute('font-weight', 'bold');
     text.setAttribute('text-anchor', 'middle');
@@ -81,7 +81,7 @@ window.buildRoomNumberText = function (cx, cy, number, fontSize) {
     const text  = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('id', 'room-number');
     text.setAttribute('x', cx); text.setAttribute('y', cy);
-    text.setAttribute('font-size', fontSize != null ? String(fontSize) : '12');
+    text.setAttribute('font-size', fontSize != null ? String(fontSize) : String(DEFAULT_FONT_SIZE_MM * FONT_MM_TO_PX));
     text.setAttribute('font-weight', 'bold');
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('dominant-baseline', 'middle');
@@ -129,7 +129,7 @@ window.buildRoomLabel = function (cx, cy, number, area, style, leaderDx, leaderD
     g.setAttribute('data-label-cy', cy);
     g.style.cursor = 'move';
 
-    const _fs  = fontSize != null ? fontSize : 12;
+    const _fs  = fontSize != null ? fontSize : DEFAULT_FONT_SIZE_MM * FONT_MM_TO_PX;
     const lineH    = _fs + 2;
     const lineLen  = Math.max(20, _fs * 2.3 | 0);
 

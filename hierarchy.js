@@ -218,8 +218,8 @@ const PROP_SCHEMA = {
         { key: 'showRoomLabel',  label: 'Показати підпис',    type: 'bool',   readOnly: false },
         { key: 'roomLabelStyle', label: 'Вид підпису',        type: 'select', readOnly: false,
           options: [{ v: 'inline', l: 'Традиційний (всередині)' }, { v: 'leader', l: 'Виносний' }] },
-        { key: 'labelFontSize',     label: 'Шрифт підпису (пт)',   type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
-        { key: 'dimensionFontSize', label: 'Шрифт розмірів (пт)',  type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
+        { key: 'labelFontSize',     label: 'Шрифт підпису (мм)',   type: 'number', readOnly: false, hint: 'За замовчуванням 3.5 мм (ЕСКД)' },
+        { key: 'dimensionFontSize', label: 'Шрифт розмірів (мм)',  type: 'number', readOnly: false, hint: 'За замовчуванням 3.5 мм (ЕСКД)' },
         { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
@@ -243,8 +243,8 @@ const PROP_SCHEMA = {
         { key: 'showRoomLabel',  label: 'Показати підпис',    type: 'bool',   readOnly: false },
         { key: 'roomLabelStyle', label: 'Вид підпису',        type: 'select', readOnly: false,
           options: [{ v: 'inline', l: 'Традиційний (всередині)' }, { v: 'leader', l: 'Виносний' }] },
-        { key: 'labelFontSize',     label: 'Шрифт підпису (пт)',   type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
-        { key: 'dimensionFontSize', label: 'Шрифт розмірів (пт)',  type: 'number', readOnly: false, hint: 'За замовчуванням 12' },
+        { key: 'labelFontSize',     label: 'Шрифт підпису (мм)',   type: 'number', readOnly: false, hint: 'За замовчуванням 3.5 мм (ЕСКД)' },
+        { key: 'dimensionFontSize', label: 'Шрифт розмірів (мм)',  type: 'number', readOnly: false, hint: 'За замовчуванням 3.5 мм (ЕСКД)' },
         { key: 'dimensionsOutside', label: 'Розміри ззовні', type: 'bool', readOnly: false },
         { key: 'visible',    label: 'Видимий',       type: 'bool',   readOnly: false },
     ],
@@ -286,8 +286,8 @@ function _propGet(item, key) {
         }
         return ELEMENT_THICKNESS;
     }
-    if (key === 'labelFontSize')     return item.labelFontSize     != null ? item.labelFontSize     : '';
-    if (key === 'dimensionFontSize') return item.dimensionFontSize != null ? item.dimensionFontSize : '';
+    if (key === 'labelFontSize')     return item.labelFontSize     != null ? item.labelFontSize     : DEFAULT_FONT_SIZE_MM;
+    if (key === 'dimensionFontSize') return item.dimensionFontSize != null ? item.dimensionFontSize : DEFAULT_FONT_SIZE_MM;
     if (key === 'dimensionsOutside') return item.dimensionsOutside === true;
     return item[key] ?? '';
 }
