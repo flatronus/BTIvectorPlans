@@ -84,7 +84,7 @@ window.renderHierarchy = function () {
     const tree = document.getElementById('hierarchy-tree');
     tree.innerHTML = '';
     if (G.hierarchyData.length === 0) {
-        tree.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Немає елементів</div>';
+        
         renderProperties(null);
         return;
     }
@@ -467,10 +467,6 @@ window.renderProperties = function (item) {
     body.innerHTML = '';
 
     if (!item) {
-        body.innerHTML =
-            '<div style="color:#aaa;text-align:center;padding:20px 8px;font-size:11px;line-height:1.6;">' +
-            '<div style="font-size:18px;margin-bottom:6px;">📋</div>' +
-            'Оберіть елемент<br>у панелі вище</div>';
         return;
     }
 

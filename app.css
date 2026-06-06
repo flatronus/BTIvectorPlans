@@ -50,7 +50,128 @@ body {
 }
 
 /* Секція панелі */
-.panel-section {\n    display: flex;\n    flex-direction: column;\n    overflow: hidden;\n    min-height: 0;\n}\n\n/* Заголовок секції */\n.panel-header {\n    display: flex;\n    align-items: center;\n    gap: 6px;\n    padding: 6px 10px;\n    background: #f3f4f6;\n    border-bottom: 1px solid #e5e7eb;\n    font-size: 12px;\n    font-weight: 700;\n    color: #374151;\n    flex-shrink: 0;\n    user-select: none;\n}\n\n.panel-header-icon {\n    font-size: 11px;\n    color: #6b7280;\n}\n\n/* Тіло секції з прокруткою */\n.panel-body {\n    flex: 1;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 6px;\n}\n\n/* Вузька прокрутка */\n.panel-body::-webkit-scrollbar        { width: 4px; }\n.panel-body::-webkit-scrollbar-track  { background: transparent; }\n.panel-body::-webkit-scrollbar-thumb  { background: #bbb; border-radius: 2px; }\n.panel-body::-webkit-scrollbar-thumb:hover { background: #888; }\n.panel-body                           { scrollbar-width: thin; scrollbar-color: #bbb transparent; }\n\n/* Розділювач між панелями — прибрано (замінено акордеоном) */\n\n/* ===== Акордеон бічної панелі ===== */\n\n/* Контейнер панелей — flex-column без зайвих відступів */\n.hierarchy-panel {\n    display: flex;\n    flex-direction: column;\n    gap: 2px;\n}\n\n/* Секція акордеону — за замовчуванням закрита: body прихований */\n.accordion-section .panel-body {\n    display: none;\n}\n\n/* Відкрита секція — body розтягується на вільний простір */\n.accordion-section.accordion-open .panel-body {\n    display: flex;\n    flex-direction: column;\n    flex: 1 1 0;\n    min-height: 60px;\n    overflow-y: auto;\n}\n\n/* Відкрита секція займає весь вільний простір */\n.accordion-section.accordion-open {\n    flex: 1 1 0;\n    min-height: 0;\n    display: flex;\n    flex-direction: column;\n}\n\n/* Закрита секція — тільки заголовок */\n.accordion-section:not(.accordion-open) {\n    flex: 0 0 auto;\n}\n\n/* Заголовок акордеону — курсор і стрілка */\n.accordion-header {\n    cursor: pointer;\n    justify-content: space-between;\n    user-select: none;\n    background: #dbeafe;\n    border-bottom: 1px solid #93c5fd;\n    color: #1e40af;\n}\n\n.accordion-header .panel-header-icon {\n    color: #3b82f6;\n}\n\n/* Відкритий заголовок — яскравіший акцент */\n.accordion-open > .accordion-header {\n    background: #2563eb;\n    border-bottom: 1px solid #1d4ed8;\n    color: #ffffff;\n}\n\n.accordion-open > .accordion-header .panel-header-icon {\n    color: #bfdbfe;\n}\n\n.accordion-open > .accordion-header .accordion-chevron {\n    color: #bfdbfe;\n}\n\n.accordion-header:hover {\n    background: #bfdbfe;\n    color: #1e3a8a;\n}\n\n.accordion-open > .accordion-header:hover {\n    background: #1d4ed8;\n}\n\n/* Стрілка шеврону */\n.accordion-chevron {\n    font-size: 10px;\n    color: #93c5fd;\n    transition: transform 0.2s ease;\n    margin-left: auto;\n}\n\n.accordion-open .accordion-chevron {\n    transform: rotate(180deg);\n}
+.panel-section {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Заголовок секції */
+.panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.panel-header-icon {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+/* Тіло секції з прокруткою */
+.panel-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px;
+}
+
+/* Вузька прокрутка */
+.panel-body::-webkit-scrollbar        { width: 4px; }
+.panel-body::-webkit-scrollbar-track  { background: transparent; }
+.panel-body::-webkit-scrollbar-thumb  { background: #bbb; border-radius: 2px; }
+.panel-body::-webkit-scrollbar-thumb:hover { background: #888; }
+.panel-body                           { scrollbar-width: thin; scrollbar-color: #bbb transparent; }
+
+/* ===== Акордеон бічної панелі ===== */
+
+/* gap між секціями */
+.hierarchy-panel {
+    gap: 2px;
+}
+
+/* Закрита секція — тільки заголовок */
+.accordion-section {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Відкрита секція — займає весь вільний простір */
+.accordion-section.accordion-open {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+/* Тіло — приховане за замовчуванням */
+.accordion-section .panel-body {
+    display: none;
+}
+
+/* Тіло відкритої секції */
+.accordion-section.accordion-open .panel-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 60px;
+    overflow-y: auto;
+}
+
+/* Заголовок акордеону — закрита панель: блакитний */
+.accordion-header {
+    cursor: pointer;
+    justify-content: space-between;
+    background: #bfdbfe;
+    border-bottom: 1px solid #93c5fd;
+    color: #1e40af;
+}
+
+.accordion-header .panel-header-icon {
+    color: #3b82f6;
+}
+
+/* Заголовок відкритої панелі — темно-синій */
+.accordion-open > .accordion-header {
+    background: #2563eb;
+    border-bottom: 1px solid #1d4ed8;
+    color: #ffffff;
+}
+
+.accordion-open > .accordion-header .panel-header-icon,
+.accordion-open > .accordion-header .accordion-chevron {
+    color: #bfdbfe;
+}
+
+.accordion-header:hover {
+    background: #93c5fd;
+    color: #1e3a8a;
+}
+
+.accordion-open > .accordion-header:hover {
+    background: #1d4ed8;
+}
+
+/* Шеврон */
+.accordion-chevron {
+    font-size: 10px;
+    color: #60a5fa;
+    transition: transform 0.2s ease;
+    margin-left: auto;
+}
+
+.accordion-open .accordion-chevron {
+    transform: rotate(180deg);
+}
 
 /* Елементи ієрархії */
 .hierarchy-item.selected-canvas {
