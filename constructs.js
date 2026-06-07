@@ -335,6 +335,34 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     });
 
     _cActiveSvg.appendChild(poly);
+
+    /* ── Реєструємо в ієрархії ── */
+    const stripCount = G.hierarchyData.filter(function(i) { return i.type === 'construct'; }).length + 1;
+    const hierarchyItem = {
+        id:                 G.hierarchyIdCounter++,
+        type:               'construct',
+        name:               'Полоска ' + stripCount,
+        constructThickness: thicknessM,
+        constructFromEnd:   false,
+        constructLength:    0,
+        visible:            true,
+        children:           [],
+        expanded:           false,
+        parentId:           null,
+        // Геометрія для перемалювання
+        _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
+        _tStart: tStart, _tEnd: tEnd,
+        _svgPoly: poly,
+    };
+    G.hierarchyData.push(hierarchyItem);
+    if (typeof _syncHierarchyToCanvas === 'function') _syncHierarchyToCanvas();
+    if (typeof renderHierarchy === 'function') renderHierarchy();
+
+    // Клік → виділення у панелі Елементи
+    poly.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hierarchyItem);
+    });
 }
 
 /**
@@ -407,3 +435,53 @@ function _distToSegment(px, py, ax, ay, bx, by) {
     const cx = ax + t * dx, cy = ay + t * dy;
     return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
 }
+
+/**
+ * Перемальовує полоску на основі властивостей ієрархічного елемента.
+ * Враховує constructFromEnd і constructLength для обрізки довжини.
+ */
+window._redrawConstructItem = function (item) {
+    if (!item || !item._svgPoly) return;
+
+    const { _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2 } = item;
+    const thicknessPx = (item.constructThickness || CONSTRUCT_THICKNESS_M) * SCALE;
+
+    const dx  = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy, ny = ux;
+
+    // Межі вільного проміжку (обчислені при розміщенні)
+    let tA = item._tStart;
+    let tB = item._tEnd;
+
+    // Застосовуємо constructLength (в метрах)
+    const lenM = item.constructLength || 0;
+    if (lenM > 0) {
+        const lenPx  = lenM * SCALE;
+        const tSpan  = lenPx / len;
+        if (item.constructFromEnd) {
+            // Відлік від кінця (tB)
+            tA = Math.max(item._tStart, tB - tSpan);
+        } else {
+            // Відлік від початку (tA)
+            tB = Math.min(item._tEnd, tA + tSpan);
+        }
+    }
+
+    const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
+    const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
+
+    const pts = [
+        sx1 + ',' + sy1,
+        sx2 + ',' + sy2,
+        (sx2 + nx * thicknessPx) + ',' + (sy2 + ny * thicknessPx),
+        (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
+    ];
+    item._svgPoly.setAttribute('points', pts.join(' '));
+
+    // Видимість
+    item._svgPoly.style.display = item.visible === false ? 'none' : '';
+};

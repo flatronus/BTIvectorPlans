@@ -96,7 +96,6 @@ window.selectHierarchyItem = function (item) {
     _highlightSvgItem(item);
     renderHierarchy();
     renderProperties(item);
-    if (typeof toggleAccordion === 'function') toggleAccordion('panel-properties');
 };
 
 /** Виділяє SVG-групу елемента: лінії стають червоними; попереднє виділення знімається */
@@ -263,6 +262,15 @@ const PROP_SCHEMA = {
         { group: 'Відображення' },
         { key: 'visible',     label: 'Видимий',      type: 'bool',   readOnly: false },
     ],
+    construct: [
+        { group: 'Конструктив' },
+        { key: 'name',             label: 'Назва',                  type: 'string', readOnly: false },
+        { key: 'constructThickness', label: 'Товщина (м)',          type: 'number', readOnly: false, hint: '0.20' },
+        { key: 'constructFromEnd',   label: 'Початок від кінця B',  type: 'bool',   readOnly: false },
+        { key: 'constructLength',    label: 'Довжина від початку (м)', type: 'number', readOnly: false, hint: 'Вся довжина якщо 0' },
+        { group: 'Відображення' },
+        { key: 'visible',          label: 'Видимий',                type: 'bool',   readOnly: false },
+    ],
 };
 
 /** Зчитує значення властивості з item (зі спеціальними ключами) */
@@ -290,6 +298,9 @@ function _propGet(item, key) {
     if (key === 'labelFontSize')     return item.labelFontSize     != null ? item.labelFontSize     : DEFAULT_FONT_SIZE_MM;
     if (key === 'dimensionFontSize') return item.dimensionFontSize != null ? item.dimensionFontSize : DEFAULT_FONT_SIZE_MM;
     if (key === 'dimensionsOutside') return item.dimensionsOutside === true;
+    if (key === 'constructThickness') return item.constructThickness != null ? item.constructThickness : (typeof CONSTRUCT_THICKNESS_M !== 'undefined' ? CONSTRUCT_THICKNESS_M : 0.2);
+    if (key === 'constructFromEnd')   return item.constructFromEnd === true;
+    if (key === 'constructLength')    return item.constructLength  != null ? item.constructLength  : 0;
     return item[key] ?? '';
 }
 
@@ -304,6 +315,7 @@ function _propSet(item, key, value) {
     if (key === 'visible') {
         item.visible = value;
         if (item.svgGroup) item.svgGroup.style.display = value ? '' : 'none';
+        if (item.type === 'construct' && typeof _redrawConstructItem === 'function') _redrawConstructItem(item);
         return;
     }
     if (key === 'name' || key === 'roomNumber') {
@@ -349,6 +361,13 @@ function _propSet(item, key, value) {
         else if (key === '_thickness') item.elThickness = parseFloat(value) || ELEMENT_THICKNESS;
         // Синхронізуємо зміни у lineData батьківської фігури і перемальовуємо
         _syncElementToParentAndRedraw(item);
+        return;
+    }
+    if (key === 'constructThickness' || key === 'constructFromEnd' || key === 'constructLength') {
+        if (key === 'constructThickness') item.constructThickness = parseFloat(String(value).replace(',', '.')) || CONSTRUCT_THICKNESS_M;
+        else if (key === 'constructFromEnd') item.constructFromEnd = value;
+        else if (key === 'constructLength') item.constructLength = parseFloat(String(value).replace(',', '.')) || 0;
+        if (typeof _redrawConstructItem === 'function') _redrawConstructItem(item);
         return;
     }
     item[key] = value;
@@ -479,7 +498,7 @@ window.renderProperties = function (item) {
         'padding:4px 8px;display:flex;align-items:center;justify-content:space-between;',
         'border-bottom:2px solid #1e3a8a;',
     ].join('');
-    const typeIcon = item.type === 'building' ? '🏢' : item.type === 'element' ? '🪟' : item.type === 'contour' ? '⬡' : '🚪';
+    const typeIcon = item.type === 'building' ? '🏢' : item.type === 'element' ? '🪟' : item.type === 'contour' ? '⬡' : item.type === 'construct' ? '▬' : '🚪';
     const titleText = document.createElement('span');
     titleText.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     titleText.textContent = typeIcon + ' ' + (item.roomNumber || item.name || 'Без назви');
@@ -879,8 +898,8 @@ window.createHierarchyItemElement = function (item) {
     }
 
     const icon = document.createElement('i');
-    icon.className = 'fas icon ' + (item.type === 'building' ? 'fa-building' : item.type === 'element' ? 'fa-window-maximize' : item.type === 'contour' ? 'fa-draw-polygon' : 'fa-door-open');
-    icon.style.color = item.type === 'building' ? '#2196F3' : item.type === 'element' ? '#9C27B0' : item.type === 'contour' ? '#9E9E9E' : '#4CAF50';
+    icon.className = 'fas icon ' + (item.type === 'building' ? 'fa-building' : item.type === 'element' ? 'fa-window-maximize' : item.type === 'contour' ? 'fa-draw-polygon' : item.type === 'construct' ? 'fa-grip-lines' : 'fa-door-open');
+    icon.style.color = item.type === 'building' ? '#2196F3' : item.type === 'element' ? '#9C27B0' : item.type === 'contour' ? '#9E9E9E' : item.type === 'construct' ? '#0ea5e9' : '#4CAF50';
     itemDiv.appendChild(icon);
 
     const label = document.createElement('span');
