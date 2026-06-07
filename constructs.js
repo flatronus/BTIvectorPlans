@@ -187,7 +187,8 @@ function _detectSnapLine(clientX, clientY) {
             const dist = _distToSegment(svgPt.x, svgPt.y, x1, y1, x2, y2);
             if (dist < SNAP_THRESHOLD && dist < bestDist) {
                 bestDist = dist;
-                best = { x1, y1, x2, y2, lineData, item, fromPt, toPt, groupCTM, offsetX, offsetY };
+                best = { x1, y1, x2, y2, lineData, item, fromPt, toPt, groupCTM, offsetX, offsetY,
+                         dropX: svgPt.x, dropY: svgPt.y };
             }
         });
     });
@@ -240,48 +241,142 @@ function _finishConstructDrop(clientX, clientY) {
 }
 
 /**
- * Малює полоску конструктиву вздовж знайденої лінії між двома точками
+ * Малює полоску конструктиву вздовж знайденої лінії.
+ * Довжина обмежується: кутові точки фігури + точки перетину вже існуючих
+ * полосок (data-construct) з цільовою лінією — нова полоска займає
+ * вільний проміжок між найближчими обмежувачами навколо точки кидання.
+ *
+ * @param {{ x1,y1,x2,y2, clientX,clientY }} lineInfo
+ * @param {number} thicknessM
  */
 function _placeConstructStrip(lineInfo, thicknessM) {
     if (!_cActiveSvg) return;
 
-    const { x1, y1, x2, y2 } = lineInfo;
+    const { x1, y1, x2, y2, dropX, dropY } = lineInfo;
     const thicknessPx = thicknessM * SCALE;
 
     const dx  = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) return;
 
-    // Перпендикуляр (назовні — з вибором сторони, завжди «назовні» відносно полігону)
-    // Використовуємо один бік: нормаль повернута вліво від напрямку лінії
-    const ux = dx / len, uy = dy / len;
-    const nx = -uy, ny = ux; // Перпендикуляр вліво від напрямку
+    const ux = dx / len, uy = dy / len;     // одиничний вектор вздовж лінії
+    const nx = -uy, ny = ux;               // перпендикуляр (вліво)
 
-    // 4 кути полоски
-    const pts = [
-        { x: x1,              y: y1              },
-        { x: x2,              y: y2              },
-        { x: x2 + nx * thicknessPx, y: y2 + ny * thicknessPx },
-        { x: x1 + nx * thicknessPx, y: y1 + ny * thicknessPx },
+    // ── Збираємо параметричні t-значення вздовж відрізка [0..1] ──
+    // Завжди є кінці самого відрізка
+    const tValues = [0, 1];
+
+    // Кут кидання у параметрі t
+    const tDrop = dropX !== undefined
+        ? _projectToLine(dropX, dropY, x1, y1, x2, y2)
+        : 0.5;
+
+    // Знаходимо перетини існуючих полосок з лінією
+    _cActiveSvg.querySelectorAll('polygon[data-construct]').forEach(function(poly) {
+        const pts = _parsePolygonPoints(poly);
+        if (pts.length < 4) return;
+
+        // Перші два і останні два кути — бічні ребра полоски.
+        // Ребра: 0-3 (лівий торець) і 1-2 (правий торець).
+        // Шукаємо перетин кожного з 4 ребер полоски з нашою лінією.
+        const edges = [
+            [pts[0], pts[1]],   // основа (вздовж лінії)
+            [pts[1], pts[2]],   // правий торець
+            [pts[2], pts[3]],   // верхній край
+            [pts[3], pts[0]],   // лівий торець
+        ];
+
+        edges.forEach(function(edge) {
+            const t = _segmentIntersectT(
+                x1, y1, x2, y2,
+                edge[0].x, edge[0].y, edge[1].x, edge[1].y
+            );
+            if (t !== null) tValues.push(t);
+        });
+    });
+
+    // Сортуємо і беремо проміжок навколо tDrop
+    tValues.sort(function(a, b) { return a - b; });
+
+    let tStart = 0, tEnd = 1;
+    for (let i = 0; i < tValues.length - 1; i++) {
+        if (tValues[i] <= tDrop && tDrop <= tValues[i + 1]) {
+            tStart = tValues[i];
+            tEnd   = tValues[i + 1];
+            break;
+        }
+    }
+
+    if (tEnd - tStart < 0.001) return; // вільного місця немає
+
+    const sx1 = x1 + ux * tStart * len, sy1 = y1 + uy * tStart * len;
+    const sx2 = x1 + ux * tEnd   * len, sy2 = y1 + uy * tEnd   * len;
+
+    const polyPts = [
+        { x: sx1,                      y: sy1                      },
+        { x: sx2,                      y: sy2                      },
+        { x: sx2 + nx * thicknessPx,   y: sy2 + ny * thicknessPx  },
+        { x: sx1 + nx * thicknessPx,   y: sy1 + ny * thicknessPx  },
     ];
 
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    poly.setAttribute('points', pts.map(function(p) { return p.x + ',' + p.y; }).join(' '));
+    poly.setAttribute('points', polyPts.map(function(p) { return p.x + ',' + p.y; }).join(' '));
     poly.setAttribute('fill', 'rgba(125,211,252,0.35)');
     poly.setAttribute('stroke', '#38bdf8');
     poly.setAttribute('stroke-width', '1');
     poly.setAttribute('vector-effect', 'non-scaling-stroke');
     poly.setAttribute('data-construct', '1');
+    poly.style.cursor = 'pointer';
+    poly.title = 'Подвійний клік — видалити';
 
-    // Клік по полоску — виділення / видалення за подвійним кліком
     poly.addEventListener('dblclick', function(e) {
         e.stopPropagation();
         if (poly.parentNode) poly.parentNode.removeChild(poly);
     });
-    poly.style.cursor = 'pointer';
-    poly.title = 'Подвійний клік — видалити';
 
     _cActiveSvg.appendChild(poly);
+}
+
+/**
+ * Проектує точку (px,py) на відрізок (ax,ay)-(bx,by), повертає t ∈ [0,1].
+ */
+function _projectToLine(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return 0;
+    let t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+    return Math.max(0, Math.min(1, t));
+}
+
+/**
+ * Знаходить параметр t уздовж відрізка A=(ax1,ay1)-(ax2,ay2),
+ * де він перетинає відрізок B=(bx1,by1)-(bx2,by2).
+ * Повертає t ∈ [0,1] або null якщо перетину немає.
+ */
+function _segmentIntersectT(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+    const dx1 = ax2 - ax1, dy1 = ay2 - ay1;
+    const dx2 = bx2 - bx1, dy2 = by2 - by1;
+    const denom = dx1 * dy2 - dy1 * dx2;
+    if (Math.abs(denom) < 1e-10) return null; // паралельні
+
+    const t = ((bx1 - ax1) * dy2 - (by1 - ay1) * dx2) / denom;
+    const u = ((bx1 - ax1) * dy1 - (by1 - ay1) * dx1) / denom;
+
+    if (t >= -1e-6 && t <= 1 + 1e-6 && u >= -1e-6 && u <= 1 + 1e-6) {
+        return Math.max(0, Math.min(1, t));
+    }
+    return null;
+}
+
+/**
+ * Парсить атрибут points полігону у масив {x,y}
+ */
+function _parsePolygonPoints(poly) {
+    const raw = poly.getAttribute('points') || '';
+    return raw.trim().split(/\s+/).map(function(pair) {
+        const p = pair.split(',');
+        return { x: parseFloat(p[0]), y: parseFloat(p[1]) };
+    }).filter(function(p) { return !isNaN(p.x) && !isNaN(p.y); });
 }
 
 /* ── Допоміжні функції ── */
