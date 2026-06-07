@@ -358,15 +358,17 @@ window.updateExistingLine = function (lineId, parsedData) {
         return;
     }
 
-    G.figureLines[idx].direction = parsedData.direction;
-    G.figureLines[idx].lineType  = parsedData.lineType;
-    G.figureLines[idx].elements  = parsedData.elements;
-    G.figureLines[idx].code      = document.getElementById('coordInput').value;
-    G.figureLines[idx].length    = newLength;
-
-    // Якщо це free-лінія з _cachedEnd — перераховуємо кінець зі збереженням напрямку
-    if (parsedData.direction === 'free' && G.figureLines[idx]._cachedEnd) {
-        // Знаходимо початкову точку лінії
+    // Якщо лінія має _cachedEnd (зафіксована діагоналлю) — завжди зберігаємо direction='free'
+    // і перемасштабовуємо _cachedEnd незалежно від того що ввів користувач у direction.
+    // Це запобігає «прокручуванню» лінії при додаванні WI1 або зміні довжини.
+    const hasCachedEnd = !!G.figureLines[idx]._cachedEnd;
+    if (hasCachedEnd) {
+        // Зберігаємо direction=free, оновлюємо лише elements/code/length
+        G.figureLines[idx].lineType  = parsedData.lineType;
+        G.figureLines[idx].elements  = parsedData.elements;
+        G.figureLines[idx].code      = document.getElementById('coordInput').value;
+        G.figureLines[idx].length    = newLength;
+        // Перемасштабовуємо _cachedEnd на нову довжину зі збереженням напрямку
         _rebuildChainPoints();
         const fromPt = G.shapePoints.find(function(p) { return p.num === G.figureLines[idx].from; });
         if (fromPt) {
@@ -375,13 +377,18 @@ window.updateExistingLine = function (lineId, parsedData) {
             const dy = oldEnd.y - fromPt.y;
             const oldLen = Math.sqrt(dx * dx + dy * dy);
             if (oldLen > 0) {
-                // Зберігаємо напрямок, масштабуємо на нову довжину
                 G.figureLines[idx]._cachedEnd = {
                     x: fromPt.x + dx / oldLen * newLength * SCALE,
                     y: fromPt.y + dy / oldLen * newLength * SCALE
                 };
             }
         }
+    } else {
+        G.figureLines[idx].direction = parsedData.direction;
+        G.figureLines[idx].lineType  = parsedData.lineType;
+        G.figureLines[idx].elements  = parsedData.elements;
+        G.figureLines[idx].code      = document.getElementById('coordInput').value;
+        G.figureLines[idx].length    = newLength;
     }
 
     // Якщо це діагональ — оновлюємо позицію кінцевої точки
@@ -641,13 +648,22 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
     // Спочатку синхронізуємо G.shapePoints з поточним станом G.figureLines
     _rebuildChainPoints();
 
-    // Знаходимо лінію що ЗАКІНЧУЄТЬСЯ в pt2Num (вона буде змінювати кут)
-    const lineIdx = G.figureLines.findIndex(function(l) {
+    // Знаходимо лінію що ЗАКІНЧУЄТЬСЯ в pt2Num (вона буде змінювати кут).
+    // Якщо не знайдено — міняємо pt1/pt2 місцями (діагональ симетрична).
+    let lineIdx = G.figureLines.findIndex(function(l) {
         return !l.isDiagonal && !l.isClosing && l.to === pt2Num;
     });
     if (lineIdx === -1) {
-        showToast('Лінія що веде до точки ' + pt2Num + ' не знайдена', 'error');
-        return;
+        const lineIdxAlt = G.figureLines.findIndex(function(l) {
+            return !l.isDiagonal && !l.isClosing && l.to === pt1Num;
+        });
+        if (lineIdxAlt !== -1) {
+            const tmp = pt1Num; pt1Num = pt2Num; pt2Num = tmp;
+            lineIdx = lineIdxAlt;
+        } else {
+            showToast('Лінія що веде до точки ' + pt2Num + ' або ' + pt1Num + ' не знайдена', 'error');
+            return;
+        }
     }
 
     // Координата pt1 (фіксована — звідси вимірюємо діагональ)
