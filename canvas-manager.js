@@ -151,19 +151,54 @@ window.canvasManager = {
         const id = this.nextId++;
         const viewBox = svg.getAttribute('viewBox');
         const [x, y, width, height] = viewBox
-            ? viewBox.split(/\s+/).map(Number)
+            ? viewBox.split(/[\s,]+/).map(Number)
             : [0, 0, 900, 1200];
+
+        // Відновлюємо hierarchyData з <metadata data-bti>
+        let loadedHierarchy = [];
+        let loadedIdCounter = 1;
+        const metaEl = svg.querySelector('metadata[data-bti]');
+        if (metaEl) {
+            try {
+                const parsed = JSON.parse(metaEl.textContent);
+                loadedHierarchy = parsed.hierarchyData || [];
+                loadedIdCounter = parsed.hierarchyIdCounter || 1;
+            } catch(e) { /* ignore */ }
+        }
 
         const canvas = {
             id, name: `C${id}`, fullName: name || `Canvas ${id}`,
             viewBox: { x, y, width, height },
             savedPath: `${name || 'imported'}.svg`,
-            hierarchyData: [], hierarchyIdCounter: 1
+            hierarchyData: loadedHierarchy,
+            hierarchyIdCounter: loadedIdCounter
         };
         this.canvases.push(canvas);
         this.renderImportedCanvas(canvas, svg.outerHTML);
         this.renderTab(canvas);
         this.setActiveCanvas(id);
+
+        // Після рендеру: прив'язуємо svgGroup кожного елемента ієрархії до DOM-групи за data-hierarchy-id
+        if (loadedHierarchy.length > 0) {
+            const wrapper = document.querySelector(`[data-canvas-id="${id}"]`);
+            const svgDom  = wrapper ? wrapper.querySelector('svg') : null;
+            if (svgDom) {
+                function reattachGroups(items) {
+                    (items || []).forEach(function(item) {
+                        if (item.id != null) {
+                            const g = svgDom.querySelector(`[data-hierarchy-id="${item.id}"]`);
+                            if (g) item.svgGroup = g;
+                        }
+                        reattachGroups(item.children);
+                    });
+                }
+                reattachGroups(loadedHierarchy);
+            }
+            // Оновлюємо G якщо це вже активне полотно
+            G.hierarchyData      = loadedHierarchy;
+            G.hierarchyIdCounter = loadedIdCounter;
+            renderHierarchy();
+        }
     },
 
     renderImportedCanvas(canvas, svgContent) {
@@ -196,6 +231,37 @@ window.canvasManager = {
         if (!canvas) return;
         const canvasEl = document.querySelector(`[data-canvas-id="${id}"]`);
         const svgEl    = canvasEl.querySelector('svg');
+
+        // Синхронізуємо hierarchyData: якщо це активне полотно — беремо з G
+        const hierarchySnapshot = (id === this.activeCanvasId)
+            ? G.hierarchyData : (canvas.hierarchyData || []);
+
+        // Серіалізуємо hierarchyData у <metadata> (без DOM-посилань)
+        function stripDom(items) {
+            return (items || []).map(function(item) {
+                const clean = {};
+                for (const k in item) {
+                    if (k === 'svgGroup') continue; // DOM-вузол — пропускаємо
+                    if (k === 'children') { clean.children = stripDom(item.children); continue; }
+                    clean[k] = item[k];
+                }
+                return clean;
+            });
+        }
+        const metaJson = JSON.stringify({
+            hierarchyData:      stripDom(hierarchySnapshot),
+            hierarchyIdCounter: (id === this.activeCanvasId) ? G.hierarchyIdCounter : (canvas.hierarchyIdCounter || 1)
+        });
+
+        // Вставляємо або оновлюємо <metadata> в SVG
+        let existMeta = svgEl.querySelector('metadata[data-bti]');
+        if (!existMeta) {
+            existMeta = document.createElementNS('http://www.w3.org/2000/svg', 'metadata');
+            existMeta.setAttribute('data-bti', '1');
+            svgEl.insertBefore(existMeta, svgEl.firstChild);
+        }
+        existMeta.textContent = metaJson;
+
         const svgData  = svgEl.outerHTML;
         const blob     = new Blob([svgData], { type: 'image/svg+xml' });
 
