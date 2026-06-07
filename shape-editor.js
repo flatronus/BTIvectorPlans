@@ -648,22 +648,15 @@ window._applyDiagonalConstraint = function (pt1Num, pt2Num, diagDist) {
     // Спочатку синхронізуємо G.shapePoints з поточним станом G.figureLines
     _rebuildChainPoints();
 
-    // Знаходимо лінію що ЗАКІНЧУЄТЬСЯ в pt2Num (вона буде змінювати кут).
-    // Якщо не знайдено — міняємо pt1/pt2 місцями (діагональ симетрична).
+    // Якщо перше число більше другого — міняємо місцями (діагональ симетрична)
+    if (pt1Num > pt2Num) { const tmp = pt1Num; pt1Num = pt2Num; pt2Num = tmp; }
+
     let lineIdx = G.figureLines.findIndex(function(l) {
         return !l.isDiagonal && !l.isClosing && l.to === pt2Num;
     });
     if (lineIdx === -1) {
-        const lineIdxAlt = G.figureLines.findIndex(function(l) {
-            return !l.isDiagonal && !l.isClosing && l.to === pt1Num;
-        });
-        if (lineIdxAlt !== -1) {
-            const tmp = pt1Num; pt1Num = pt2Num; pt2Num = tmp;
-            lineIdx = lineIdxAlt;
-        } else {
-            showToast('Лінія що веде до точки ' + pt2Num + ' або ' + pt1Num + ' не знайдена', 'error');
-            return;
-        }
+        showToast('Лінія що веде до точки ' + pt2Num + ' не знайдена', 'error');
+        return;
     }
 
     // Координата pt1 (фіксована — звідси вимірюємо діагональ)
