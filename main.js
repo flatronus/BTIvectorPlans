@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function () {
     /* ── Ініціалізація першого полотна ── */
     window.canvasManager.createCanvas();
 
+    /* ── Ініціалізація панелі Конструктиви ── */
+    if (typeof initConstructsPanel === 'function') initConstructsPanel();
+
     /* ── Акордеон бічної панелі ── */
     window.toggleAccordion = function (panelId) {
         const sections = document.querySelectorAll('.accordion-section');
