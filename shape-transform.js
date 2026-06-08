@@ -397,7 +397,12 @@ window.shapeTransform = (function () {
         }
     }
 
-    function _onMouseUp() { _dragging = false; }
+    function _onMouseUp() { 
+        if (_dragging && _mode === 'move' && _selectedId) {
+            _snapRoomToConstruct();
+        }
+        _dragging = false; 
+    }
 
     /* ── Touch ── */
     function _onTouchStart(e) {
@@ -416,7 +421,78 @@ window.shapeTransform = (function () {
         _onMouseMove({ clientX: t.clientX, clientY: t.clientY });
     }
 
-    function _onTouchEnd() { _dragging = false; }
+    function _onTouchEnd() { 
+        if (_dragging && _mode === 'move' && _selectedId) {
+            _snapRoomToConstruct();
+        }
+        _dragging = false; 
+    }
+
+    /**
+     * Після відпускання миші/дотику у режимі move:
+     * якщо будь-яка точка кімнати знаходиться ближче ніж SNAP_DIST до точки конструктиву —
+     * зміщуємо кімнату так, щоб ці точки збіглись.
+     */
+    const SNAP_DIST = 20; // SVG-пікселів
+    function _snapRoomToConstruct() {
+        if (!_selectedId) return;
+        const item = findHierarchyItemById(_selectedId);
+        if (!item || !item.svgGroup || !item.shapePoints) return;
+        if (typeof _getConstructSnapPoints !== 'function') return;
+
+        const snapPts = _getConstructSnapPoints();
+        if (!snapPts || snapPts.length === 0) return;
+
+        const svg = _getMainSvg();
+        if (!svg) return;
+
+        // Отримуємо CTM групи кімнати
+        let groupCTM = null;
+        try {
+            const svgCTM = svg.getScreenCTM();
+            const grpCTM = item.svgGroup.getScreenCTM();
+            if (svgCTM && grpCTM) groupCTM = svgCTM.inverse().multiply(grpCTM);
+        } catch(e) {}
+
+        const offsetX = item._offsetX || 0;
+        const offsetY = item._offsetY || 0;
+
+        let bestDist = SNAP_DIST;
+        let bestRoomPt = null;
+        let bestSnapPt = null;
+
+        // Перебираємо всі точки кімнати
+        item.shapePoints.forEach(function(pt) {
+            let svgX, svgY;
+            if (groupCTM) {
+                const p = svg.createSVGPoint();
+                p.x = pt.x + offsetX;
+                p.y = pt.y + offsetY;
+                const r = p.matrixTransform(groupCTM);
+                svgX = r.x; svgY = r.y;
+            } else {
+                const { tx, ty } = _parseTransform(item.svgGroup);
+                svgX = pt.x + offsetX + tx;
+                svgY = pt.y + offsetY + ty;
+            }
+
+            snapPts.forEach(function(sp) {
+                const d = Math.sqrt((svgX - sp.x) ** 2 + (svgY - sp.y) ** 2);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestRoomPt = { svgX, svgY };
+                    bestSnapPt = sp;
+                }
+            });
+        });
+
+        if (bestRoomPt && bestSnapPt) {
+            const dx = bestSnapPt.x - bestRoomPt.svgX;
+            const dy = bestSnapPt.y - bestRoomPt.svgY;
+            _moveTree(item, dx, dy);
+            _refreshPoints(item);
+        }
+    }
 
     return api;
 })();

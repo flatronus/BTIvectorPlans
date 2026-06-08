@@ -97,6 +97,10 @@ document.addEventListener('DOMContentLoaded', function () {
             case 'm': shapeTransform.setMode('move');   break;
             case 'r': shapeTransform.setMode('rotate'); break;
         }
+        // Видалення виділеного елемента
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (typeof deleteSelectedHierarchyItem === 'function') deleteSelectedHierarchyItem();
+        }
     });
 
     /* ── Enter у модалці діагоналі ── */

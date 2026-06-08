@@ -345,6 +345,7 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         constructThickness: thicknessM,
         constructFromEnd:   false,
         constructLength:    0,
+        constructSideInward: false,  // false=ззовні (перпендикуляр ліворуч), true=зсередини
         visible:            true,
         children:           [],
         expanded:           false,
@@ -358,12 +359,37 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     if (typeof _syncHierarchyToCanvas === 'function') _syncHierarchyToCanvas();
     if (typeof renderHierarchy === 'function') renderHierarchy();
 
-    // Клік → виділення у панелі Елементи
+    // Клік → виділення у панелі Елементи + підсвічування на канві
     poly.addEventListener('click', function(e) {
         e.stopPropagation();
         if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hierarchyItem);
     });
 }
+
+/**
+ * Підсвічує полоску конструктиву на SVG-канві (виділення).
+ * Викликається з _highlightSvgItem коли item.type === 'construct'.
+ */
+window._highlightConstructItem = function(item) {
+    // Знімаємо всі попередні виділення полосок
+    const canvas = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
+    const mainSvg = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
+    if (mainSvg) {
+        mainSvg.querySelectorAll('polygon[data-construct][data-selected]').forEach(function(el) {
+            el.setAttribute('stroke', el.getAttribute('data-orig-stroke') || '#38bdf8');
+            el.setAttribute('stroke-width', '1');
+            el.removeAttribute('data-selected');
+            el.removeAttribute('data-orig-stroke');
+        });
+    }
+    if (!item || !item._svgPoly) return;
+    const poly = item._svgPoly;
+    const orig = poly.getAttribute('stroke') || '#38bdf8';
+    poly.setAttribute('data-orig-stroke', orig);
+    poly.setAttribute('data-selected', '1');
+    poly.setAttribute('stroke', '#ef4444');
+    poly.setAttribute('stroke-width', '2.5');
+};
 
 /**
  * Проектує точку (px,py) на відрізок (ax,ay)-(bx,by), повертає t ∈ [0,1].
@@ -451,7 +477,9 @@ window._redrawConstructItem = function (item) {
     if (len < 1) return;
 
     const ux = dx / len, uy = dy / len;
-    const nx = -uy, ny = ux;
+    // constructSideInward=false → ліворуч від вектора (ззовні), true → праворуч (зсередини)
+    const side = item.constructSideInward ? 1 : -1;
+    const nx = -uy * side, ny = ux * side;
 
     // Межі вільного проміжку (обчислені при розміщенні)
     let tA = item._tStart;
@@ -484,4 +512,24 @@ window._redrawConstructItem = function (item) {
 
     // Видимість
     item._svgPoly.style.display = item.visible === false ? 'none' : '';
+};
+
+/**
+ * Повертає всі характерні точки конструктивів на активній канві
+ * (кути полосок — 4 точки кожної) у SVG-координатах.
+ * Використовується для snap кімнати при переміщенні.
+ * @returns {Array<{x:number,y:number}>}
+ */
+window._getConstructSnapPoints = function() {
+    const pts = [];
+    (G.hierarchyData || []).forEach(function(item) {
+        if (item.type !== 'construct' || !item._svgPoly) return;
+        const raw = item._svgPoly.getAttribute('points') || '';
+        raw.trim().split(/\s+/).forEach(function(pair) {
+            const p = pair.split(',');
+            const x = parseFloat(p[0]), y = parseFloat(p[1]);
+            if (!isNaN(x) && !isNaN(y)) pts.push({ x, y });
+        });
+    });
+    return pts;
 };
