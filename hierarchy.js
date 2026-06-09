@@ -110,18 +110,6 @@ window._highlightSvgItem = function (item) {
         });
         // Видаляємо мітки точок попереднього виділення
         mainSvg.querySelectorAll('[data-point-label]').forEach(el => el.remove());
-        // Знімаємо виділення з полосок конструктивів
-        mainSvg.querySelectorAll('polygon[data-construct][data-selected]').forEach(function(el) {
-            el.setAttribute('stroke', el.getAttribute('data-orig-stroke') || '#38bdf8');
-            el.setAttribute('stroke-width', '1');
-            el.removeAttribute('data-selected');
-            el.removeAttribute('data-orig-stroke');
-        });
-    }
-    // Для construct — спеціальне виділення (немає svgGroup)
-    if (item && item.type === 'construct') {
-        if (typeof _highlightConstructItem === 'function') _highlightConstructItem(item);
-        return;
     }
     if (!item || !item.svgGroup) return;
 
@@ -278,7 +266,6 @@ const PROP_SCHEMA = {
         { group: 'Конструктив' },
         { key: 'name',             label: 'Назва',                  type: 'string', readOnly: false },
         { key: 'constructThickness', label: 'Товщина (м)',          type: 'number', readOnly: false, hint: '0.20' },
-        { key: 'constructSideInward', label: 'Зсередини',           type: 'bool',   readOnly: false },
         { key: 'constructFromEnd',   label: 'Початок від кінця B',  type: 'bool',   readOnly: false },
         { key: 'constructLength',    label: 'Довжина від початку (м)', type: 'number', readOnly: false, hint: 'Вся довжина якщо 0' },
         { group: 'Відображення' },
@@ -313,7 +300,6 @@ function _propGet(item, key) {
     if (key === 'dimensionsOutside') return item.dimensionsOutside === true;
     if (key === 'constructThickness') return item.constructThickness != null ? item.constructThickness : (typeof CONSTRUCT_THICKNESS_M !== 'undefined' ? CONSTRUCT_THICKNESS_M : 0.2);
     if (key === 'constructFromEnd')   return item.constructFromEnd === true;
-    if (key === 'constructSideInward') return item.constructSideInward === true;
     if (key === 'constructLength')    return item.constructLength  != null ? item.constructLength  : 0;
     return item[key] ?? '';
 }
@@ -377,10 +363,9 @@ function _propSet(item, key, value) {
         _syncElementToParentAndRedraw(item);
         return;
     }
-    if (key === 'constructThickness' || key === 'constructFromEnd' || key === 'constructLength' || key === 'constructSideInward') {
+    if (key === 'constructThickness' || key === 'constructFromEnd' || key === 'constructLength') {
         if (key === 'constructThickness') item.constructThickness = parseFloat(String(value).replace(',', '.')) || CONSTRUCT_THICKNESS_M;
         else if (key === 'constructFromEnd') item.constructFromEnd = value;
-        else if (key === 'constructSideInward') item.constructSideInward = value;
         else if (key === 'constructLength') item.constructLength = parseFloat(String(value).replace(',', '.')) || 0;
         if (typeof _redrawConstructItem === 'function') _redrawConstructItem(item);
         return;
@@ -450,6 +435,37 @@ function _syncElementToParentAndRedraw(elItem) {
         });
     }
     if (!lineData) return;
+
+    // ── Drag-WI1: ключ починається з 'wi_drag_' ──
+    // Цей елемент вставлено через drag-and-drop; оновлюємо тріплет у lineData.elements
+    // і перемальовуємо власну SVG-групу через _redrawWindowElement.
+    if (elItem._elKey && elItem._elKey.startsWith('wi_drag_')) {
+        // Оновлюємо тріплет у lineData.elements
+        var els = lineData.elements || [];
+        // Ідентифікуємо тріплет: шукаємо за старим elStart або за послідовністю
+        // Зберігаємо старий elStart щоб знайти тріплет
+        for (var i = 0; i < els.length; i++) {
+            if (els[i]?.type === 'number' && els[i+1]?.type === 'number' && els[i+2]?.type === 'element') {
+                var rawCode = els[i+2].value;
+                var code = rawCode.startsWith('-') ? rawCode.substring(1) : rawCode;
+                if (code !== 'WI1') { i += 2; continue; }
+                // Знаходимо тріплет, що відповідає цьому elItem по близькості start
+                // (перший WI1 з таким же _hostLineId)
+                els[i].value   = elItem.elStart;
+                els[i+1].value = elItem.elEnd;
+                var newSide = elItem.elSide != null ? elItem.elSide : 1;
+                els[i+2].value = newSide === -1 ? '-WI1' : 'WI1';
+                lineData.code = _rebuildLineCode(lineData.elements, lineData.direction, lineData.lineType);
+                break;
+            }
+        }
+        // Перемальовуємо власну групу WI1
+        elItem._side = elItem.elSide != null ? elItem.elSide : 1;
+        if (typeof _redrawWindowElement === 'function') _redrawWindowElement(elItem);
+        elItem.name = _buildElementName(elItem);
+        renderHierarchy();
+        return;
+    }
 
     // Оновлюємо lineData.elements — замінюємо значення start/end/side і товщину
     var elements = lineData.elements || [];
@@ -529,19 +545,6 @@ window.renderProperties = function (item) {
     ].join('');
     addBtn.onclick = function() { _showAddCustomPropDialog(item, body); };
     titleBar.appendChild(addBtn);
-
-    /* ── Кнопка видалення ── */
-    const delBtn = document.createElement('button');
-    delBtn.title = 'Видалити елемент';
-    delBtn.textContent = '🗑';
-    delBtn.style.cssText = [
-        'background:#f44336;color:#fff;border:none;border-radius:3px;',
-        'font-size:13px;padding:0 6px;cursor:pointer;',
-        'line-height:18px;flex-shrink:0;margin-left:4px;',
-    ].join('');
-    delBtn.onclick = function() { deleteSelectedHierarchyItem(); };
-    titleBar.appendChild(delBtn);
-
     body.appendChild(titleBar);
 
     /* ── Таблиця властивостей ── */
@@ -881,45 +884,6 @@ function _buildElementName(elItem) {
     const to   = elItem.lineTo   ?? '?';
     return base + ' ' + from + '-' + to;
 }
-
-/**
- * Видаляє виділений елемент ієрархії (фігуру, примітив, конструктив).
- * Прибирає SVG-групу або полігон з DOM, видаляє з G.hierarchyData.
- */
-window.deleteSelectedHierarchyItem = function() {
-    const id = G.selectedHierarchyItem;
-    if (id == null) { showToast('Оберіть елемент для видалення', 'warning'); return; }
-    const item = findHierarchyItemById(id);
-    if (!item) return;
-
-    // Видаляємо SVG
-    if (item.type === 'construct') {
-        if (item._svgPoly && item._svgPoly.parentNode)
-            item._svgPoly.parentNode.removeChild(item._svgPoly);
-    } else {
-        if (item.svgGroup && item.svgGroup.parentNode)
-            item.svgGroup.parentNode.removeChild(item.svgGroup);
-        // Прибираємо мітки точок
-        const canvas = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
-        const mainSvg = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
-        if (mainSvg) mainSvg.querySelectorAll('[data-point-label]').forEach(el => el.remove());
-    }
-
-    // Видаляємо з дерева ієрархії
-    function _removeFromTree(items) {
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].id === id) { items.splice(i, 1); return true; }
-            if (_removeFromTree(items[i].children || [])) return true;
-        }
-        return false;
-    }
-    _removeFromTree(G.hierarchyData);
-    G.selectedHierarchyItem = null;
-    _syncHierarchyToCanvas();
-    renderHierarchy();
-    renderProperties(null);
-    showToast('Елемент видалено', 'info');
-};
 
 window.openShapeModalForEdit = function (item) {
     appState.viewingElementMode    = false;
