@@ -14,12 +14,11 @@ window.initConstructsPanel = function () {
 
     const hint = document.createElement('div');
     hint.style.cssText = 'font-size:11px;color:#6b7280;padding:6px 4px 8px;';
-    hint.textContent = 'Перетягніть полоску на лінію фігури — вона автоматично вирівняється між двома точками.';
+    hint.textContent = 'Перетягніть елемент на лінію. Вікно прилипає з того боку, з якого підносите.';
     body.appendChild(hint);
 
-    // Полоска конструктиву 0.20 м
-    const strip = _makeConstructStrip('Перекриття 0.20 м', CONSTRUCT_THICKNESS_M);
-    body.appendChild(strip);
+    body.appendChild(_makeConstructStrip('Перекриття 0.20 м', CONSTRUCT_THICKNESS_M));
+    body.appendChild(_makeWindowStrip('Вікно WI1'));
 };
 
 /** Будує drag-джерело полоски */
@@ -336,6 +335,11 @@ function _placeConstructStrip(lineInfo, thicknessM) {
 
     _cActiveSvg.appendChild(poly);
 
+    // Маркер початку полоски (маленький трикутник; прихований поки не виділено)
+    const startMarker = _makeConstructStartMarker(sx1, sy1, nx, ny, thicknessPx);
+    startMarker.style.display = 'none';
+    _cActiveSvg.appendChild(startMarker);
+
     /* ── Реєструємо в ієрархії ── */
     const stripCount = G.hierarchyData.filter(function(i) { return i.type === 'construct'; }).length + 1;
     const hierarchyItem = {
@@ -344,24 +348,28 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         name:                'Полоска ' + stripCount,
         constructThickness:  thicknessM,
         constructSideInward: false,
-        constructAutoWidth:  false,
         constructFromEnd:    false,
         constructLength:     0,
+        constructAutoWidth:  false,
         visible:             true,
         children:            [],
         expanded:            false,
         parentId:            null,
-        // Геометрія для перемалювання
         _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
         _tStart: tStart, _tEnd: tEnd,
         _svgPoly: poly,
+        _startMarker: startMarker,
     };
     G.hierarchyData.push(hierarchyItem);
     if (typeof _syncHierarchyToCanvas === 'function') _syncHierarchyToCanvas();
     if (typeof renderHierarchy === 'function') renderHierarchy();
 
-    // Клік → виділення у панелі Елементи + підсвічування полоски на канві
+    // Клік → виділення у панелі Елементи + на канві
     poly.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hierarchyItem);
+    });
+    startMarker.addEventListener('click', function(e) {
         e.stopPropagation();
         if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hierarchyItem);
     });
@@ -439,6 +447,34 @@ function _distToSegment(px, py, ax, ay, bx, by) {
 }
 
 /**
+ * Будує SVG-маркер початку полоски: маленький рівнобедрений трикутник
+ * що вказує у напрямку полоски і стоїть на стартовому торці.
+ */
+function _makeConstructStartMarker(sx1, sy1, nx, ny, thicknessPx) {
+    // Вектор вздовж полоски — перпендикуляр до (nx, ny): (ny, -nx)
+    const ax = ny, ay = -nx;
+    const half = thicknessPx / 2;
+    const tip  = 7; // виступ трикутника вперед (px)
+
+    // Три точки: два кути стартового торця і "ніс" трикутника
+    const bx1 = sx1,            by1 = sy1;             // кут 0 (на лінії)
+    const bx2 = sx1 + nx * thicknessPx, by2 = sy1 + ny * thicknessPx; // кут 1
+    const bx3 = sx1 + nx * half - ax * tip,
+          by3 = sy1 + ny * half - ay * tip;             // ніс (виступ проти напрямку)
+
+    const pts = [bx1+','+by1, bx2+','+by2, bx3+','+by3].join(' ');
+
+    const tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    tri.setAttribute('points', pts);
+    tri.setAttribute('fill', '#ef4444');
+    tri.setAttribute('stroke', 'none');
+    tri.setAttribute('data-construct-start', '1');
+    tri.style.pointerEvents = 'all';
+    tri.style.cursor = 'pointer';
+    return tri;
+}
+
+/**
  * Перемальовує полоску на основі властивостей ієрархічного елемента.
  * Враховує constructFromEnd і constructLength для обрізки довжини.
  */
@@ -446,6 +482,15 @@ window._redrawConstructItem = function (item) {
     if (!item || !item._svgPoly) return;
 
     const { _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2 } = item;
+
+    // ── Автоширина: підлаштувати товщину до найближчого WI1 на тій самій лінії ──
+    if (item.constructAutoWidth) {
+        const winThickness = _findWindowThicknessOnLine(item);
+        if (winThickness != null) {
+            item.constructThickness = winThickness;
+        }
+    }
+
     const thicknessPx = (item.constructThickness || CONSTRUCT_THICKNESS_M) * SCALE;
 
     const dx  = x2 - x1, dy = y2 - y1;
@@ -453,24 +498,19 @@ window._redrawConstructItem = function (item) {
     if (len < 1) return;
 
     const ux = dx / len, uy = dy / len;
-    // constructSideInward: false=ззовні (нормаль вліво: -uy,ux), true=зсередини (+uy,-ux)
     const sideSign = item.constructSideInward ? 1 : -1;
-    const nx = -uy * sideSign, ny = ux * sideSign;
+    const nx = uy * sideSign, ny = -ux * sideSign;
 
-    // Межі вільного проміжку (обчислені при розміщенні)
     let tA = item._tStart;
     let tB = item._tEnd;
 
-    // Застосовуємо constructLength (в метрах)
     const lenM = item.constructLength || 0;
     if (lenM > 0) {
         const lenPx  = lenM * SCALE;
         const tSpan  = lenPx / len;
         if (item.constructFromEnd) {
-            // Відлік від кінця (tB)
             tA = Math.max(item._tStart, tB - tSpan);
         } else {
-            // Відлік від початку (tA)
             tB = Math.min(item._tEnd, tA + tSpan);
         }
     }
@@ -485,7 +525,468 @@ window._redrawConstructItem = function (item) {
         (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
     ];
     item._svgPoly.setAttribute('points', pts.join(' '));
-
-    // Видимість
     item._svgPoly.style.display = item.visible === false ? 'none' : '';
+
+    // Оновлюємо маркер початку
+    if (item._startMarker) {
+        if (item._startMarker.parentNode) item._startMarker.parentNode.removeChild(item._startMarker);
+        const newMarker = _makeConstructStartMarker(sx1, sy1, nx, ny, thicknessPx);
+        // Зберігаємо видимість: маркер видний лише при виділенні
+        const isSelected = item._svgPoly.getAttribute('data-selected-construct') === '1';
+        newMarker.style.display = isSelected ? '' : 'none';
+        if (item._svgPoly.parentNode) item._svgPoly.parentNode.appendChild(newMarker);
+        newMarker.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (typeof selectHierarchyItem === 'function') selectHierarchyItem(item);
+        });
+        item._startMarker = newMarker;
+    }
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+ * ВІКНО WI1 — drag-and-drop на лінію фігури
+ * Сторона визначається з якого боку підносять (cross-product).
+ * ═══════════════════════════════════════════════════════════════════ */
+
+const _WIN_WIDTH_M     = 0.90;   // ширина вікна за замовч.
+const _WIN_THICKNESS_M = 0.20;   // товщина вікна за замовч.
+
+/** Будує drag-джерело «Вікно WI1» */
+function _makeWindowStrip(label) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = [
+        'display:flex;flex-direction:column;align-items:center;gap:4px;',
+        'padding:8px 4px;margin-bottom:6px;',
+        'background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;',
+        'cursor:grab;user-select:none;',
+    ].join('');
+    wrap.title = 'Перетягніть вікно на лінію. Сторона визначається автоматично.';
+
+    // Превʼю WI1: прямокутник + середня лінія
+    const prev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    prev.setAttribute('width', '80'); prev.setAttribute('height', '14');
+    prev.setAttribute('viewBox', '0 0 80 14');
+    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    r.setAttribute('x','1'); r.setAttribute('y','2'); r.setAttribute('width','78'); r.setAttribute('height','10');
+    r.setAttribute('fill','none'); r.setAttribute('stroke','#c2410c'); r.setAttribute('stroke-width','1.5');
+    const ml = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ml.setAttribute('x1','1'); ml.setAttribute('y1','7'); ml.setAttribute('x2','79'); ml.setAttribute('y2','7');
+    ml.setAttribute('stroke','#c2410c'); ml.setAttribute('stroke-width','1');
+    prev.appendChild(r); prev.appendChild(ml);
+    wrap.appendChild(prev);
+
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'font-size:11px;color:#c2410c;font-weight:600;';
+    lbl.textContent = label;
+    wrap.appendChild(lbl);
+
+    wrap.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        _startWindowDrag(e.clientX, e.clientY);
+    });
+    wrap.addEventListener('touchstart', function(e) {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        _startWindowDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+
+    return wrap;
+}
+
+/* ── Window drag-стан (окремий від полоски) ── */
+let _wDrag = false, _wGhost = null, _wTargetLine = null, _wActiveSvg = null, _wSnapEl = null;
+
+function _startWindowDrag(clientX, clientY) {
+    _wDrag = true;
+    _wTargetLine = null;
+
+    const canvas = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
+    _wActiveSvg  = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
+
+    _wGhost = document.createElement('div');
+    _wGhost.style.cssText = [
+        'position:fixed;pointer-events:none;z-index:9000;',
+        'width:50px;height:10px;background:rgba(251,146,60,0.4);',
+        'border:1px solid #ea580c;border-radius:2px;transform:translate(-50%,-50%);',
+    ].join('');
+    document.body.appendChild(_wGhost);
+    _wGhostMove(clientX, clientY);
+
+    document.addEventListener('mousemove', _wOnMouseMove);
+    document.addEventListener('mouseup',   _wOnMouseUp);
+    document.addEventListener('touchmove', _wOnTouchMove, { passive: false });
+    document.addEventListener('touchend',  _wOnTouchEnd);
+}
+
+function _wGhostMove(cx, cy) { if (_wGhost) { _wGhost.style.left = cx+'px'; _wGhost.style.top = cy+'px'; } }
+
+function _wOnMouseMove(e) { if (!_wDrag) return; _wGhostMove(e.clientX, e.clientY); _wDetectLine(e.clientX, e.clientY); }
+function _wOnTouchMove(e) { if (!_wDrag || e.touches.length !== 1) return; e.preventDefault(); _wGhostMove(e.touches[0].clientX, e.touches[0].clientY); _wDetectLine(e.touches[0].clientX, e.touches[0].clientY); }
+function _wOnMouseUp(e)   { _wFinish(e.clientX, e.clientY); }
+function _wOnTouchEnd(e)  { const t = e.changedTouches[0]; _wFinish(t ? t.clientX : 0, t ? t.clientY : 0); }
+
+function _wScreenToSvg(cx, cy) {
+    if (!_wActiveSvg) return null;
+    const pt = _wActiveSvg.createSVGPoint();
+    pt.x = cx; pt.y = cy;
+    try { return pt.matrixTransform(_wActiveSvg.getScreenCTM().inverse()); } catch(e) { return null; }
+}
+
+function _wDetectLine(clientX, clientY) {
+    if (!_wActiveSvg) return;
+    const svgPt = _wScreenToSvg(clientX, clientY);
+    if (!svgPt) return;
+
+    let best = null, bestDist = Infinity;
+    const THRESH = 30;
+
+    _flattenHierarchy(G.hierarchyData).forEach(function(item) {
+        if (!item.figureLines || !item.shapePoints || !item.svgGroup) return;
+        const offX = item._offsetX || 0, offY = item._offsetY || 0;
+        let grpCTM = null;
+        try {
+            const ss = _wActiveSvg.getScreenCTM(), gs = item.svgGroup.getScreenCTM();
+            if (ss && gs) grpCTM = ss.inverse().multiply(gs);
+        } catch(e) {}
+
+        item.figureLines.forEach(function(ld) {
+            if (ld.isDiagonal) return;
+            const fp = item.shapePoints.find(function(p) { return p.num === ld.from; });
+            const tp = ld.isClosing ? item.shapePoints[0] : item.shapePoints.find(function(p) { return p.num === ld.to; });
+            if (!fp || !tp) return;
+
+            let x1 = fp.x + offX, y1 = fp.y + offY, x2 = tp.x + offX, y2 = tp.y + offY;
+            if (grpCTM) {
+                const a = _applyMatrix(grpCTM, x1, y1), b = _applyMatrix(grpCTM, x2, y2);
+                x1 = a.x; y1 = a.y; x2 = b.x; y2 = b.y;
+            }
+
+            const dist = _distToSegment(svgPt.x, svgPt.y, x1, y1, x2, y2);
+            if (dist < THRESH && dist < bestDist) {
+                bestDist = dist;
+                // Сторона: cross-product вектора лінії і вектора до курсора
+                const ldx = x2 - x1, ldy = y2 - y1;
+                const cross = ldx * (svgPt.y - y1) - ldy * (svgPt.x - x1);
+                const side = cross >= 0 ? 1 : -1;
+                best = { x1, y1, x2, y2, lineData: ld, item, offX, offY, grpCTM, dropX: svgPt.x, dropY: svgPt.y, side };
+            }
+        });
+    });
+
+    // Прибираємо старий snap-highlight
+    if (_wSnapEl && _wSnapEl.parentNode) _wSnapEl.parentNode.removeChild(_wSnapEl);
+    _wSnapEl = null;
+    _wTargetLine = best;
+
+    if (best) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        el.setAttribute('x1', best.x1); el.setAttribute('y1', best.y1);
+        el.setAttribute('x2', best.x2); el.setAttribute('y2', best.y2);
+        el.setAttribute('stroke', '#ea580c'); el.setAttribute('stroke-width', '4');
+        el.setAttribute('stroke-dasharray', '6 3'); el.setAttribute('vector-effect', 'non-scaling-stroke');
+        el.style.pointerEvents = 'none';
+        _wActiveSvg.appendChild(el);
+        _wSnapEl = el;
+    }
+}
+
+function _wFinish(cx, cy) {
+    if (!_wDrag) return;
+    _wDrag = false;
+    if (_wSnapEl && _wSnapEl.parentNode) _wSnapEl.parentNode.removeChild(_wSnapEl);
+    _wSnapEl = null;
+    if (_wGhost) { if (_wGhost.parentNode) _wGhost.parentNode.removeChild(_wGhost); _wGhost = null; }
+    document.removeEventListener('mousemove', _wOnMouseMove);
+    document.removeEventListener('mouseup',   _wOnMouseUp);
+    document.removeEventListener('touchmove', _wOnTouchMove);
+    document.removeEventListener('touchend',  _wOnTouchEnd);
+    if (!_wTargetLine) return;
+    _placeWindowOnLine(_wTargetLine);
+    _wTargetLine = null;
+}
+
+/**
+ * Малює WI1 на лінії в точці кидання.
+ */
+function _placeWindowOnLine(li) {
+    if (!_wActiveSvg) return;
+    const { x1, y1, x2, y2, lineData, item, dropX, dropY, side } = li;
+
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+
+    const ux = dx / len, uy = dy / len;
+    // side=1 → нормаль вліво від вектора (cross>0): nx=-uy, ny=ux
+    // side=-1 → нормаль вправо: nx=uy, ny=-ux
+    const nx = -uy * side, ny = ux * side;
+
+    const tDrop = _projectToLine(dropX, dropY, x1, y1, x2, y2);
+    const winPx = _WIN_WIDTH_M * SCALE;
+    const tHalf = (winPx / 2) / len;
+    let tS = Math.max(0, tDrop - tHalf);
+    let tE = Math.min(1, tS + winPx / len);
+    tS = Math.max(0, tE - winPx / len);
+
+    const thPx  = _WIN_THICKNESS_M * SCALE;
+    const elStartM = parseFloat((tS * len / SCALE).toFixed(3));
+    const elEndM   = parseFloat((tE * len / SCALE).toFixed(3));
+    const sx   = x1 + ux * tS * len, sy   = y1 + uy * tS * len;
+    const elen = (tE - tS) * len;
+
+    // Малюємо <g> з WI1
+    const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const newId = G.hierarchyIdCounter++;
+    grp.setAttribute('data-hierarchy-id', String(newId));
+    _drawWI1Svg(grp, sx, sy, ux, uy, nx, ny, elen, thPx);
+
+    // Вікно малюємо ПРЯМО в SVG (не в групу фігури), щоб воно завжди було ВИЩЕ полосок
+    _wActiveSvg.appendChild(grp);
+
+    // Реєструємо в ієрархії
+    const winCount = G.hierarchyData.filter(function(i) { return i.type === 'element' && i.elCode === 'WI1'; }).length + 1;
+    const hItem = {
+        id:          newId,
+        type:        'element',
+        name:        'Вікно ' + (lineData.from || '?') + '-' + (lineData.isClosing ? '1' : (lineData.to || '?')),
+        elCode:      'WI1',
+        elStart:     elStartM,
+        elEnd:       elEndM,
+        elSide:      side,
+        elThickness: _WIN_THICKNESS_M,
+        lineFrom:    lineData.from,
+        lineTo:      lineData.isClosing ? null : lineData.to,
+        _hostLineId: lineData.id,
+        _elKey:      'wi_drag_' + newId,
+        svgGroup:    grp,
+        children:    [],
+        expanded:    false,
+        parentId:    item.id,
+        // Геометрія лінії для перемалювання
+        _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
+        _side:   side,
+    };
+
+    // Вставляємо тріплет у lineData.elements батьківської фігури
+    if (!lineData.elements) lineData.elements = [];
+    const codeStr = side === -1 ? '-WI1' : 'WI1';
+    lineData.elements.push({ type: 'number', value: elStartM });
+    lineData.elements.push({ type: 'number', value: elEndM   });
+    lineData.elements.push({ type: 'element', value: codeStr  });
+
+    if (!item.children) item.children = [];
+    item.children.push(hItem);
+
+    grp.style.cursor = 'pointer';
+    grp.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hItem);
+    });
+
+    if (typeof _syncHierarchyToCanvas === 'function') _syncHierarchyToCanvas();
+    if (typeof renderHierarchy         === 'function') renderHierarchy();
+    if (typeof renderProperties        === 'function') renderProperties(hItem);
+    showToast('Вікно розміщено. Редагуйте у Властивостях.', 'success');
+}
+
+/** Малює WI1 у SVG-групу */
+function _drawWI1Svg(target, sx, sy, ux, uy, nx, ny, elen, thPx) {
+    const c1x = sx, c1y = sy;
+    const c2x = sx + ux * elen, c2y = sy + uy * elen;
+    const c3x = c2x + nx * thPx, c3y = c2y + ny * thPx;
+    const c4x = c1x + nx * thPx, c4y = c1y + ny * thPx;
+
+    // Прозора підкладка (hit-area)
+    const hit = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    hit.setAttribute('points', [c1x+','+c1y, c2x+','+c2y, c3x+','+c3y, c4x+','+c4y].join(' '));
+    hit.setAttribute('fill', 'transparent'); hit.setAttribute('stroke', 'none');
+    target.appendChild(hit);
+
+    // Контур
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    rect.setAttribute('points', [c1x+','+c1y, c2x+','+c2y, c3x+','+c3y, c4x+','+c4y].join(' '));
+    rect.setAttribute('fill', 'none'); rect.setAttribute('stroke', 'black');
+    rect.setAttribute('stroke-width', '1'); rect.setAttribute('vector-effect', 'non-scaling-stroke');
+    target.appendChild(rect);
+
+    // Середня лінія
+    const mid = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    mid.setAttribute('x1', c1x + nx * thPx / 2); mid.setAttribute('y1', c1y + ny * thPx / 2);
+    mid.setAttribute('x2', c2x + nx * thPx / 2); mid.setAttribute('y2', c2y + ny * thPx / 2);
+    mid.setAttribute('stroke', 'black'); mid.setAttribute('stroke-width', '1');
+    mid.setAttribute('vector-effect', 'non-scaling-stroke');
+    target.appendChild(mid);
+}
+
+/**
+ * Перемальовує SVG-групу вікна WI1 після редагування elStart/elEnd/elSide у Властивостях.
+ */
+window._redrawWindowElement = function(elItem) {
+    if (!elItem || !elItem.svgGroup) return;
+
+    const x1 = elItem._lineX1, y1 = elItem._lineY1;
+    const x2 = elItem._lineX2, y2 = elItem._lineY2;
+    if (x1 == null) return;
+
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+
+    const ux = dx / len, uy = dy / len;
+    const side = elItem.elSide != null ? elItem.elSide : 1;
+    const nx = -uy * side, ny = ux * side;
+    elItem._side = side;
+
+    const thPx   = (elItem.elThickness || _WIN_THICKNESS_M) * SCALE;
+    const startPx = elItem.elStart * SCALE;
+    const elen    = (elItem.elEnd - elItem.elStart) * SCALE;
+    const sx = x1 + ux * startPx, sy = y1 + uy * startPx;
+
+    while (elItem.svgGroup.firstChild) elItem.svgGroup.removeChild(elItem.svgGroup.firstChild);
+    _drawWI1Svg(elItem.svgGroup, sx, sy, ux, uy, nx, ny, elen, thPx);
+};
+
+/**
+ * Повертає товщину найближчого вікна WI1 на тій самій лінії що й полоска,
+ * або null якщо вікон немає.
+ */
+function _findWindowThicknessOnLine(constructItem) {
+    const allItems = _flattenHierarchy(G.hierarchyData);
+    let best = null;
+
+    allItems.forEach(function(item) {
+        if (item.type !== 'element' || item.elCode !== 'WI1') return;
+        // Перевіряємо чи лінія вікна та лінія полоски збігаються (за координатами)
+        if (item._lineX1 == null) return;
+        const cx1 = constructItem._lineX1, cy1 = constructItem._lineY1;
+        const cx2 = constructItem._lineX2, cy2 = constructItem._lineY2;
+        const wx1 = item._lineX1,          wy1 = item._lineY1;
+        const wx2 = item._lineX2,          wy2 = item._lineY2;
+        const same = (Math.abs(cx1 - wx1) < 1 && Math.abs(cy1 - wy1) < 1 &&
+                      Math.abs(cx2 - wx2) < 1 && Math.abs(cy2 - wy2) < 1) ||
+                     (Math.abs(cx1 - wx2) < 1 && Math.abs(cy1 - wy2) < 1 &&
+                      Math.abs(cx2 - wx1) < 1 && Math.abs(cy2 - wy1) < 1);
+        if (!same) return;
+        const th = item.elThickness != null ? item.elThickness : (typeof ELEMENT_THICKNESS !== 'undefined' ? ELEMENT_THICKNESS : 0.20);
+        if (best == null) best = th;
+    });
+
+    return best;
+}
+
+/**
+ * Застосовує автоширину вікна WI1: розширює elEnd - elStart до відстані
+ * до найближчої лінії іншої фігури, що перетинає перпендикуляр з центру вікна.
+ * Змінює item.elStart і item.elEnd.
+ */
+window._applyWindowAutoWidth = function(elItem) {
+    if (!elItem || elItem.elCode !== 'WI1') return;
+    const x1 = elItem._lineX1, y1 = elItem._lineY1;
+    const x2 = elItem._lineX2, y2 = elItem._lineY2;
+    if (x1 == null) return;
+
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+    const ux = dx / len; // одиничний вектор вздовж лінії
+
+    // Поточний центр вікна у параметрі t
+    const tCenter = ((elItem.elStart + elItem.elEnd) / 2) / (len / SCALE);
+    // Поточна ширина у метрах
+    const curWidthM = elItem.elEnd - elItem.elStart;
+
+    // Шукаємо найближчі точки всіх інших фігур вздовж лінії (обмежувачі)
+    const hostParent = _findParentForElement(elItem);
+    const allItems = _flattenHierarchy(G.hierarchyData);
+
+    let leftLimit  = 0;           // t-значення лівого обмежувача
+    let rightLimit = 1;           // t-значення правого обмежувача
+
+    allItems.forEach(function(other) {
+        if (!other.figureLines || !other.shapePoints) return;
+        if (hostParent && other.id === hostParent.id) return; // ту саму фігуру пропускаємо
+
+        const offX = other._offsetX || 0, offY = other._offsetY || 0;
+        let grpCTM = null;
+        const canvas = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
+        const mainSvg = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
+        if (mainSvg && other.svgGroup) {
+            try {
+                const ss = mainSvg.getScreenCTM(), gs = other.svgGroup.getScreenCTM();
+                if (ss && gs) grpCTM = ss.inverse().multiply(gs);
+            } catch(e) {}
+        }
+
+        other.figureLines.forEach(function(ld) {
+            if (ld.isDiagonal) return;
+            const fp = other.shapePoints.find(function(p) { return p.num === ld.from; });
+            const tp = ld.isClosing ? other.shapePoints[0] : other.shapePoints.find(function(p) { return p.num === ld.to; });
+            if (!fp || !tp) return;
+
+            let ox1 = fp.x + offX, oy1 = fp.y + offY;
+            let ox2 = tp.x + offX, oy2 = tp.y + offY;
+            if (grpCTM) {
+                const a = _applyMatrix(grpCTM, ox1, oy1), b = _applyMatrix(grpCTM, ox2, oy2);
+                ox1 = a.x; oy1 = a.y; ox2 = b.x; oy2 = b.y;
+            }
+
+            // Шукаємо перетин іншої лінії з нашою лінією
+            const t = _segmentIntersectT(x1, y1, x2, y2, ox1, oy1, ox2, oy2);
+            if (t !== null) {
+                if (t < tCenter && t > leftLimit)  leftLimit  = t;
+                if (t > tCenter && t < rightLimit) rightLimit = t;
+            }
+        });
+    });
+
+    // Новий elStart і elEnd у метрах
+    const newStartM = parseFloat((leftLimit  * len / SCALE).toFixed(3));
+    const newEndM   = parseFloat((rightLimit * len / SCALE).toFixed(3));
+
+    if (newEndM > newStartM) {
+        elItem.elStart = newStartM;
+        elItem.elEnd   = newEndM;
+    }
+};
+
+/** Знаходить батьківську фігуру елемента (для autoWidth) */
+function _findParentForElement(elItem) {
+    function search(items) {
+        for (var i = 0; i < items.length; i++) {
+            if ((items[i].children || []).some(function(c) { return c.id === elItem.id; }))
+                return items[i];
+            var r = search(items[i].children || []);
+            if (r) return r;
+        }
+        return null;
+    }
+    return search(G.hierarchyData);
+}
+
+/**
+ * Показує маркер початку полоски (при виділенні).
+ */
+window._showConstructStartMarker = function(item) {
+    if (item._startMarker) item._startMarker.style.display = '';
+};
+
+/**
+ * Ховає маркер початку полоски (при знятті виділення).
+ */
+window._hideConstructStartMarker = function(item) {
+    if (item._startMarker) item._startMarker.style.display = 'none';
+};
+ */
+window._getConstructSnapPoints = function() {
+    const pts = [];
+    (G.hierarchyData || []).forEach(function(item) {
+        if (item.type !== 'construct' || !item._svgPoly) return;
+        const raw = item._svgPoly.getAttribute('points') || '';
+        raw.trim().split(/\s+/).forEach(function(pair) {
+            const p = pair.split(',');
+            const x = parseFloat(p[0]), y = parseFloat(p[1]);
+            if (!isNaN(x) && !isNaN(y)) pts.push({ x, y });
+        });
+    });
+    return pts;
 };
