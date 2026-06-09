@@ -118,10 +118,13 @@ window._highlightSvgItem = function (item) {
             el.removeAttribute('data-selected-construct');
             el.removeAttribute('data-orig-stroke');
         });
-        // Ховаємо маркери початку всіх полосок
-        G.hierarchyData.forEach(function(i) {
-            if (i.type === 'construct' && typeof _hideConstructStartMarker === 'function')
-                _hideConstructStartMarker(i);
+        // Відновлюємо кольори маркерів початку полосок
+        (G.hierarchyData || []).forEach(function(it) {
+            if (it.type !== 'construct' || !it._svgStartMarker) return;
+            const circ = it._svgStartMarker.querySelector('circle');
+            if (circ) { circ.setAttribute('stroke', '#0ea5e9'); circ.setAttribute('fill', 'rgba(56,189,248,0.25)'); }
+            const arrow = it._svgStartMarker.querySelector('polygon');
+            if (arrow) arrow.setAttribute('fill', '#0ea5e9');
         });
         // Видаляємо мітки точок попереднього виділення
         mainSvg.querySelectorAll('[data-point-label]').forEach(el => el.remove());
@@ -138,7 +141,15 @@ window._highlightSvgItem = function (item) {
             item._svgPoly.setAttribute('stroke', '#ef4444');
             item._svgPoly.setAttribute('stroke-width', '2.5');
         }
-        if (typeof _showConstructStartMarker === 'function') _showConstructStartMarker(item);
+        // Показуємо маркер початку яскраво
+        if (item._svgStartMarker) {
+            item._svgStartMarker.style.opacity = '1';
+            // Підсвічуємо кружок маркера
+            const circ = item._svgStartMarker.querySelector('circle');
+            if (circ) { circ.setAttribute('stroke', '#ef4444'); circ.setAttribute('fill', 'rgba(239,68,68,0.18)'); }
+            const arrow = item._svgStartMarker.querySelector('polygon');
+            if (arrow) arrow.setAttribute('fill', '#ef4444');
+        }
         return;
     }
 
@@ -287,7 +298,7 @@ const PROP_SCHEMA = {
         { group: 'Конструктив' },
         { key: 'name',               label: 'Назва',                     type: 'string', readOnly: false },
         { key: 'constructThickness', label: 'Товщина (м)',                type: 'number', readOnly: false, hint: '0.20' },
-        { key: 'constructAutoWidth', label: 'Авто-товщина (= вікно)',     type: 'bool',   readOnly: false },
+        { key: 'constructAutoThickness', label: 'Авто-товщина (як вікно)', type: 'bool', readOnly: false },
         { key: 'constructSideInward',label: 'Зсередини',                  type: 'bool',   readOnly: false },
         { key: 'constructFromEnd',   label: 'Початок від кінця B',        type: 'bool',   readOnly: false },
         { key: 'constructLength',    label: 'Довжина від початку (м)',     type: 'number', readOnly: false, hint: 'Вся довжина якщо 0' },
@@ -325,7 +336,7 @@ function _propGet(item, key) {
     if (key === 'constructFromEnd')   return item.constructFromEnd === true;
     if (key === 'constructSideInward') return item.constructSideInward === true;
     if (key === 'constructLength')    return item.constructLength  != null ? item.constructLength  : 0;
-    if (key === 'constructAutoWidth') return item.constructAutoWidth === true;
+    if (key === 'constructAutoThickness') return item.constructAutoThickness === true;
     if (key === 'windowAutoWidth')    return item.windowAutoWidth === true;
     // elSide як bool: true = зсередини (side=-1), false = ззовні (side=1)
     if (key === 'elSide') return (item.elSide != null ? item.elSide : 1) === -1;
@@ -391,25 +402,42 @@ function _propSet(item, key, value) {
         _syncElementToParentAndRedraw(item);
         return;
     }
-    if (key === 'constructThickness' || key === 'constructFromEnd' || key === 'constructLength' || key === 'constructSideInward' || key === 'constructAutoWidth') {
+    if (key === 'constructThickness' || key === 'constructFromEnd' || key === 'constructLength' || key === 'constructSideInward' || key === 'constructAutoThickness') {
         if (key === 'constructThickness') item.constructThickness = parseFloat(String(value).replace(',', '.')) || CONSTRUCT_THICKNESS_M;
         else if (key === 'constructFromEnd') item.constructFromEnd = value;
         else if (key === 'constructSideInward') item.constructSideInward = value;
         else if (key === 'constructLength') item.constructLength = parseFloat(String(value).replace(',', '.')) || 0;
-        else if (key === 'constructAutoWidth') {
-            item.constructAutoWidth = value;
-            if (value) showToast('Авто-товщина: підлаштовується до вікна на тій самій лінії', 'info');
+        else if (key === 'constructAutoThickness') {
+            item.constructAutoThickness = value;
+            if (value) {
+                // Перевіряємо наявність WI1 на тій самій лінії
+                const hasWI1 = (function() {
+                    const allItems = [];
+                    (function flat(arr) { (arr||[]).forEach(function(i) { allItems.push(i); flat(i.children); }); }(G.hierarchyData));
+                    const EPS = 2;
+                    return allItems.some(function(it) {
+                        if (it.type !== 'element' || it.elCode !== 'WI1') return false;
+                        return Math.abs(it._lineX1 - item._lineX1) < EPS &&
+                               Math.abs(it._lineY1 - item._lineY1) < EPS &&
+                               Math.abs(it._lineX2 - item._lineX2) < EPS &&
+                               Math.abs(it._lineY2 - item._lineY2) < EPS;
+                    });
+                }());
+                if (!hasWI1) {
+                    item.constructAutoThickness = false;
+                    if (typeof showToast === 'function') showToast('Авто-товщина недоступна: на цій лінії немає вікна WI1', 'warning');
+                    renderProperties(item);
+                    return;
+                }
+            }
         }
         if (typeof _redrawConstructItem === 'function') _redrawConstructItem(item);
+        if (key === 'constructAutoThickness') renderProperties(item);
         return;
     }
     if (key === 'windowAutoWidth') {
         item.windowAutoWidth = value;
-        if (value) {
-            if (typeof _applyWindowAutoWidth === 'function') _applyWindowAutoWidth(item);
-            _syncElementToParentAndRedraw(item);
-            showToast('Авто-ширина застосована', 'success');
-        }
+        if (typeof _redrawWindowElement === 'function') _redrawWindowElement(item);
         renderProperties(item);
         return;
     }
@@ -537,6 +565,8 @@ window.deleteSelectedHierarchyItem = function() {
     if (item.type === 'construct') {
         if (item._svgPoly && item._svgPoly.parentNode)
             item._svgPoly.parentNode.removeChild(item._svgPoly);
+        if (item._svgStartMarker && item._svgStartMarker.parentNode)
+            item._svgStartMarker.parentNode.removeChild(item._svgStartMarker);
     } else {
         if (item.svgGroup && item.svgGroup.parentNode)
             item.svgGroup.parentNode.removeChild(item.svgGroup);
