@@ -271,23 +271,35 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         : 0.5;
 
     // Знаходимо межі від вже існуючих полосок НА ТІЙ САМІЙ ЛІНІЇ
-    // Використовуємо збережені _tStart/_tEnd (а не SVG-перетини) — надійніше
-    const EPS_LINE = 2; // px допуск для порівняння ліній
+    // Порівняння напрямконезалежне (A-B або B-A — одна й та сама лінія)
+    const EPS_LINE = 8; // px допуск
+    function _sameLineSegment(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+        return (Math.abs(ax1-bx1)<EPS_LINE && Math.abs(ay1-by1)<EPS_LINE &&
+                Math.abs(ax2-bx2)<EPS_LINE && Math.abs(ay2-by2)<EPS_LINE) ||
+               (Math.abs(ax1-bx2)<EPS_LINE && Math.abs(ay1-by2)<EPS_LINE &&
+                Math.abs(ax2-bx1)<EPS_LINE && Math.abs(ay2-by1)<EPS_LINE);
+    }
     _flattenHierarchy(G.hierarchyData).forEach(function(existing) {
         if (existing.type !== 'construct') return;
-        if (Math.abs(existing._lineX1 - x1) < EPS_LINE && Math.abs(existing._lineY1 - y1) < EPS_LINE &&
-            Math.abs(existing._lineX2 - x2) < EPS_LINE && Math.abs(existing._lineY2 - y2) < EPS_LINE) {
-            // Полоска на тій самій лінії — беремо реальний відображений діапазон
-            let tA = existing._tStart, tB = existing._tEnd;
-            const lenM = existing.constructLength || 0;
-            if (lenM > 0) {
-                const tSpan = (lenM * SCALE) / len;
-                if (existing.constructFromEnd) tA = Math.max(existing._tStart, tB - tSpan);
-                else                           tB = Math.min(existing._tEnd, tA + tSpan);
-            }
-            tValues.push(tA);
-            tValues.push(tB);
+        if (!_sameLineSegment(x1,y1,x2,y2,
+                              existing._lineX1, existing._lineY1,
+                              existing._lineX2, existing._lineY2)) return;
+
+        // Полоска на тій самій лінії — беремо реальний відображений t-діапазон
+        // Якщо напрямок зворотній — конвертуємо t: t_new = 1 - t_old
+        const reversed = (Math.abs(existing._lineX1-x2)<EPS_LINE && Math.abs(existing._lineY1-y2)<EPS_LINE);
+        let tA = existing._tStart, tB = existing._tEnd;
+        const lenM = existing.constructLength || 0;
+        if (lenM > 0) {
+            const existLen = Math.sqrt(
+                (existing._lineX2-existing._lineX1)**2 + (existing._lineY2-existing._lineY1)**2);
+            const tSpan = (lenM * SCALE) / (existLen || len);
+            if (existing.constructFromEnd) tA = Math.max(existing._tStart, tB - tSpan);
+            else                           tB = Math.min(existing._tEnd, tA + tSpan);
         }
+        if (reversed) { const tmp = 1-tB; tB = 1-tA; tA = tmp; }
+        tValues.push(tA);
+        tValues.push(tB);
     });
 
     // Сортуємо і беремо проміжок навколо tDrop
@@ -487,6 +499,14 @@ window._redrawConstructItem = function (item) {
         if (wi1Th !== null) item.constructThickness = wi1Th;
     }
 
+    _applyConstructGeometry(item);
+};
+
+/**
+ * Малює полоску відповідно до її властивостей (без auto-thickness логіки).
+ * Також оновлює маркер початку.
+ */
+function _applyConstructGeometry(item) {
     const { _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2 } = item;
     const thicknessPx = (item.constructThickness || CONSTRUCT_THICKNESS_M) * SCALE;
 
@@ -523,9 +543,9 @@ window._redrawConstructItem = function (item) {
     item._svgPoly.setAttribute('points', pts.join(' '));
     item._svgPoly.style.display = item.visible === false ? 'none' : '';
 
-    // Оновлюємо маркер початку — tA є реальним початком (враховує constructFromEnd)
-    const markerX = item.constructFromEnd ? sx2 : sx1;
-    const markerY = item.constructFromEnd ? sy2 : sy1;
+    // Маркер початку: якщо constructFromEnd — на кінці B, стрілка назад
+    const markerX  = item.constructFromEnd ? sx2 : sx1;
+    const markerY  = item.constructFromEnd ? sy2 : sy1;
     const markerUx = item.constructFromEnd ? -ux : ux;
     const markerUy = item.constructFromEnd ? -uy : uy;
 
@@ -544,21 +564,24 @@ window._redrawConstructItem = function (item) {
             });
         }(item));
     }
-};
+}
 
 /**
  * Шукає elThickness першого WI1 на тій самій лінії що і полоска item.
  * @returns {number|null}
  */
 function _findWI1ThicknessOnLine(item) {
-    const EPS = 2;
-    function near(a, b) { return Math.abs(a - b) < EPS; }
+    const EPS = 8;
+    function sameSeg(ax1,ay1,ax2,ay2,bx1,by1,bx2,by2) {
+        return (Math.abs(ax1-bx1)<EPS && Math.abs(ay1-by1)<EPS && Math.abs(ax2-bx2)<EPS && Math.abs(ay2-by2)<EPS) ||
+               (Math.abs(ax1-bx2)<EPS && Math.abs(ay1-by2)<EPS && Math.abs(ax2-bx1)<EPS && Math.abs(ay2-by1)<EPS);
+    }
     const allItems = _flattenHierarchy(G.hierarchyData);
     for (let i = 0; i < allItems.length; i++) {
         const it = allItems[i];
         if (it.type !== 'element' || it.elCode !== 'WI1') continue;
-        if (near(it._lineX1, item._lineX1) && near(it._lineY1, item._lineY1) &&
-            near(it._lineX2, item._lineX2) && near(it._lineY2, item._lineY2)) {
+        if (sameSeg(it._lineX1, it._lineY1, it._lineX2, it._lineY2,
+                    item._lineX1, item._lineY1, item._lineX2, item._lineY2)) {
             return it.elThickness != null ? it.elThickness : _WIN_THICKNESS_M;
         }
     }

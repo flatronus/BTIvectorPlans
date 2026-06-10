@@ -409,16 +409,17 @@ function _propSet(item, key, value) {
         else if (key === 'constructAutoThickness') {
             item.constructAutoThickness = value;
             if (value) {
-                // Перевіряємо наявність WI1 на тій самій лінії
                 const allFlat = [];
                 (function flat(arr) { (arr||[]).forEach(function(i) { allFlat.push(i); flat(i.children); }); }(G.hierarchyData));
-                const EPS = 2;
+                const EPS = 8;
+                function sameSeg(ax1,ay1,ax2,ay2,bx1,by1,bx2,by2) {
+                    return (Math.abs(ax1-bx1)<EPS && Math.abs(ay1-by1)<EPS && Math.abs(ax2-bx2)<EPS && Math.abs(ay2-by2)<EPS) ||
+                           (Math.abs(ax1-bx2)<EPS && Math.abs(ay1-by2)<EPS && Math.abs(ax2-bx1)<EPS && Math.abs(ay2-by1)<EPS);
+                }
                 const hasWI1 = allFlat.some(function(it) {
                     if (it.type !== 'element' || it.elCode !== 'WI1') return false;
-                    return Math.abs(it._lineX1 - item._lineX1) < EPS &&
-                           Math.abs(it._lineY1 - item._lineY1) < EPS &&
-                           Math.abs(it._lineX2 - item._lineX2) < EPS &&
-                           Math.abs(it._lineY2 - item._lineY2) < EPS;
+                    return sameSeg(it._lineX1, it._lineY1, it._lineX2, it._lineY2,
+                                   item._lineX1, item._lineY1, item._lineX2, item._lineY2);
                 });
                 if (!hasWI1) {
                     item.constructAutoThickness = false;
@@ -932,6 +933,14 @@ function _makeControl(prop, val, item) {
             inp.value = inp.value.replace(',', '.');
             _propSet(item, prop.key, inp.value);
         };
+        inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === 'NumpadEnter') {
+                e.preventDefault();
+                inp.value = inp.value.replace(',', '.');
+                _propSet(item, prop.key, inp.value);
+                inp.blur();
+            }
+        });
         _applyFocusStyle(inp);
         return inp;
     }
