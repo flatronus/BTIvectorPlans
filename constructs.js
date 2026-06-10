@@ -187,7 +187,8 @@ function _detectSnapLine(clientX, clientY) {
             if (dist < SNAP_THRESHOLD && dist < bestDist) {
                 bestDist = dist;
                 best = { x1, y1, x2, y2, lineData, item, fromPt, toPt, groupCTM, offsetX, offsetY,
-                         dropX: svgPt.x, dropY: svgPt.y };
+                         dropX: svgPt.x, dropY: svgPt.y,
+                         hostKey: item.id + '_' + lineData.id };
             }
         });
     });
@@ -264,6 +265,9 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     if (!_cActiveSvg) return;
 
     const { x1, y1, x2, y2 } = lineInfo;
+    // Стабільний ключ лінії — ідентифікатор фігури + ідентифікатор lineData,
+    // незалежний від float-координат і напрямку.
+    const stableKey = lineInfo.hostKey || _lineKey(x1, y1, x2, y2);
 
     const dx  = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
@@ -305,7 +309,7 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         expanded:             false,
         parentId:             null,
         _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
-        _lineKey: _lineKey(x1, y1, x2, y2),
+        _lineKey: stableKey,
         _placeOrder: ++_stripPlaceCounter,
         // _tStart/_tEnd заповнюються _repackStripsOnLine нижче
         _tStart: 0, _tEnd: 1,
@@ -349,22 +353,36 @@ function _repackStripsOnLine(anyItem) {
 
     if (siblings.length === 0) return;
 
-    // Загальна довжина відрізка у пікселях (береться з першого елемента)
+    // Канонічна геометрія лінії — беремо з першого за порядком
     const ref = siblings[0];
-    const lineDx = ref._lineX2 - ref._lineX1, lineDy = ref._lineY2 - ref._lineY1;
+    const rx1 = ref._lineX1, ry1 = ref._lineY1;
+    const rx2 = ref._lineX2, ry2 = ref._lineY2;
+    const lineDx = rx2 - rx1, lineDy = ry2 - ry1;
     const lineLen = Math.sqrt(lineDx * lineDx + lineDy * lineDy);
     if (lineLen < 1) return;
 
-    // Розподіляємо t-діапазони впритул: t іде від 0 до 1
-    // Полоски з constructLength=0 ділять простір, що залишився, порівно.
-    // Полоски з constructLength>0 займають фіксовану частку.
+    // Виправляємо координати всіх сиблінгів до канонічного напряму
+    siblings.forEach(function(s) {
+        if (s === ref) return;
+        const sdx = s._lineX2 - s._lineX1, sdy = s._lineY2 - s._lineY1;
+        const dot = sdx * lineDx + sdy * lineDy;
+        if (dot < 0) {
+            // Зворотний напрям — міняємо місцями
+            const tx = s._lineX1, ty = s._lineY1;
+            s._lineX1 = s._lineX2; s._lineY1 = s._lineY2;
+            s._lineX2 = tx;        s._lineY2 = ty;
+        }
+        // Вирівнюємо точно до ref-координат (усуваємо float-дрейф)
+        s._lineX1 = rx1; s._lineY1 = ry1;
+        s._lineX2 = rx2; s._lineY2 = ry2;
+    });
+
+    // Розподіл t-діапазонів: полоски з constructLength>0 фіксовані, решта — рівно
     const totalT = 1.0;
-    let fixedT = 0;
-    let freeCount = 0;
+    let fixedT = 0, freeCount = 0;
     siblings.forEach(function(s) {
         if ((s.constructLength || 0) > 0) {
-            const span = Math.min((s.constructLength * SCALE) / lineLen, totalT);
-            fixedT += span;
+            fixedT += Math.min((s.constructLength * SCALE) / lineLen, totalT);
         } else {
             freeCount++;
         }
@@ -374,14 +392,11 @@ function _repackStripsOnLine(anyItem) {
 
     let cursor = 0;
     siblings.forEach(function(s) {
-        let span;
-        if ((s.constructLength || 0) > 0) {
-            span = Math.min((s.constructLength * SCALE) / lineLen, totalT - cursor);
-        } else {
-            span = Math.min(freeEach, totalT - cursor);
-        }
+        const span = (s.constructLength || 0) > 0
+            ? Math.min((s.constructLength * SCALE) / lineLen, totalT - cursor)
+            : Math.min(freeEach, totalT - cursor);
         s._tStart = cursor;
-        s._tEnd   = cursor + span;
+        s._tEnd   = parseFloat((cursor + span).toFixed(10)); // уникаємо float-сміття
         cursor    = s._tEnd;
         _applyConstructGeometry(s);
     });
