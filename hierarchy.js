@@ -111,17 +111,17 @@ window._highlightSvgItem = function (item) {
             el.removeAttribute('data-orig-stroke');
             el.removeAttribute('data-orig-stroke-width');
         });
-        // Знімаємо виділення з полосок конструктивів
+        // Знімаємо виділення з полосок конструктивів + відновлюємо маркери початку
         mainSvg.querySelectorAll('polygon[data-construct][data-selected-construct]').forEach(function(el) {
             el.setAttribute('stroke', el.getAttribute('data-orig-stroke') || '#38bdf8');
             el.setAttribute('stroke-width', '1');
             el.removeAttribute('data-selected-construct');
             el.removeAttribute('data-orig-stroke');
         });
-        // Відновлюємо кольори маркерів початку полосок
+        // Відновлюємо кольори всіх маркерів початку
         (G.hierarchyData || []).forEach(function(it) {
             if (it.type !== 'construct' || !it._svgStartMarker) return;
-            const circ = it._svgStartMarker.querySelector('circle');
+            const circ  = it._svgStartMarker.querySelector('circle');
             if (circ) { circ.setAttribute('stroke', '#0ea5e9'); circ.setAttribute('fill', 'rgba(56,189,248,0.25)'); }
             const arrow = it._svgStartMarker.querySelector('polygon');
             if (arrow) arrow.setAttribute('fill', '#0ea5e9');
@@ -141,11 +141,9 @@ window._highlightSvgItem = function (item) {
             item._svgPoly.setAttribute('stroke', '#ef4444');
             item._svgPoly.setAttribute('stroke-width', '2.5');
         }
-        // Показуємо маркер початку яскраво
+        // Підсвічуємо маркер початку
         if (item._svgStartMarker) {
-            item._svgStartMarker.style.opacity = '1';
-            // Підсвічуємо кружок маркера
-            const circ = item._svgStartMarker.querySelector('circle');
+            const circ  = item._svgStartMarker.querySelector('circle');
             if (circ) { circ.setAttribute('stroke', '#ef4444'); circ.setAttribute('fill', 'rgba(239,68,68,0.18)'); }
             const arrow = item._svgStartMarker.querySelector('polygon');
             if (arrow) arrow.setAttribute('fill', '#ef4444');
@@ -283,27 +281,27 @@ const PROP_SCHEMA = {
     ],
     element: [
         { group: 'Ідентифікація' },
-        { key: 'name',        label: 'Назва',        type: 'string', readOnly: false },
+        { key: 'name',               label: 'Назва',                      type: 'string', readOnly: false },
         { group: 'Розміщення' },
-        { key: '_lineDef',    label: 'Лінія',        type: 'info',   readOnly: true  },
-        { key: 'elStart',     label: 'Від (м)',      type: 'number', readOnly: false },
-        { key: 'elEnd',       label: 'До (м)',       type: 'number', readOnly: false },
-        { key: 'windowAutoWidth', label: 'Авто-ширина (до стіни)', type: 'bool', readOnly: false },
-        { key: '_thickness',  label: 'Товщина (м)',  type: 'number', readOnly: false, hint: 'За замовчуванням 0.20' },
-        { key: 'elSide',      label: 'Зсередини',    type: 'bool',   readOnly: false },
+        { key: '_lineDef',           label: 'Лінія',                      type: 'info',   readOnly: true  },
+        { key: 'elStart',            label: 'Від (м)',                     type: 'number', readOnly: false },
+        { key: 'elEnd',              label: 'До (м)',                      type: 'number', readOnly: false },
+        { key: '_thickness',         label: 'Товщина (м)',                 type: 'number', readOnly: false, hint: 'За замовчуванням 0.20' },
+        { key: 'windowAutoThickness',label: 'Авто-товщина (до стіни)',     type: 'bool',   readOnly: false },
+        { key: 'elSide',             label: 'Зсередини',                   type: 'bool',   readOnly: false },
         { group: 'Відображення' },
-        { key: 'visible',     label: 'Видимий',      type: 'bool',   readOnly: false },
+        { key: 'visible',            label: 'Видимий',                     type: 'bool',   readOnly: false },
     ],
     construct: [
         { group: 'Конструктив' },
-        { key: 'name',               label: 'Назва',                     type: 'string', readOnly: false },
-        { key: 'constructThickness', label: 'Товщина (м)',                type: 'number', readOnly: false, hint: '0.20' },
-        { key: 'constructAutoThickness', label: 'Авто-товщина (як вікно)', type: 'bool', readOnly: false },
-        { key: 'constructSideInward',label: 'Зсередини',                  type: 'bool',   readOnly: false },
-        { key: 'constructFromEnd',   label: 'Початок від кінця B',        type: 'bool',   readOnly: false },
-        { key: 'constructLength',    label: 'Довжина від початку (м)',     type: 'number', readOnly: false, hint: 'Вся довжина якщо 0' },
+        { key: 'name',               label: 'Назва',                       type: 'string', readOnly: false },
+        { key: 'constructThickness', label: 'Товщина (м)',                  type: 'number', readOnly: false, hint: '0.20' },
+        { key: 'constructAutoThickness', label: 'Авто-товщина (як вікно)', type: 'bool',   readOnly: false },
+        { key: 'constructSideInward',label: 'Зсередини',                   type: 'bool',   readOnly: false },
+        { key: 'constructFromEnd',   label: 'Початок від кінця B',         type: 'bool',   readOnly: false },
+        { key: 'constructLength',    label: 'Довжина від початку (м)',      type: 'number', readOnly: false, hint: 'Вся довжина якщо 0' },
         { group: 'Відображення' },
-        { key: 'visible',            label: 'Видимий',                    type: 'bool',   readOnly: false },
+        { key: 'visible',            label: 'Видимий',                     type: 'bool',   readOnly: false },
     ],
 };
 
@@ -337,7 +335,7 @@ function _propGet(item, key) {
     if (key === 'constructSideInward') return item.constructSideInward === true;
     if (key === 'constructLength')    return item.constructLength  != null ? item.constructLength  : 0;
     if (key === 'constructAutoThickness') return item.constructAutoThickness === true;
-    if (key === 'windowAutoWidth')    return item.windowAutoWidth === true;
+    if (key === 'windowAutoThickness') return item.windowAutoThickness === true;
     // elSide як bool: true = зсередини (side=-1), false = ззовні (side=1)
     if (key === 'elSide') return (item.elSide != null ? item.elSide : 1) === -1;
     return item[key] ?? '';
@@ -393,12 +391,13 @@ function _propSet(item, key, value) {
         _redrawItemSvgGroup(item);
         return;
     }
-    if (key === 'elStart' || key === 'elEnd' || key === 'elSide' || key === '_thickness') {
-        if (key === 'elStart') item.elStart = parseFloat(value) || 0;
-        else if (key === 'elEnd') item.elEnd = parseFloat(value) || 0;
+    if (key === 'elStart' || key === 'elEnd' || key === 'elSide' || key === '_thickness' || key === 'windowAutoThickness') {
+        if (key === 'elStart') item.elStart = parseFloat(String(value).replace(',', '.')) || 0;
+        else if (key === 'elEnd') item.elEnd = parseFloat(String(value).replace(',', '.')) || 0;
         // elSide: bool true → зсередини → side=-1; false → ззовні → side=1
         else if (key === 'elSide') item.elSide = value ? -1 : 1;
-        else if (key === '_thickness') item.elThickness = parseFloat(value) || ELEMENT_THICKNESS;
+        else if (key === '_thickness') item.elThickness = parseFloat(String(value).replace(',', '.')) || ELEMENT_THICKNESS;
+        else if (key === 'windowAutoThickness') item.windowAutoThickness = value;
         _syncElementToParentAndRedraw(item);
         return;
     }
@@ -411,18 +410,16 @@ function _propSet(item, key, value) {
             item.constructAutoThickness = value;
             if (value) {
                 // Перевіряємо наявність WI1 на тій самій лінії
-                const hasWI1 = (function() {
-                    const allItems = [];
-                    (function flat(arr) { (arr||[]).forEach(function(i) { allItems.push(i); flat(i.children); }); }(G.hierarchyData));
-                    const EPS = 2;
-                    return allItems.some(function(it) {
-                        if (it.type !== 'element' || it.elCode !== 'WI1') return false;
-                        return Math.abs(it._lineX1 - item._lineX1) < EPS &&
-                               Math.abs(it._lineY1 - item._lineY1) < EPS &&
-                               Math.abs(it._lineX2 - item._lineX2) < EPS &&
-                               Math.abs(it._lineY2 - item._lineY2) < EPS;
-                    });
-                }());
+                const allFlat = [];
+                (function flat(arr) { (arr||[]).forEach(function(i) { allFlat.push(i); flat(i.children); }); }(G.hierarchyData));
+                const EPS = 2;
+                const hasWI1 = allFlat.some(function(it) {
+                    if (it.type !== 'element' || it.elCode !== 'WI1') return false;
+                    return Math.abs(it._lineX1 - item._lineX1) < EPS &&
+                           Math.abs(it._lineY1 - item._lineY1) < EPS &&
+                           Math.abs(it._lineX2 - item._lineX2) < EPS &&
+                           Math.abs(it._lineY2 - item._lineY2) < EPS;
+                });
                 if (!hasWI1) {
                     item.constructAutoThickness = false;
                     if (typeof showToast === 'function') showToast('Авто-товщина недоступна: на цій лінії немає вікна WI1', 'warning');
@@ -432,13 +429,6 @@ function _propSet(item, key, value) {
             }
         }
         if (typeof _redrawConstructItem === 'function') _redrawConstructItem(item);
-        if (key === 'constructAutoThickness') renderProperties(item);
-        return;
-    }
-    if (key === 'windowAutoWidth') {
-        item.windowAutoWidth = value;
-        if (typeof _redrawWindowElement === 'function') _redrawWindowElement(item);
-        renderProperties(item);
         return;
     }
     item[key] = value;
@@ -503,30 +493,55 @@ function _syncElementToParentAndRedraw(elItem) {
         lineData = (parent.figureLines || []).find(function(l) {
             return l.from === elItem.lineFrom && (l.to === elItem.lineTo || (l.isClosing && elItem.lineTo == null));
         });
-    if (!lineData) return;
+    if (!lineData) {
+        // Drag-WI1 без lineData — просто перемальовуємо SVG
+        if (elItem._elKey && elItem._elKey.startsWith('wi_drag_')) {
+            if (typeof _redrawWindowElement === 'function') _redrawWindowElement(elItem);
+            elItem.name = _buildElementName(elItem);
+            renderHierarchy();
+        }
+        return;
+    }
 
     // Оновлюємо тріплет у lineData.elements
+    // Для drag-WI1: шукаємо тріплет по ідентифікатору _dragId, збереженому в els[i+2]
     var els = lineData.elements || [];
-    for (var i = 0; i < els.length; i++) {
-        if (els[i]?.type === 'number' && els[i+1]?.type === 'number' && els[i+2]?.type === 'element') {
-            var rawCode = els[i+2].value;
-            var code    = rawCode.startsWith('-') ? rawCode.substring(1) : rawCode;
-            var side    = rawCode.startsWith('-') ? -1 : 1;
-            var elKey   = 'wi_' + lineData.from + '_' + (lineData.to ?? 'c') + '_' + code + '_' + els[i].value;
-            if (elItem._elKey && !elItem._elKey.startsWith('wi_drag_') && elItem._elKey !== elKey) { i += 2; continue; }
-            els[i].value   = elItem.elStart;
-            els[i+1].value = elItem.elEnd;
-            var newSide    = elItem.elSide != null ? elItem.elSide : side;
-            els[i+2].value = newSide === -1 ? ('-' + code) : code;
-            if (!elItem._elKey || !elItem._elKey.startsWith('wi_drag_'))
-                elItem._elKey = 'wi_' + lineData.from + '_' + (lineData.to ?? 'c') + '_' + code + '_' + elItem.elStart;
-            lineData.code = _rebuildLineCode(lineData.elements, lineData.direction, lineData.lineType);
-            break;
+    var isDrag = elItem._elKey && elItem._elKey.startsWith('wi_drag_');
+
+    for (var i = 0; i < els.length - 2; i++) {
+        if (!(els[i]?.type === 'number' && els[i+1]?.type === 'number' && els[i+2]?.type === 'element')) continue;
+
+        var rawCode = els[i+2].value;
+        var code    = rawCode.startsWith('-') ? rawCode.substring(1) : rawCode;
+        var side    = rawCode.startsWith('-') ? -1 : 1;
+
+        if (isDrag) {
+            // Для drag-вікна: знаходимо свій тріплет по збереженому _dragId або по близькості elStart
+            var tripletDragId = els[i+2]._dragId;
+            var elDragId      = elItem._elKey.replace('wi_drag_', '');
+            var matches = tripletDragId != null
+                ? (tripletDragId === elDragId)
+                : (Math.abs(els[i].value - elItem._origElStart) < 0.01 && code === 'WI1');
+            if (!matches) { i += 2; continue; }
+        } else {
+            var elKey = 'wi_' + lineData.from + '_' + (lineData.to ?? 'c') + '_' + code + '_' + els[i].value;
+            if (elItem._elKey && elItem._elKey !== elKey) { i += 2; continue; }
         }
+
+        els[i].value   = elItem.elStart;
+        els[i+1].value = elItem.elEnd;
+        var newSide    = elItem.elSide != null ? elItem.elSide : side;
+        els[i+2].value = newSide === -1 ? ('-' + code) : code;
+        // Зберігаємо _dragId щоб у майбутніх викликах матчинг був точним
+        if (isDrag) els[i+2]._dragId = elItem._elKey.replace('wi_drag_', '');
+        if (!isDrag)
+            elItem._elKey = 'wi_' + lineData.from + '_' + (lineData.to ?? 'c') + '_' + code + '_' + elItem.elStart;
+        lineData.code = _rebuildLineCode(lineData.elements, lineData.direction, lineData.lineType);
+        break;
     }
 
     // Drag-WI1: перемальовуємо тільки власну <g> вікна
-    if (elItem._elKey && elItem._elKey.startsWith('wi_drag_')) {
+    if (isDrag) {
         if (typeof _redrawWindowElement === 'function') _redrawWindowElement(elItem);
         elItem.name = _buildElementName(elItem);
         renderHierarchy();
