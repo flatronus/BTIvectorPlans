@@ -343,60 +343,67 @@ function _placeConstructStrip(lineInfo, thicknessM) {
  * Після перерахунку оновлює SVG кожної полоски.
  */
 function _repackStripsOnLine(anyItem) {
-    const key = anyItem._lineKey;
-    if (!key) return;
+    const key  = anyItem._lineKey;
+    const rx1  = anyItem._lineX1, ry1 = anyItem._lineY1;
+    const rx2  = anyItem._lineX2, ry2 = anyItem._lineY2;
+    const EPS  = 20; // px — для координатного fallback
 
-    // Збираємо всі полоски на цій лінії, сортуємо по _placeOrder
+    function _sameLineSeg(it) {
+        if (key && it._lineKey === key) return true;
+        const ax1=it._lineX1, ay1=it._lineY1, ax2=it._lineX2, ay2=it._lineY2;
+        return (Math.abs(ax1-rx1)<EPS && Math.abs(ay1-ry1)<EPS &&
+                Math.abs(ax2-rx2)<EPS && Math.abs(ay2-ry2)<EPS) ||
+               (Math.abs(ax1-rx2)<EPS && Math.abs(ay1-ry2)<EPS &&
+                Math.abs(ax2-rx1)<EPS && Math.abs(ay2-ry1)<EPS);
+    }
+
     const siblings = _flattenHierarchy(G.hierarchyData)
-        .filter(function(it) { return it.type === 'construct' && it._lineKey === key; })
+        .filter(function(it) { return it.type === 'construct' && _sameLineSeg(it); })
         .sort(function(a, b) { return a._placeOrder - b._placeOrder; });
 
     if (siblings.length === 0) return;
 
-    // Канонічна геометрія лінії — беремо з першого за порядком
-    const ref = siblings[0];
-    const rx1 = ref._lineX1, ry1 = ref._lineY1;
-    const rx2 = ref._lineX2, ry2 = ref._lineY2;
-    const lineDx = rx2 - rx1, lineDy = ry2 - ry1;
-    const lineLen = Math.sqrt(lineDx * lineDx + lineDy * lineDy);
+    // Уніфікуємо ключ усіх сиблінгів щоб наступні repack-и теж їх знаходили
+    if (key) siblings.forEach(function(s) { s._lineKey = key; });
+
+    // Канонічна геометрія лінії — з першого за _placeOrder
+    const ref    = siblings[0];
+    const refDx  = ref._lineX2 - ref._lineX1, refDy = ref._lineY2 - ref._lineY1;
+    const lineLen = Math.sqrt(refDx * refDx + refDy * refDy);
     if (lineLen < 1) return;
 
-    // Виправляємо координати всіх сиблінгів до канонічного напряму
+    // Вирівнюємо координати всіх сиблінгів до ref (напрям + числові значення)
     siblings.forEach(function(s) {
         if (s === ref) return;
         const sdx = s._lineX2 - s._lineX1, sdy = s._lineY2 - s._lineY1;
-        const dot = sdx * lineDx + sdy * lineDy;
-        if (dot < 0) {
-            // Зворотний напрям — міняємо місцями
+        if (sdx * refDx + sdy * refDy < 0) {
             const tx = s._lineX1, ty = s._lineY1;
             s._lineX1 = s._lineX2; s._lineY1 = s._lineY2;
             s._lineX2 = tx;        s._lineY2 = ty;
         }
-        // Вирівнюємо точно до ref-координат (усуваємо float-дрейф)
-        s._lineX1 = rx1; s._lineY1 = ry1;
-        s._lineX2 = rx2; s._lineY2 = ry2;
+        s._lineX1 = ref._lineX1; s._lineY1 = ref._lineY1;
+        s._lineX2 = ref._lineX2; s._lineY2 = ref._lineY2;
     });
 
-    // Розподіл t-діапазонів: полоски з constructLength>0 фіксовані, решта — рівно
-    const totalT = 1.0;
+    // Розподіл t-діапазонів впритул — без gaps і без перекриттів
     let fixedT = 0, freeCount = 0;
     siblings.forEach(function(s) {
-        if ((s.constructLength || 0) > 0) {
-            fixedT += Math.min((s.constructLength * SCALE) / lineLen, totalT);
-        } else {
+        if ((s.constructLength || 0) > 0)
+            fixedT += Math.min((s.constructLength * SCALE) / lineLen, 1);
+        else
             freeCount++;
-        }
     });
-    fixedT = Math.min(fixedT, totalT);
-    const freeEach = freeCount > 0 ? Math.max(0, (totalT - fixedT) / freeCount) : 0;
+    fixedT = Math.min(fixedT, 1);
+    const freeEach = freeCount > 0 ? Math.max(0, (1 - fixedT) / freeCount) : 0;
 
     let cursor = 0;
     siblings.forEach(function(s) {
-        const span = (s.constructLength || 0) > 0
-            ? Math.min((s.constructLength * SCALE) / lineLen, totalT - cursor)
-            : Math.min(freeEach, totalT - cursor);
+        const avail = 1 - cursor;
+        const span  = (s.constructLength || 0) > 0
+            ? Math.min((s.constructLength * SCALE) / lineLen, avail)
+            : Math.min(freeEach, avail);
         s._tStart = cursor;
-        s._tEnd   = parseFloat((cursor + span).toFixed(10)); // уникаємо float-сміття
+        s._tEnd   = parseFloat((cursor + span).toFixed(10));
         cursor    = s._tEnd;
         _applyConstructGeometry(s);
     });
