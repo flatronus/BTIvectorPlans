@@ -239,95 +239,41 @@ function _finishConstructDrop(clientX, clientY) {
     _cTargetLine = null;
 }
 
+// Монотонний лічильник порядку розміщення полосок
+let _stripPlaceCounter = 0;
+
+/**
+ * Нормалізує пару координат лінії у рядковий ключ незалежно від напряму.
+ * Завжди ставить меншу точку першою (порівняння лексикографічне).
+ */
+function _lineKey(x1, y1, x2, y2) {
+    const a = Math.round(x1) + ',' + Math.round(y1);
+    const b = Math.round(x2) + ',' + Math.round(y2);
+    return a < b ? a + '|' + b : b + '|' + a;
+}
+
 /**
  * Малює полоску конструктиву вздовж знайденої лінії.
- * Довжина обмежується: кутові точки фігури + точки перетину вже існуючих
- * полосок (data-construct) з цільовою лінією — нова полоска займає
- * вільний проміжок між найближчими обмежувачами навколо точки кидання.
+ * Нова модель: кожна полоска зберігає _placeOrder і _lineKey.
+ * Геометрія (tStart/tEnd) обчислюється динамічно через _repackStripsOnLine.
  *
- * @param {{ x1,y1,x2,y2, clientX,clientY }} lineInfo
+ * @param {{ x1,y1,x2,y2, dropX,dropY }} lineInfo
  * @param {number} thicknessM
  */
 function _placeConstructStrip(lineInfo, thicknessM) {
     if (!_cActiveSvg) return;
 
-    const { x1, y1, x2, y2, dropX, dropY } = lineInfo;
-    const thicknessPx = thicknessM * SCALE;
+    const { x1, y1, x2, y2 } = lineInfo;
 
     const dx  = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) return;
 
-    const ux = dx / len, uy = dy / len;     // одиничний вектор вздовж лінії
-    const nx = -uy, ny = ux;               // перпендикуляр (вліво)
-
-    // ── Збираємо параметричні t-значення вздовж відрізка [0..1] ──
-    // Завжди є кінці самого відрізка
-    const tValues = [0, 1];
-
-    // Кут кидання у параметрі t
-    const tDrop = dropX !== undefined
-        ? _projectToLine(dropX, dropY, x1, y1, x2, y2)
-        : 0.5;
-
-    // Знаходимо межі від вже існуючих полосок НА ТІЙ САМІЙ ЛІНІЇ
-    // Порівняння напрямконезалежне (A-B або B-A — одна й та сама лінія)
-    const EPS_LINE = 8; // px допуск
-    function _sameLineSegment(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
-        return (Math.abs(ax1-bx1)<EPS_LINE && Math.abs(ay1-by1)<EPS_LINE &&
-                Math.abs(ax2-bx2)<EPS_LINE && Math.abs(ay2-by2)<EPS_LINE) ||
-               (Math.abs(ax1-bx2)<EPS_LINE && Math.abs(ay1-by2)<EPS_LINE &&
-                Math.abs(ax2-bx1)<EPS_LINE && Math.abs(ay2-by1)<EPS_LINE);
-    }
-    _flattenHierarchy(G.hierarchyData).forEach(function(existing) {
-        if (existing.type !== 'construct') return;
-        if (!_sameLineSegment(x1,y1,x2,y2,
-                              existing._lineX1, existing._lineY1,
-                              existing._lineX2, existing._lineY2)) return;
-
-        // Полоска на тій самій лінії — беремо реальний відображений t-діапазон
-        // Якщо напрямок зворотній — конвертуємо t: t_new = 1 - t_old
-        const reversed = (Math.abs(existing._lineX1-x2)<EPS_LINE && Math.abs(existing._lineY1-y2)<EPS_LINE);
-        let tA = existing._tStart, tB = existing._tEnd;
-        const lenM = existing.constructLength || 0;
-        if (lenM > 0) {
-            const existLen = Math.sqrt(
-                (existing._lineX2-existing._lineX1)**2 + (existing._lineY2-existing._lineY1)**2);
-            const tSpan = (lenM * SCALE) / (existLen || len);
-            if (existing.constructFromEnd) tA = Math.max(existing._tStart, tB - tSpan);
-            else                           tB = Math.min(existing._tEnd, tA + tSpan);
-        }
-        if (reversed) { const tmp = 1-tB; tB = 1-tA; tA = tmp; }
-        tValues.push(tA);
-        tValues.push(tB);
-    });
-
-    // Сортуємо і беремо проміжок навколо tDrop
-    tValues.sort(function(a, b) { return a - b; });
-
-    let tStart = 0, tEnd = 1;
-    for (let i = 0; i < tValues.length - 1; i++) {
-        if (tValues[i] <= tDrop && tDrop <= tValues[i + 1]) {
-            tStart = tValues[i];
-            tEnd   = tValues[i + 1];
-            break;
-        }
-    }
-
-    if (tEnd - tStart < 0.001) return; // вільного місця немає
-
-    const sx1 = x1 + ux * tStart * len, sy1 = y1 + uy * tStart * len;
-    const sx2 = x1 + ux * tEnd   * len, sy2 = y1 + uy * tEnd   * len;
-
-    const polyPts = [
-        { x: sx1,                      y: sy1                      },
-        { x: sx2,                      y: sy2                      },
-        { x: sx2 + nx * thicknessPx,   y: sy2 + ny * thicknessPx  },
-        { x: sx1 + nx * thicknessPx,   y: sy1 + ny * thicknessPx  },
-    ];
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy, ny = ux; // перпендикуляр (вліво) — для початкового малювання
 
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    poly.setAttribute('points', polyPts.map(function(p) { return p.x + ',' + p.y; }).join(' '));
+    poly.setAttribute('points', '0,0 0,0 0,0 0,0'); // тимчасово; заповнюється _repack
     poly.setAttribute('fill', 'rgba(125,211,252,0.35)');
     poly.setAttribute('stroke', '#38bdf8');
     poly.setAttribute('stroke-width', '1');
@@ -335,19 +281,15 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     poly.setAttribute('data-construct', '1');
     poly.style.cursor = 'pointer';
     poly.title = 'Подвійний клік — видалити';
-
     poly.addEventListener('dblclick', function(e) {
         e.stopPropagation();
         if (poly.parentNode) poly.parentNode.removeChild(poly);
     });
-
     _cActiveSvg.appendChild(poly);
 
-    // Мітка початку полоски
-    const startMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
+    const startMarker = _createConstructStartMarker(x1, y1, ux, uy); // тимчасова позиція
     _cActiveSvg.appendChild(startMarker);
 
-    /* ── Реєструємо в ієрархії ── */
     const stripCount = G.hierarchyData.filter(function(i) { return i.type === 'construct'; }).length + 1;
     const hierarchyItem = {
         id:                   G.hierarchyIdCounter++,
@@ -363,15 +305,21 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         expanded:             false,
         parentId:             null,
         _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
-        _tStart: tStart, _tEnd: tEnd,
+        _lineKey: _lineKey(x1, y1, x2, y2),
+        _placeOrder: ++_stripPlaceCounter,
+        // _tStart/_tEnd заповнюються _repackStripsOnLine нижче
+        _tStart: 0, _tEnd: 1,
         _svgPoly: poly,
         _svgStartMarker: startMarker,
     };
     G.hierarchyData.push(hierarchyItem);
+
+    // Відразу перепакуємо всі полоски на цій лінії (включно з новою)
+    _repackStripsOnLine(hierarchyItem);
+
     if (typeof _syncHierarchyToCanvas === 'function') _syncHierarchyToCanvas();
     if (typeof renderHierarchy === 'function') renderHierarchy();
 
-    // Клік → виділення у панелі Елементи + на канві
     poly.addEventListener('click', function(e) {
         e.stopPropagation();
         if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hierarchyItem);
@@ -380,6 +328,62 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     startMarker.addEventListener('click', function(e) {
         e.stopPropagation();
         if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hierarchyItem);
+    });
+}
+
+/**
+ * Перепаковує всі полоски на тій самій лінії що й item.
+ * Розставляє їх впритул одну за одною у порядку _placeOrder,
+ * від початку лінії (t=0) до кінця (t=1).
+ * Якщо у полоски є constructLength — займає рівно стільки, решта ділиться між іншими.
+ * Після перерахунку оновлює SVG кожної полоски.
+ */
+function _repackStripsOnLine(anyItem) {
+    const key = anyItem._lineKey;
+    if (!key) return;
+
+    // Збираємо всі полоски на цій лінії, сортуємо по _placeOrder
+    const siblings = _flattenHierarchy(G.hierarchyData)
+        .filter(function(it) { return it.type === 'construct' && it._lineKey === key; })
+        .sort(function(a, b) { return a._placeOrder - b._placeOrder; });
+
+    if (siblings.length === 0) return;
+
+    // Загальна довжина відрізка у пікселях (береться з першого елемента)
+    const ref = siblings[0];
+    const lineDx = ref._lineX2 - ref._lineX1, lineDy = ref._lineY2 - ref._lineY1;
+    const lineLen = Math.sqrt(lineDx * lineDx + lineDy * lineDy);
+    if (lineLen < 1) return;
+
+    // Розподіляємо t-діапазони впритул: t іде від 0 до 1
+    // Полоски з constructLength=0 ділять простір, що залишився, порівно.
+    // Полоски з constructLength>0 займають фіксовану частку.
+    const totalT = 1.0;
+    let fixedT = 0;
+    let freeCount = 0;
+    siblings.forEach(function(s) {
+        if ((s.constructLength || 0) > 0) {
+            const span = Math.min((s.constructLength * SCALE) / lineLen, totalT);
+            fixedT += span;
+        } else {
+            freeCount++;
+        }
+    });
+    fixedT = Math.min(fixedT, totalT);
+    const freeEach = freeCount > 0 ? Math.max(0, (totalT - fixedT) / freeCount) : 0;
+
+    let cursor = 0;
+    siblings.forEach(function(s) {
+        let span;
+        if ((s.constructLength || 0) > 0) {
+            span = Math.min((s.constructLength * SCALE) / lineLen, totalT - cursor);
+        } else {
+            span = Math.min(freeEach, totalT - cursor);
+        }
+        s._tStart = cursor;
+        s._tEnd   = cursor + span;
+        cursor    = s._tEnd;
+        _applyConstructGeometry(s);
     });
 }
 
@@ -493,13 +497,17 @@ function _distToSegment(px, py, ax, ay, bx, by) {
 window._redrawConstructItem = function (item) {
     if (!item || !item._svgPoly) return;
 
-    // Авто-товщина: беремо товщину з WI1 на тій самій лінії
     if (item.constructAutoThickness) {
         const wi1Th = _findWI1ThicknessOnLine(item);
         if (wi1Th !== null) item.constructThickness = wi1Th;
     }
 
-    _applyConstructGeometry(item);
+    // Перепаковуємо всі полоски на тій самій лінії — сусіди теж відсуваються
+    if (item._lineKey) {
+        _repackStripsOnLine(item);
+    } else {
+        _applyConstructGeometry(item);
+    }
 };
 
 /**
@@ -518,18 +526,9 @@ function _applyConstructGeometry(item) {
     const sideSign = item.constructSideInward ? 1 : -1;
     const nx = uy * sideSign, ny = -ux * sideSign;
 
-    let tA = item._tStart;
-    let tB = item._tEnd;
-
-    const lenM = item.constructLength || 0;
-    if (lenM > 0) {
-        const tSpan = (lenM * SCALE) / len;
-        if (item.constructFromEnd) {
-            tA = Math.max(item._tStart, tB - tSpan);
-        } else {
-            tB = Math.min(item._tEnd, tA + tSpan);
-        }
-    }
+    // _tStart/_tEnd вже обчислені _repackStripsOnLine — просто малюємо
+    const tA = item._tStart != null ? item._tStart : 0;
+    const tB = item._tEnd   != null ? item._tEnd   : 1;
 
     const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
     const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
