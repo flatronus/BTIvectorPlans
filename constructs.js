@@ -270,44 +270,19 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         ? _projectToLine(dropX, dropY, x1, y1, x2, y2)
         : 0.5;
 
-    // Знаходимо перетини ліній УСІХ фігур з хост-лінією (стіни як межі)
-    _flattenHierarchy(G.hierarchyData).forEach(function(it) {
-        if (!it.figureLines || !it.shapePoints) return;
-        const offX = it._offsetX || 0, offY = it._offsetY || 0;
-        let grpCTM = null;
-        try {
-            const ss = _cActiveSvg.getScreenCTM(), gs = it.svgGroup && it.svgGroup.getScreenCTM();
-            if (ss && gs) grpCTM = ss.inverse().multiply(gs);
-        } catch(e) {}
-
-        it.figureLines.forEach(function(ld) {
-            if (ld.isDiagonal) return;
-            const fp = it.shapePoints.find(function(p) { return p.num === ld.from; });
-            const tp = ld.isClosing ? it.shapePoints[0] : it.shapePoints.find(function(p) { return p.num === ld.to; });
-            if (!fp || !tp) return;
-
-            let lx1 = fp.x + offX, ly1 = fp.y + offY;
-            let lx2 = tp.x + offX, ly2 = tp.y + offY;
-            if (grpCTM) {
-                const a = _applyMatrix(grpCTM, lx1, ly1), b = _applyMatrix(grpCTM, lx2, ly2);
-                lx1 = a.x; ly1 = a.y; lx2 = b.x; ly2 = b.y;
-            }
-
-            const t = _segmentIntersectT(x1, y1, x2, y2, lx1, ly1, lx2, ly2);
-            if (t !== null) tValues.push(t);
-        });
-    });
-
     // Знаходимо перетини існуючих полосок з лінією
     _cActiveSvg.querySelectorAll('polygon[data-construct]').forEach(function(poly) {
         const pts = _parsePolygonPoints(poly);
         if (pts.length < 4) return;
 
+        // Перші два і останні два кути — бічні ребра полоски.
+        // Ребра: 0-3 (лівий торець) і 1-2 (правий торець).
+        // Шукаємо перетин кожного з 4 ребер полоски з нашою лінією.
         const edges = [
-            [pts[0], pts[1]],
-            [pts[1], pts[2]],
-            [pts[2], pts[3]],
-            [pts[3], pts[0]],
+            [pts[0], pts[1]],   // основа (вздовж лінії)
+            [pts[1], pts[2]],   // правий торець
+            [pts[2], pts[3]],   // верхній край
+            [pts[3], pts[0]],   // лівий торець
         ];
 
         edges.forEach(function(edge) {
@@ -582,7 +557,143 @@ window._redrawConstructItem = function (item) {
 
     // Видимість
     item._svgPoly.style.display = item.visible === false ? 'none' : '';
+
+    // Після перемалювання цієї полоски — перерахувати межі всіх інших полосок
+    _recalcAllStripBounds(item);
 };
+
+/**
+ * Після зміни товщини полоски changedItem перераховує _tStart/_tEnd
+ * всіх інших полосок, чий полігон перетинається з оновленим полігоном changedItem.
+ * Використовує той самий tValues-механізм що і _placeConstructStrip.
+ */
+function _recalcAllStripBounds(changedItem) {
+    if (!_cActiveSvg) return;
+
+    const allStrips = (G.hierarchyData || []).filter(function(it) {
+        return it.type === 'construct' && it !== changedItem && it._svgPoly && it._lineX1 != null;
+    });
+
+    if (allStrips.length === 0) return;
+
+    allStrips.forEach(function(strip) {
+        const x1 = strip._lineX1, y1 = strip._lineY1;
+        const x2 = strip._lineX2, y2 = strip._lineY2;
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 1) return;
+
+        // Середина поточного проміжку — для визначення якого проміжку тримається полоска
+        const tMid = (strip._tStart + strip._tEnd) / 2;
+
+        // Збираємо t-значення: межі лінії + перетини з усіма фігурами + перетини з усіма полігонами полосок
+        const tValues = [0, 1];
+
+        // Перетини ліній фігур
+        _flattenHierarchy(G.hierarchyData).forEach(function(it) {
+            if (!it.figureLines || !it.shapePoints) return;
+            const offX = it._offsetX || 0, offY = it._offsetY || 0;
+            let grpCTM = null;
+            try {
+                const ss = _cActiveSvg.getScreenCTM(), gs = it.svgGroup && it.svgGroup.getScreenCTM();
+                if (ss && gs) grpCTM = ss.inverse().multiply(gs);
+            } catch(e) {}
+
+            it.figureLines.forEach(function(ld) {
+                if (ld.isDiagonal) return;
+                const fp = it.shapePoints.find(function(p) { return p.num === ld.from; });
+                const tp = ld.isClosing ? it.shapePoints[0] : it.shapePoints.find(function(p) { return p.num === ld.to; });
+                if (!fp || !tp) return;
+
+                let lx1 = fp.x + offX, ly1 = fp.y + offY;
+                let lx2 = tp.x + offX, ly2 = tp.y + offY;
+                if (grpCTM) {
+                    const a = _applyMatrix(grpCTM, lx1, ly1), b = _applyMatrix(grpCTM, lx2, ly2);
+                    lx1 = a.x; ly1 = a.y; lx2 = b.x; ly2 = b.y;
+                }
+
+                const t = _segmentIntersectT(x1, y1, x2, y2, lx1, ly1, lx2, ly2);
+                if (t !== null) tValues.push(t);
+            });
+        });
+
+        // Перетини з полігонами всіх полосок (включно зі зміненою changedItem)
+        _cActiveSvg.querySelectorAll('polygon[data-construct]').forEach(function(poly) {
+            const pts = _parsePolygonPoints(poly);
+            if (pts.length < 4) return;
+            const edges = [
+                [pts[0], pts[1]],
+                [pts[1], pts[2]],
+                [pts[2], pts[3]],
+                [pts[3], pts[0]],
+            ];
+            edges.forEach(function(edge) {
+                const t = _segmentIntersectT(x1, y1, x2, y2, edge[0].x, edge[0].y, edge[1].x, edge[1].y);
+                if (t !== null) tValues.push(t);
+            });
+        });
+
+        tValues.sort(function(a, b) { return a - b; });
+
+        // Знаходимо проміжок що містить tMid
+        let tS = 0, tE = 1;
+        for (let i = 0; i < tValues.length - 1; i++) {
+            if (tValues[i] <= tMid && tMid <= tValues[i + 1]) {
+                tS = tValues[i];
+                tE = tValues[i + 1];
+                break;
+            }
+        }
+
+        if (tE - tS < 0.001) return;
+
+        // Оновлюємо межі і перемальовуємо без рекурсії (без виклику _recalcAllStripBounds)
+        strip._tStart = tS;
+        strip._tEnd   = tE;
+
+        const ux = dx / len, uy = dy / len;
+        const sideSign = strip.constructSideInward ? 1 : -1;
+        const nx = uy * sideSign, ny = -ux * sideSign;
+        const thicknessPx = (strip.constructThickness || CONSTRUCT_THICKNESS_M) * SCALE;
+
+        let tA = tS, tB = tE;
+        const lenM = strip.constructLength || 0;
+        if (lenM > 0) {
+            const tSpan = (lenM * SCALE) / len;
+            if (strip.constructFromEnd) {
+                tA = Math.max(tS, tB - tSpan);
+            } else {
+                tB = Math.min(tE, tA + tSpan);
+            }
+        }
+
+        const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
+        const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
+
+        const polyPts = [
+            sx1 + ',' + sy1,
+            sx2 + ',' + sy2,
+            (sx2 + nx * thicknessPx) + ',' + (sy2 + ny * thicknessPx),
+            (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
+        ];
+        strip._svgPoly.setAttribute('points', polyPts.join(' '));
+        strip._svgPoly.style.display = strip.visible === false ? 'none' : '';
+
+        // Оновлюємо маркер початку
+        if (strip._svgStartMarker && strip._svgStartMarker.parentNode) {
+            strip._svgStartMarker.parentNode.removeChild(strip._svgStartMarker);
+        }
+        strip._svgStartMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
+        strip._svgStartMarker.style.display = strip.visible === false ? 'none' : '';
+        _cActiveSvg.appendChild(strip._svgStartMarker);
+        (function(hi) {
+            strip._svgStartMarker.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hi);
+            });
+        }(strip));
+    });
+}
 
 /**
  * Шукає товщину WI1 (elThickness) серед елементів ієрархії,
