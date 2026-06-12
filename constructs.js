@@ -1022,9 +1022,18 @@ window._redrawWindowElement = function(elItem) {
         }
     }
 
-    const thPx   = (elItem.elThickness || _WIN_THICKNESS_M) * SCALE;
-    const startPx = elItem.elStart * SCALE;
-    const elen    = (elItem.elEnd - elItem.elStart) * SCALE;
+    const thPx = (elItem.elThickness || _WIN_THICKNESS_M) * SCALE;
+    const elen  = (elItem.elEnd - elItem.elStart) * SCALE;
+
+    // elFromEnd: відлік від кінця лінії (B→A)
+    // elStart — відстань від точки B до ближнього до B краю вікна
+    // elEnd   — відстань від точки B до дальнього від B краю вікна
+    // Реальна стартова точка = (x2,y2) - ux * elEnd * SCALE
+    //                        = (x1,y1) + ux * (len - elEnd * SCALE)
+    const startPx = elItem.elFromEnd
+        ? (len - elItem.elEnd * SCALE)
+        : (elItem.elStart * SCALE);
+
     const sx = x1 + ux * startPx, sy = y1 + uy * startPx;
 
     while (elItem.svgGroup.firstChild) elItem.svgGroup.removeChild(elItem.svgGroup.firstChild);

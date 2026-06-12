@@ -289,6 +289,7 @@ const PROP_SCHEMA = {
         { key: '_thickness',         label: 'Товщина (м)',                 type: 'number', readOnly: false, hint: 'За замовчуванням 0.20' },
         { key: 'windowAutoThickness',label: 'Авто-товщина (до стіни)',     type: 'bool',   readOnly: false },
         { key: 'elSide',             label: 'Зсередини',                   type: 'bool',   readOnly: false },
+        { key: 'elFromEnd',          label: 'Відлік від кінця (B→A)',      type: 'bool',   readOnly: false },
         { group: 'Відображення' },
         { key: 'visible',            label: 'Видимий',                     type: 'bool',   readOnly: false },
     ],
@@ -338,6 +339,7 @@ function _propGet(item, key) {
     if (key === 'windowAutoThickness') return item.windowAutoThickness === true;
     // elSide як bool: true = зсередини (side=-1), false = ззовні (side=1)
     if (key === 'elSide') return (item.elSide != null ? item.elSide : 1) === -1;
+    if (key === 'elFromEnd') return item.elFromEnd === true;
     return item[key] ?? '';
 }
 
@@ -391,13 +393,14 @@ function _propSet(item, key, value) {
         _redrawItemSvgGroup(item);
         return;
     }
-    if (key === 'elStart' || key === 'elEnd' || key === 'elSide' || key === '_thickness' || key === 'windowAutoThickness') {
+    if (key === 'elStart' || key === 'elEnd' || key === 'elSide' || key === '_thickness' || key === 'windowAutoThickness' || key === 'elFromEnd') {
         if (key === 'elStart') item.elStart = parseFloat(String(value).replace(',', '.')) || 0;
         else if (key === 'elEnd') item.elEnd = parseFloat(String(value).replace(',', '.')) || 0;
         // elSide: bool true → зсередини → side=-1; false → ззовні → side=1
         else if (key === 'elSide') item.elSide = value ? -1 : 1;
         else if (key === '_thickness') item.elThickness = parseFloat(String(value).replace(',', '.')) || ELEMENT_THICKNESS;
         else if (key === 'windowAutoThickness') item.windowAutoThickness = value;
+        else if (key === 'elFromEnd') item.elFromEnd = value;
         _syncElementToParentAndRedraw(item);
         return;
     }
