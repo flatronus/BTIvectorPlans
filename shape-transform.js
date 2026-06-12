@@ -188,6 +188,18 @@ window.shapeTransform = (function () {
     function _refreshPoints(item) {
         if (window._highlightSvgItem) _highlightSvgItem(item);
         _updateRoomLabelsTree(item);
+        // Оновлюємо конструктиви і вікна прив'язані до цієї фігури (і дочірніх)
+        if (typeof window._updateConstructsForItem === 'function') {
+            (function walk(it) {
+                if (!it) return;
+                if (it.type === 'room' || it.type === 'building' || it.type === 'contour') {
+                    window._updateConstructsForItem(it);
+                }
+                (it.children || []).forEach(function(ch) {
+                    if (ch.type !== 'element') walk(ch);
+                });
+            }(item));
+        }
     }
 
     /**
