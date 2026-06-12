@@ -26,6 +26,59 @@ window._renderSvgDashedLine = function (svg, x1, y1, x2, y2, id) {
     svg.appendChild(line);
 };
 
+/**
+ * Будує рядок SVG-шляху дуги між (x1,y1)→(x2,y2) з висотою sag (опуклість).
+ * sag > 0 — дуга відхиляється ліворуч від напрямку руху (відносно лінії start→end),
+ * sag < 0 — праворуч.
+ * Повертає рядок 'd' для <path>.
+ */
+window._buildArcPath = function (x1, y1, x2, y2, sag) {
+    if (!sag || sag === 0) return `M ${x1} ${y1} L ${x2} ${y2}`;
+    const dx  = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return `M ${x1} ${y1} L ${x2} ${y2}`;
+    // Перпендикуляр (ліворуч від напрямку)
+    const px = -dy / len, py = dx / len;
+    // Радіус кола за формулою: R = (chord²/4 + sag²) / (2*sag)
+    const chord = len;
+    const R = (chord * chord / 4 + sag * sag) / (2 * sag);
+    // large-arc-flag: 0 якщо |sag| < |R| (менша дуга)
+    const largeArc = Math.abs(sag) > Math.abs(R) ? 1 : 0;
+    const sweep = sag > 0 ? 1 : 0;
+    return `M ${x1} ${y1} A ${Math.abs(R)} ${Math.abs(R)} 0 ${largeArc} ${sweep} ${x2} ${y2}`;
+};
+
+/**
+ * Малює SVG дугу між (x1,y1)→(x2,y2) з висотою sag (у пікселях).
+ */
+window._renderSvgArc = function (svg, x1, y1, x2, y2, sag, id) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', _buildArcPath(x1, y1, x2, y2, sag));
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'black');
+    path.setAttribute('stroke-width', '1');
+    path.setAttribute('vector-effect', 'non-scaling-stroke');
+    if (id !== undefined) path.setAttribute('id', `line-${id}`);
+    svg.appendChild(path);
+};
+
+/**
+ * Витягує параметри дуги з parsedData.elements для lineType === 'curve'.
+ * Формат elements: [ширина_хорди(число), ...елементи..., висота_дуги(число)]
+ * Повертає { chordWidth, sagMeters } або null якщо недостатньо даних.
+ * chordWidth = перше число в elements (в метрах).
+ * sagMeters  = останнє число в elements (в метрах), зі знаком (+ ліворуч, - праворуч).
+ */
+window._parseArcParams = function (elements) {
+    const nums = [];
+    const numIdx = [];
+    elements.forEach(function(el, i) {
+        if (el.type === 'number') { nums.push(el.value); numIdx.push(i); }
+    });
+    if (nums.length < 2) return null;
+    return { chordWidth: nums[0], sagMeters: nums[nums.length - 1] };
+};
+
 window._renderSvgPoint = function (svg, x, y, num) {
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', x); circle.setAttribute('cy', y);

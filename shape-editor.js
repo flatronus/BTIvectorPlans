@@ -206,10 +206,15 @@ window.drawLineOnCanvas = function (parsedData) {
     let endX = lastPoint.x, endY = lastPoint.y;
     let lineLength = 0;
 
-    for (let i = parsedData.elements.length - 1; i >= 0; i--) {
-        if (parsedData.elements[i].type === 'number') {
-            lineLength = parseFloat(parsedData.elements[i].value);
-            break;
+    if (parsedData.lineType === 'curve') {
+        const arcP = _parseArcParams(parsedData.elements);
+        lineLength = arcP ? arcP.chordWidth : 0;
+    } else {
+        for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+            if (parsedData.elements[i].type === 'number') {
+                lineLength = parseFloat(parsedData.elements[i].value);
+                break;
+            }
         }
     }
 
@@ -222,7 +227,13 @@ window.drawLineOnCanvas = function (parsedData) {
         endX = rel.x; endY = rel.y;
     }
 
-    _renderSvgLine(svg, lastPoint.x, lastPoint.y, endX, endY, G.lineIdCounter);
+    if (parsedData.lineType === 'curve') {
+        const arcP = _parseArcParams(parsedData.elements);
+        const sag = arcP ? arcP.sagMeters * SCALE : 0;
+        _renderSvgArc(svg, lastPoint.x, lastPoint.y, endX, endY, sag, G.lineIdCounter);
+    } else {
+        _renderSvgLine(svg, lastPoint.x, lastPoint.y, endX, endY, G.lineIdCounter);
+    }
     drawLineDimension(lastPoint.x, lastPoint.y, endX, endY, lineLength, null);
     drawElementsOnLine(parsedData, lastPoint.x, lastPoint.y, endX, endY, SCALE);
 
@@ -349,8 +360,13 @@ window.updateExistingLine = function (lineId, parsedData) {
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
     let newLength = 0;
-    for (let i = parsedData.elements.length - 1; i >= 0; i--) {
-        if (parsedData.elements[i].type === 'number') { newLength = parsedData.elements[i].value; break; }
+    if (parsedData.lineType === 'curve') {
+        const arcP = _parseArcParams(parsedData.elements);
+        newLength = arcP ? arcP.chordWidth : 0;
+    } else {
+        for (let i = parsedData.elements.length - 1; i >= 0; i--) {
+            if (parsedData.elements[i].type === 'number') { newLength = parsedData.elements[i].value; break; }
+        }
     }
 
     if (!G.figureLines[idx].isDiagonal && newLength <= 0) {
@@ -424,7 +440,13 @@ window.redrawEntireFigure = function () {
             }
             drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
         } else {
-            _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            if (lineData.lineType === 'curve') {
+                const arcP = _parseArcParams(lineData.elements || []);
+                const sag = arcP ? arcP.sagMeters * SCALE : 0;
+                _renderSvgArc(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, sag, lineData.id);
+            } else {
+                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            }
             drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
             drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
             if (!lineData.isClosing) {
