@@ -399,7 +399,6 @@ function _propSet(item, key, value) {
         else if (key === '_thickness') item.elThickness = parseFloat(String(value).replace(',', '.')) || ELEMENT_THICKNESS;
         else if (key === 'windowAutoThickness') item.windowAutoThickness = value;
         _syncElementToParentAndRedraw(item);
-        if (key === 'windowAutoThickness') renderProperties(item);
         return;
     }
     if (key === 'constructThickness' || key === 'constructFromEnd' || key === 'constructLength' || key === 'constructSideInward' || key === 'constructAutoThickness') {
@@ -580,6 +579,7 @@ window.deleteSelectedHierarchyItem = function() {
 
     // Видаляємо SVG
     if (item.type === 'construct') {
+        const lineKey = item._lineKey; // зберігаємо перед видаленням
         if (item._svgPoly && item._svgPoly.parentNode)
             item._svgPoly.parentNode.removeChild(item._svgPoly);
         if (item._svgStartMarker && item._svgStartMarker.parentNode)
@@ -628,6 +628,14 @@ window.deleteSelectedHierarchyItem = function() {
     }
     _removeFromTree(G.hierarchyData);
     G.selectedHierarchyItem = null;
+
+    // Якщо видалили полоску — перепаковуємо решту на тій самій лінії
+    if (item.type === 'construct' && typeof _repackStripsOnLine === 'function') {
+        const sibling = _flattenHierarchy(G.hierarchyData)
+            .find(function(it) { return it.type === 'construct' && it._lineKey === item._lineKey; });
+        if (sibling) _repackStripsOnLine(sibling);
+    }
+
     _syncHierarchyToCanvas();
     renderHierarchy();
     renderProperties(null);
