@@ -42,9 +42,11 @@ window._buildArcPath = function (x1, y1, x2, y2, sag) {
     // Радіус кола за формулою: R = (chord²/4 + sag²) / (2*sag)
     const chord = len;
     const R = (chord * chord / 4 + sag * sag) / (2 * sag);
-    // large-arc-flag: 0 якщо |sag| < |R| (менша дуга)
+    // large-arc-flag: 1 якщо |sag| > |R| (більша дуга, більше ніж півколо)
     const largeArc = Math.abs(sag) > Math.abs(R) ? 1 : 0;
-    const sweep = sag > 0 ? 1 : 0;
+    // sweep: 0 = проти год. стрілки (ліворуч від напрямку в SVG), 1 = за год. стрілкою (праворуч)
+    // sag > 0 → дуга ліворуч від напрямку → sweep=0; sag < 0 → праворуч → sweep=1
+    const sweep = sag > 0 ? 0 : 1;
     return `M ${x1} ${y1} A ${Math.abs(R)} ${Math.abs(R)} 0 ${largeArc} ${sweep} ${x2} ${y2}`;
 };
 
