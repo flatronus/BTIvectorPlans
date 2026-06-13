@@ -1367,7 +1367,7 @@ function _drawWI1Svg(target, sx1, sy1, sx2, sy2, side, thPx, sagPx) {
         rect.setAttribute('fill', 'none'); rect.setAttribute('stroke', 'black');
         rect.setAttribute('stroke-width', '1'); rect.setAttribute('vector-effect', 'non-scaling-stroke');
         target.appendChild(rect);
-        // Середня дуга (sag половина товщини)
+        // Середня дуга: концентрична, радіус midR = R + normalSign*thPx/2, той самий центр і кути
         const c = _arcCircle(sx1, sy1, sx2, sy2, sagPx);
         if (c) {
             const normalSign = (c.Rs > 0 ? 1 : -1) * side;
@@ -1376,9 +1376,9 @@ function _drawWI1Svg(target, sx1, sy1, sx2, sy2, side, thPx, sagPx) {
                 const angA = c.angA, angB = c.angB;
                 const m1x = c.cx + midR * Math.cos(angA), m1y = c.cy + midR * Math.sin(angA);
                 const m2x = c.cx + midR * Math.cos(angB), m2y = c.cy + midR * Math.sin(angB);
-                const midSag = sagPx + normalSign * thPx / 2;
+                const largeArc = Math.abs(sagPx) > c.R ? 1 : 0;
                 const midPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                midPath.setAttribute('d', _buildArcPath(m1x, m1y, m2x, m2y, midSag));
+                midPath.setAttribute('d', 'M '+m1x+','+m1y+' A '+midR+','+midR+' 0 '+largeArc+' '+c.sweep+' '+m2x+','+m2y);
                 midPath.setAttribute('fill', 'none'); midPath.setAttribute('stroke', 'black');
                 midPath.setAttribute('stroke-width', '1'); midPath.setAttribute('vector-effect', 'non-scaling-stroke');
                 target.appendChild(midPath);
