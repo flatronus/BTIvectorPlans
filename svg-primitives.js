@@ -42,11 +42,9 @@ window._buildArcPath = function (x1, y1, x2, y2, sag) {
     // Радіус кола за формулою: R = (chord²/4 + sag²) / (2*sag)
     const chord = len;
     const R = (chord * chord / 4 + sag * sag) / (2 * sag);
-    // large-arc-flag: 1 якщо |sag| > |R| (більша дуга, більше ніж півколо)
+    // large-arc-flag: 0 якщо |sag| < |R| (менша дуга)
     const largeArc = Math.abs(sag) > Math.abs(R) ? 1 : 0;
-    // sweep: 0 = проти год. стрілки (ліворуч від напрямку в SVG), 1 = за год. стрілкою (праворуч)
-    // sag > 0 → дуга ліворуч від напрямку → sweep=0; sag < 0 → праворуч → sweep=1
-    const sweep = sag > 0 ? 0 : 1;
+    const sweep = sag > 0 ? 1 : 0;
     return `M ${x1} ${y1} A ${Math.abs(R)} ${Math.abs(R)} 0 ${largeArc} ${sweep} ${x2} ${y2}`;
 };
 
@@ -66,10 +64,10 @@ window._renderSvgArc = function (svg, x1, y1, x2, y2, sag, id) {
 
 /**
  * Витягує параметри дуги з parsedData.elements для lineType === 'curve'.
- * Формат elements: [ширина_хорди(число), ...елементи..., висота_дуги(число)]
+ * Формат elements: [висота_дуги(число), ширина_хорди(число), ...елементи...]
  * Повертає { chordWidth, sagMeters } або null якщо недостатньо даних.
- * chordWidth = перше число в elements (в метрах).
- * sagMeters  = останнє число в elements (в метрах), зі знаком (+ ліворуч, - праворуч).
+ * sagMeters  = перше число в elements (в метрах), зі знаком (+ ліворуч, - праворуч).
+ * chordWidth = друге число в elements (в метрах).
  */
 window._parseArcParams = function (elements) {
     const nums = [];
@@ -78,7 +76,7 @@ window._parseArcParams = function (elements) {
         if (el.type === 'number') { nums.push(el.value); numIdx.push(i); }
     });
     if (nums.length < 2) return null;
-    return { chordWidth: nums[0], sagMeters: nums[nums.length - 1] };
+    return { chordWidth: nums[1], sagMeters: nums[0] };
 };
 
 window._renderSvgPoint = function (svg, x, y, num) {

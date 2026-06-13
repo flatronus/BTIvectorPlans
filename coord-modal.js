@@ -214,7 +214,7 @@ window.parseCoordinateInput = function (inputText) {
     if (lineType === 'curve') {
         const nums = elements.filter(e => e.type === 'number');
         if (nums.length < 2) {
-            showToast('Для дуги введіть ширину хорди та висоту дуги', 'warning'); return null;
+            showToast('Для дуги введіть висоту дуги та ширину хорди', 'warning'); return null;
         }
     }
 
