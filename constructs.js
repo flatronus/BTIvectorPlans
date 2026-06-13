@@ -136,7 +136,8 @@ function _screenToSvg(clientX, clientY) {
 }
 
 /**
- * Шукає найближчу лінію будь-якої фігури на канві, підсвічує її
+ * Шукає найближчу лінію будь-якої фігури на канві, підсвічує її.
+ * Для дуг (lineType==='curve') вимірює відстань до дуги, а не до хорди.
  */
 function _detectSnapLine(clientX, clientY) {
     if (!_cActiveSvg) return;
@@ -148,14 +149,12 @@ function _detectSnapLine(clientX, clientY) {
     let bestDist = Infinity;
     const SNAP_THRESHOLD = 30; // SVG-пікселів
 
-    // Перебираємо всі елементи ієрархії на поточній канві
     const allItems = _flattenHierarchy(G.hierarchyData);
     allItems.forEach(function(item) {
         if (!item.figureLines || !item.shapePoints || !item.svgGroup) return;
 
         const offsetX = item._offsetX || 0;
         const offsetY = item._offsetY || 0;
-        // Отримуємо CTM групи → SVG
         let groupCTM = null;
         try {
             const svgScreen = _cActiveSvg.getScreenCTM();
@@ -175,7 +174,6 @@ function _detectSnapLine(clientX, clientY) {
             let x1 = fromPt.x + offsetX, y1 = fromPt.y + offsetY;
             let x2 = toPt.x   + offsetX, y2 = toPt.y   + offsetY;
 
-            // Трансформуємо у SVG-координати через CTM групи
             if (groupCTM) {
                 const p1 = _applyMatrix(groupCTM, x1, y1);
                 const p2 = _applyMatrix(groupCTM, x2, y2);
@@ -183,11 +181,20 @@ function _detectSnapLine(clientX, clientY) {
                 x2 = p2.x; y2 = p2.y;
             }
 
-            const dist = _distToSegment(svgPt.x, svgPt.y, x1, y1, x2, y2);
+            let dist;
+            let sagPx = 0;
+            if (lineData.lineType === 'curve') {
+                const arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(lineData.elements || []) : null;
+                sagPx = arcP ? arcP.sagMeters * SCALE : 0;
+                dist = _distToArc(svgPt.x, svgPt.y, x1, y1, x2, y2, sagPx);
+            } else {
+                dist = _distToSegment(svgPt.x, svgPt.y, x1, y1, x2, y2);
+            }
+
             if (dist < SNAP_THRESHOLD && dist < bestDist) {
                 bestDist = dist;
                 best = { x1, y1, x2, y2, lineData, item, fromPt, toPt, groupCTM, offsetX, offsetY,
-                         dropX: svgPt.x, dropY: svgPt.y };
+                         dropX: svgPt.x, dropY: svgPt.y, sagPx: sagPx, lineType: lineData.lineType };
             }
         });
     });
@@ -200,9 +207,16 @@ function _detectSnapLine(clientX, clientY) {
 let _cSnapEl = null;
 function _drawSvgSnapHighlight(lineInfo) {
     if (!_cActiveSvg) return;
-    const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    el.setAttribute('x1', lineInfo.x1); el.setAttribute('y1', lineInfo.y1);
-    el.setAttribute('x2', lineInfo.x2); el.setAttribute('y2', lineInfo.y2);
+    let el;
+    if (lineInfo.lineType === 'curve' && lineInfo.sagPx) {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        el.setAttribute('d', _buildArcPath(lineInfo.x1, lineInfo.y1, lineInfo.x2, lineInfo.y2, lineInfo.sagPx));
+        el.setAttribute('fill', 'none');
+    } else {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        el.setAttribute('x1', lineInfo.x1); el.setAttribute('y1', lineInfo.y1);
+        el.setAttribute('x2', lineInfo.x2); el.setAttribute('y2', lineInfo.y2);
+    }
     el.setAttribute('stroke', '#38bdf8');
     el.setAttribute('stroke-width', '4');
     el.setAttribute('stroke-dasharray', '6 3');
@@ -252,49 +266,58 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     if (!_cActiveSvg) return;
 
     const { x1, y1, x2, y2, dropX, dropY } = lineInfo;
+    const sagPx = lineInfo.sagPx || 0;
+    const isArc = lineInfo.lineType === 'curve' && sagPx !== 0;
     const thicknessPx = thicknessM * SCALE;
 
     const dx  = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) return;
 
-    const ux = dx / len, uy = dy / len;     // одиничний вектор вздовж лінії
+    const ux = dx / len, uy = dy / len;     // одиничний вектор вздовж хорди
     const nx = -uy, ny = ux;               // перпендикуляр (вліво)
 
-    // ── Збираємо параметричні t-значення вздовж відрізка [0..1] ──
-    // Завжди є кінці самого відрізка
+    // ── Збираємо параметричні t-значення вздовж хорди [0..1] ──
     const tValues = [0, 1];
 
-    // Кут кидання у параметрі t
+    // Кут кидання у параметрі t (проекція на хорду)
     const tDrop = dropX !== undefined
         ? _projectToLine(dropX, dropY, x1, y1, x2, y2)
         : 0.5;
 
-    // Знаходимо перетини існуючих полосок з лінією
+    // Знаходимо перетини існуючих полосок/path з хордою
     _cActiveSvg.querySelectorAll('polygon[data-construct]').forEach(function(poly) {
         const pts = _parsePolygonPoints(poly);
         if (pts.length < 4) return;
-
-        // Перші два і останні два кути — бічні ребра полоски.
-        // Ребра: 0-3 (лівий торець) і 1-2 (правий торець).
-        // Шукаємо перетин кожного з 4 ребер полоски з нашою лінією.
         const edges = [
-            [pts[0], pts[1]],   // основа (вздовж лінії)
-            [pts[1], pts[2]],   // правий торець
-            [pts[2], pts[3]],   // верхній край
-            [pts[3], pts[0]],   // лівий торець
+            [pts[0], pts[1]],
+            [pts[1], pts[2]],
+            [pts[2], pts[3]],
+            [pts[3], pts[0]],
         ];
-
         edges.forEach(function(edge) {
-            const t = _segmentIntersectT(
-                x1, y1, x2, y2,
-                edge[0].x, edge[0].y, edge[1].x, edge[1].y
-            );
+            const t = _segmentIntersectT(x1, y1, x2, y2, edge[0].x, edge[0].y, edge[1].x, edge[1].y);
             if (t !== null) tValues.push(t);
         });
     });
+    // Також path[data-construct] (дугові полоски)
+    _cActiveSvg.querySelectorAll('path[data-construct]').forEach(function(path) {
+        const bb = path.getBBox();
+        // Апроксимація: перетин bounding-box торців з хордою
+        const corners = [
+            {x: bb.x,          y: bb.y},
+            {x: bb.x+bb.width, y: bb.y},
+            {x: bb.x+bb.width, y: bb.y+bb.height},
+            {x: bb.x,          y: bb.y+bb.height},
+        ];
+        for (let ci = 0; ci < corners.length; ci++) {
+            const t = _segmentIntersectT(x1, y1, x2, y2,
+                corners[ci].x, corners[ci].y,
+                corners[(ci+1)%4].x, corners[(ci+1)%4].y);
+            if (t !== null) tValues.push(t);
+        }
+    });
 
-    // Сортуємо і беремо проміжок навколо tDrop
     tValues.sort(function(a, b) { return a - b; });
 
     let tStart = 0, tEnd = 1;
@@ -311,20 +334,28 @@ function _placeConstructStrip(lineInfo, thicknessM) {
     const sx1 = x1 + ux * tStart * len, sy1 = y1 + uy * tStart * len;
     const sx2 = x1 + ux * tEnd   * len, sy2 = y1 + uy * tEnd   * len;
 
-    const polyPts = [
-        { x: sx1,                      y: sy1                      },
-        { x: sx2,                      y: sy2                      },
-        { x: sx2 + nx * thicknessPx,   y: sy2 + ny * thicknessPx  },
-        { x: sx1 + nx * thicknessPx,   y: sy1 + ny * thicknessPx  },
-    ];
-
-    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    poly.setAttribute('points', polyPts.map(function(p) { return p.x + ',' + p.y; }).join(' '));
+    let poly;
+    if (isArc) {
+        // Будуємо closed path з двох дуг (зовнішня і внутрішня)
+        poly = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        poly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thicknessPx, nx, ny));
+        poly.setAttribute('data-construct', '1');
+        poly.setAttribute('data-arc', '1');
+    } else {
+        const polyPts = [
+            { x: sx1,                      y: sy1                      },
+            { x: sx2,                      y: sy2                      },
+            { x: sx2 + nx * thicknessPx,   y: sy2 + ny * thicknessPx  },
+            { x: sx1 + nx * thicknessPx,   y: sy1 + ny * thicknessPx  },
+        ];
+        poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        poly.setAttribute('points', polyPts.map(function(p) { return p.x + ',' + p.y; }).join(' '));
+        poly.setAttribute('data-construct', '1');
+    }
     poly.setAttribute('fill', 'rgba(125,211,252,0.35)');
     poly.setAttribute('stroke', '#38bdf8');
     poly.setAttribute('stroke-width', '1');
     poly.setAttribute('vector-effect', 'non-scaling-stroke');
-    poly.setAttribute('data-construct', '1');
     poly.style.cursor = 'pointer';
     poly.title = 'Подвійний клік — видалити';
 
@@ -335,7 +366,7 @@ function _placeConstructStrip(lineInfo, thicknessM) {
 
     _cActiveSvg.appendChild(poly);
 
-    // Мітка початку полоски (маленький трикутник-стрілка)
+    // Мітка початку полоски
     const startMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
     _cActiveSvg.appendChild(startMarker);
 
@@ -358,6 +389,7 @@ function _placeConstructStrip(lineInfo, thicknessM) {
         _hostLineId:          lineInfo.lineData ? lineInfo.lineData.id : null,
         _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
         _tStart: tStart, _tEnd: tEnd,
+        _sagPx:  sagPx,
         _svgPoly: poly,
         _svgStartMarker: startMarker,
     };
@@ -473,6 +505,89 @@ function _applyMatrix(m, x, y) {
     };
 }
 
+/**
+ * Будує closed SVG path полоски на дузі:
+ * внутрішня дуга (sx1,sy1)→(sx2,sy2) зі stag sagPx,
+ * зовнішня — (sx1+nx*th)→(sx2+nx*th) з радіусом R±th.
+ * Повертає рядок 'd'.
+ */
+function _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, nx, ny) {
+    if (!sagPx || sagPx === 0) {
+        // fallback — звичайний прямокутник
+        const p1 = sx1+','+sy1, p2 = sx2+','+sy2;
+        const p3 = (sx2+nx*thPx)+','+(sy2+ny*thPx), p4 = (sx1+nx*thPx)+','+(sy1+ny*thPx);
+        return 'M '+p1+' L '+p2+' L '+p3+' L '+p4+' Z';
+    }
+    const dx = sx2 - sx1, dy = sy2 - sy1;
+    const chord = Math.sqrt(dx*dx + dy*dy);
+    if (chord < 1) return 'M '+sx1+','+sy1+' Z';
+
+    // Радіус внутрішньої дуги
+    const R = (chord*chord/4 + sagPx*sagPx) / (2*sagPx);
+    const largeArc = Math.abs(sagPx) > Math.abs(R) ? 1 : 0;
+    const sweep = sagPx > 0 ? 1 : 0;
+    const absR = Math.abs(R);
+
+    // Зовнішня хорда (зміщена на thPx по нормалі)
+    const ox1 = sx1 + nx*thPx, oy1 = sy1 + ny*thPx;
+    const ox2 = sx2 + nx*thPx, oy2 = sy2 + ny*thPx;
+
+    // Радіус зовнішньої дуги: R + thPx (якщо sag>0 — ліворуч, outer далі від центру кола)
+    const outerR = Math.abs(R + (sagPx > 0 ? thPx : -thPx));
+    const outerSweep = sweep;
+
+    return [
+        'M', ox1+','+oy1,
+        'A', outerR, outerR, 0, largeArc, outerSweep, ox2+','+oy2,
+        'L', sx2+','+sy2,
+        'A', absR, absR, 0, largeArc, (sweep ? 0 : 1), sx1+','+sy1,
+        'Z',
+    ].join(' ');
+}
+
+/**
+ * Відстань від точки (px,py) до дуги між (ax,ay)-(bx,by) з висотою sag.
+ * Апроксимація: вимірює відстань до кола, обмеженого дугою.
+ */
+function _distToArc(px, py, ax, ay, bx, by, sag) {
+    if (!sag || sag === 0) return _distToSegment(px, py, ax, ay, bx, by);
+    const dx = bx - ax, dy = by - ay;
+    const chord = Math.sqrt(dx*dx + dy*dy);
+    if (chord < 1) return _distToSegment(px, py, ax, ay, bx, by);
+    // Центр хорди
+    const mx = (ax+bx)/2, my = (ay+by)/2;
+    // Перпендикуляр вліво
+    const pxN = -dy/chord, pyN = dx/chord;
+    // Центр кола
+    const R = (chord*chord/4 + sag*sag) / (2*sag);
+    const cx = mx + pxN * (R - sag);
+    const cy = my + pyN * (R - sag);
+    const absR = Math.abs(R);
+    // Відстань від точки до кола
+    const dToCenter = Math.sqrt((px-cx)**2+(py-cy)**2);
+    const dToCircle = Math.abs(dToCenter - absR);
+    // Перевіряємо що точка знаходиться в кутовому діапазоні дуги
+    const angA = Math.atan2(ay - cy, ax - cx);
+    const angB = Math.atan2(by - cy, bx - cx);
+    const angP = Math.atan2(py - cy, px - cx);
+    // Нормалізуємо до [0, 2π]
+    function norm(a) { return ((a % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI); }
+    const nA = norm(angA), nB = norm(angB), nP = norm(angP);
+    let inArc;
+    if (sag > 0) {
+        inArc = nA <= nP ? nP <= nB || nB < nA : nP <= nB || nP >= nA;
+    } else {
+        inArc = nB <= nP ? nP <= nA || nA < nB : nP <= nA || nP >= nB;
+    }
+    if (!inArc) {
+        // Поза дугою — відстань до найближчого кінця
+        const dA = Math.sqrt((px-ax)**2+(py-ay)**2);
+        const dB = Math.sqrt((px-bx)**2+(py-by)**2);
+        return Math.min(dA, dB);
+    }
+    return dToCircle;
+}
+
 /** Відстань від точки (px,py) до відрізка (ax,ay)-(bx,by) */
 function _distToSegment(px, py, ax, ay, bx, by) {
     const dx = bx - ax, dy = by - ay;
@@ -500,6 +615,8 @@ window._redrawConstructItem = function (item) {
     }
 
     const { _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2 } = item;
+    const sagPx = item._sagPx || 0;
+    const isArc = sagPx !== 0;
     const thicknessPx = (item.constructThickness || CONSTRUCT_THICKNESS_M) * SCALE;
 
     const dx  = x2 - x1, dy = y2 - y1;
@@ -521,10 +638,8 @@ window._redrawConstructItem = function (item) {
         const lenPx  = lenM * SCALE;
         const tSpan  = lenPx / len;
         if (item.constructFromEnd) {
-            // Відлік від кінця (tB)
             tA = Math.max(item._tStart, tB - tSpan);
         } else {
-            // Відлік від початку (tA)
             tB = Math.min(item._tEnd, tA + tSpan);
         }
     }
@@ -532,13 +647,52 @@ window._redrawConstructItem = function (item) {
     const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
     const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
 
-    const pts = [
-        sx1 + ',' + sy1,
-        sx2 + ',' + sy2,
-        (sx2 + nx * thicknessPx) + ',' + (sy2 + ny * thicknessPx),
-        (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
-    ];
-    item._svgPoly.setAttribute('points', pts.join(' '));
+    if (isArc) {
+        // Перебудовуємо як path (може бути polygon → треба замінити елемент)
+        if (item._svgPoly.tagName === 'polygon') {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('fill', 'rgba(125,211,252,0.35)');
+            path.setAttribute('stroke', '#38bdf8');
+            path.setAttribute('stroke-width', '1');
+            path.setAttribute('vector-effect', 'non-scaling-stroke');
+            path.setAttribute('data-construct', '1');
+            path.setAttribute('data-arc', '1');
+            path.style.cursor = 'pointer';
+            path.title = 'Подвійний клік — видалити';
+            (function(hi) {
+                path.addEventListener('dblclick', function(e) { e.stopPropagation(); if (path.parentNode) path.parentNode.removeChild(path); });
+                path.addEventListener('click', function(e) { e.stopPropagation(); if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hi); });
+            }(item));
+            if (item._svgPoly.parentNode) item._svgPoly.parentNode.replaceChild(path, item._svgPoly);
+            item._svgPoly = path;
+        }
+        item._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx * sideSign, thicknessPx, nx, ny));
+    } else {
+        // Переконуємось що це polygon
+        if (item._svgPoly.tagName === 'path') {
+            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            poly.setAttribute('fill', 'rgba(125,211,252,0.35)');
+            poly.setAttribute('stroke', '#38bdf8');
+            poly.setAttribute('stroke-width', '1');
+            poly.setAttribute('vector-effect', 'non-scaling-stroke');
+            poly.setAttribute('data-construct', '1');
+            poly.style.cursor = 'pointer';
+            poly.title = 'Подвійний клік — видалити';
+            (function(hi) {
+                poly.addEventListener('dblclick', function(e) { e.stopPropagation(); if (poly.parentNode) poly.parentNode.removeChild(poly); });
+                poly.addEventListener('click', function(e) { e.stopPropagation(); if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hi); });
+            }(item));
+            if (item._svgPoly.parentNode) item._svgPoly.parentNode.replaceChild(poly, item._svgPoly);
+            item._svgPoly = poly;
+        }
+        const pts = [
+            sx1 + ',' + sy1,
+            sx2 + ',' + sy2,
+            (sx2 + nx * thicknessPx) + ',' + (sy2 + ny * thicknessPx),
+            (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
+        ];
+        item._svgPoly.setAttribute('points', pts.join(' '));
+    }
 
     // Оновлюємо позицію маркера початку
     if (item._svgStartMarker && item._svgStartMarker.parentNode) {
@@ -548,7 +702,6 @@ window._redrawConstructItem = function (item) {
         item._svgStartMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
         item._svgStartMarker.style.display = item.visible === false ? 'none' : '';
         _cActiveSvg.appendChild(item._svgStartMarker);
-        // Підтягуємо обробник кліку
         (function(hi) {
             item._svgStartMarker.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -619,7 +772,7 @@ function _recalcAllStripBounds(changedItem) {
             });
         });
 
-        // Перетини з полігонами всіх полосок (включно зі зміненою changedItem)
+        // Перетини з полігонами/path всіх полосок (включно зі зміненою changedItem)
         _cActiveSvg.querySelectorAll('polygon[data-construct]').forEach(function(poly) {
             const pts = _parsePolygonPoints(poly);
             if (pts.length < 4) return;
@@ -633,6 +786,17 @@ function _recalcAllStripBounds(changedItem) {
                 const t = _segmentIntersectT(x1, y1, x2, y2, edge[0].x, edge[0].y, edge[1].x, edge[1].y);
                 if (t !== null) tValues.push(t);
             });
+        });
+        _cActiveSvg.querySelectorAll('path[data-construct]').forEach(function(path) {
+            const bb = path.getBBox();
+            const corners = [
+                {x: bb.x, y: bb.y}, {x: bb.x+bb.width, y: bb.y},
+                {x: bb.x+bb.width, y: bb.y+bb.height}, {x: bb.x, y: bb.y+bb.height},
+            ];
+            for (let ci = 0; ci < corners.length; ci++) {
+                const t = _segmentIntersectT(x1, y1, x2, y2, corners[ci].x, corners[ci].y, corners[(ci+1)%4].x, corners[(ci+1)%4].y);
+                if (t !== null) tValues.push(t);
+            }
         });
 
         tValues.sort(function(a, b) { return a - b; });
@@ -672,13 +836,34 @@ function _recalcAllStripBounds(changedItem) {
         const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
         const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
 
-        const polyPts = [
-            sx1 + ',' + sy1,
-            sx2 + ',' + sy2,
-            (sx2 + nx * thicknessPx) + ',' + (sy2 + ny * thicknessPx),
-            (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
-        ];
-        strip._svgPoly.setAttribute('points', polyPts.join(' '));
+        const stripSagPx = strip._sagPx || 0;
+        if (stripSagPx !== 0) {
+            if (strip._svgPoly.tagName === 'polygon') {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('fill', 'rgba(125,211,252,0.35)');
+                path.setAttribute('stroke', '#38bdf8');
+                path.setAttribute('stroke-width', '1');
+                path.setAttribute('vector-effect', 'non-scaling-stroke');
+                path.setAttribute('data-construct', '1');
+                path.setAttribute('data-arc', '1');
+                path.style.cursor = 'pointer';
+                (function(hi) {
+                    path.addEventListener('dblclick', function(e) { e.stopPropagation(); if (path.parentNode) path.parentNode.removeChild(path); });
+                    path.addEventListener('click', function(e) { e.stopPropagation(); if (typeof selectHierarchyItem === 'function') selectHierarchyItem(hi); });
+                }(strip));
+                if (strip._svgPoly.parentNode) strip._svgPoly.parentNode.replaceChild(path, strip._svgPoly);
+                strip._svgPoly = path;
+            }
+            strip._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, stripSagPx, thicknessPx, nx, ny));
+        } else {
+            const polyPts = [
+                sx1 + ',' + sy1,
+                sx2 + ',' + sy2,
+                (sx2 + nx * thicknessPx) + ',' + (sy2 + ny * thicknessPx),
+                (sx1 + nx * thicknessPx) + ',' + (sy1 + ny * thicknessPx),
+            ];
+            strip._svgPoly.setAttribute('points', polyPts.join(' '));
+        }
         strip._svgPoly.style.display = strip.visible === false ? 'none' : '';
 
         // Оновлюємо маркер початку
@@ -836,14 +1021,22 @@ function _wDetectLine(clientX, clientY) {
                 x1 = a.x; y1 = a.y; x2 = b.x; y2 = b.y;
             }
 
-            const dist = _distToSegment(svgPt.x, svgPt.y, x1, y1, x2, y2);
-            if (dist < THRESH && dist < bestDist) {
-                bestDist = dist;
+            let dist2;
+            let sagPx2 = 0;
+            if (ld.lineType === 'curve') {
+                const arcP2 = (typeof _parseArcParams === 'function') ? _parseArcParams(ld.elements || []) : null;
+                sagPx2 = arcP2 ? arcP2.sagMeters * SCALE : 0;
+                dist2 = _distToArc(svgPt.x, svgPt.y, x1, y1, x2, y2, sagPx2);
+            } else {
+                dist2 = _distToSegment(svgPt.x, svgPt.y, x1, y1, x2, y2);
+            }
+            if (dist2 < THRESH && dist2 < bestDist) {
+                bestDist = dist2;
                 // Сторона: cross-product вектора лінії і вектора до курсора
                 const ldx = x2 - x1, ldy = y2 - y1;
                 const cross = ldx * (svgPt.y - y1) - ldy * (svgPt.x - x1);
                 const side = cross >= 0 ? 1 : -1;
-                best = { x1, y1, x2, y2, lineData: ld, item, offX, offY, grpCTM, dropX: svgPt.x, dropY: svgPt.y, side };
+                best = { x1, y1, x2, y2, lineData: ld, item, offX, offY, grpCTM, dropX: svgPt.x, dropY: svgPt.y, side, sagPx: sagPx2, lineType: ld.lineType };
             }
         });
     });
@@ -854,9 +1047,16 @@ function _wDetectLine(clientX, clientY) {
     _wTargetLine = best;
 
     if (best) {
-        const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        el.setAttribute('x1', best.x1); el.setAttribute('y1', best.y1);
-        el.setAttribute('x2', best.x2); el.setAttribute('y2', best.y2);
+        let el;
+        if (best.lineType === 'curve' && best.sagPx) {
+            el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            el.setAttribute('d', _buildArcPath(best.x1, best.y1, best.x2, best.y2, best.sagPx));
+            el.setAttribute('fill', 'none');
+        } else {
+            el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            el.setAttribute('x1', best.x1); el.setAttribute('y1', best.y1);
+            el.setAttribute('x2', best.x2); el.setAttribute('y2', best.y2);
+        }
         el.setAttribute('stroke', '#ea580c'); el.setAttribute('stroke-width', '4');
         el.setAttribute('stroke-dasharray', '6 3'); el.setAttribute('vector-effect', 'non-scaling-stroke');
         el.style.pointerEvents = 'none';
@@ -886,14 +1086,14 @@ function _wFinish(cx, cy) {
 function _placeWindowOnLine(li) {
     if (!_wActiveSvg) return;
     const { x1, y1, x2, y2, lineData, item, dropX, dropY, side } = li;
+    const sagPx = li.sagPx || 0;
+    const isArc = li.lineType === 'curve' && sagPx !== 0;
 
     const dx = x2 - x1, dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) return;
 
     const ux = dx / len, uy = dy / len;
-    // side=1 → нормаль вліво від вектора (cross>0): nx=-uy, ny=ux
-    // side=-1 → нормаль вправо: nx=uy, ny=-ux
     const nx = -uy * side, ny = ux * side;
 
     const tDrop = _projectToLine(dropX, dropY, x1, y1, x2, y2);
@@ -913,7 +1113,7 @@ function _placeWindowOnLine(li) {
     const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const newId = G.hierarchyIdCounter++;
     grp.setAttribute('data-hierarchy-id', String(newId));
-    _drawWI1Svg(grp, sx, sy, ux, uy, nx, ny, elen, thPx);
+    _drawWI1Svg(grp, sx, sy, ux, uy, nx, ny, elen, thPx, isArc ? sagPx : 0, tS, len);
 
     // Вікно малюємо ПРЯМО в SVG (не в групу фігури), щоб воно завжди було ВИЩЕ полосок
     _wActiveSvg.appendChild(grp);
@@ -942,6 +1142,7 @@ function _placeWindowOnLine(li) {
         // Геометрія лінії для перемалювання
         _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2,
         _side:   side,
+        _sagPx:  isArc ? sagPx : 0,
     };
 
     // Вставляємо тріплет у lineData.elements батьківської фігури
@@ -967,12 +1168,53 @@ function _placeWindowOnLine(li) {
 }
 
 /** Малює WI1 у SVG-групу */
-function _drawWI1Svg(target, sx, sy, ux, uy, nx, ny, elen, thPx) {
+/**
+ * Малює WI1 у SVG-групу.
+ * sagPx — висота дуги хост-лінії (0 = пряма); tStart — параметр початку на хорді; chordLen — довжина хорди.
+ * Для дуг: передня і задня грані — дуги, бічні — прямі.
+ */
+function _drawWI1Svg(target, sx, sy, ux, uy, nx, ny, elen, thPx, sagPx, tStart, chordLen) {
     const c1x = sx, c1y = sy;
     const c2x = sx + ux * elen, c2y = sy + uy * elen;
     const c3x = c2x + nx * thPx, c3y = c2y + ny * thPx;
     const c4x = c1x + nx * thPx, c4y = c1y + ny * thPx;
 
+    const isArc = sagPx && sagPx !== 0 && chordLen && chordLen > 0;
+
+    if (isArc) {
+        // Вираховуємо sag для підсегмента [sx,sy]→[c2x,c2y]
+        // Передня грань: sag пропорційний до subLen/chordLen
+        const subSag = sagPx * (elen / chordLen);
+        // Задня грань (зміщена на thPx по нормалі): радіус менший або більший
+        const chord = Math.sqrt((c2x-c1x)**2+(c2y-c1y)**2);
+        if (chord > 0) {
+            const R = (chord*chord/4 + sagPx*sagPx) / (2*sagPx);
+            const outerR = Math.abs(R) - thPx * (sagPx > 0 ? 1 : -1);
+            // Хорда залишається та сама, лише R змінюється
+            const innerSag = (chord/2)**2 / (outerR + Math.sqrt(outerR**2 - (chord/2)**2));
+            const hitD = _buildArcStripPath(c1x, c1y, c2x, c2y, subSag, thPx, nx, ny);
+            const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            hit.setAttribute('d', hitD);
+            hit.setAttribute('fill', 'transparent'); hit.setAttribute('stroke', 'none');
+            target.appendChild(hit);
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            rect.setAttribute('d', hitD);
+            rect.setAttribute('fill', 'none'); rect.setAttribute('stroke', 'black');
+            rect.setAttribute('stroke-width', '1'); rect.setAttribute('vector-effect', 'non-scaling-stroke');
+            target.appendChild(rect);
+            // Середня лінія — arc посередині
+            const m1x = c1x + nx * thPx/2, m1y = c1y + ny * thPx/2;
+            const m2x = c2x + nx * thPx/2, m2y = c2y + ny * thPx/2;
+            const midPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            midPath.setAttribute('d', _buildArcPath(m1x, m1y, m2x, m2y, subSag));
+            midPath.setAttribute('fill', 'none'); midPath.setAttribute('stroke', 'black');
+            midPath.setAttribute('stroke-width', '1'); midPath.setAttribute('vector-effect', 'non-scaling-stroke');
+            target.appendChild(midPath);
+            return;
+        }
+    }
+
+    // Пряма (оригінальна) версія
     // Прозора підкладка (hit-area)
     const hit = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     hit.setAttribute('points', [c1x+','+c1y, c2x+','+c2y, c3x+','+c3y, c4x+','+c4y].join(' '));
@@ -1037,7 +1279,9 @@ window._redrawWindowElement = function(elItem) {
     const sx = x1 + ux * startPx, sy = y1 + uy * startPx;
 
     while (elItem.svgGroup.firstChild) elItem.svgGroup.removeChild(elItem.svgGroup.firstChild);
-    _drawWI1Svg(elItem.svgGroup, sx, sy, ux, uy, nx, ny, elen, thPx);
+    const sagPxW = elItem._sagPx || 0;
+    const tStartW = elItem.elFromEnd ? ((len - elItem.elEnd * SCALE) / len) : (elItem.elStart * SCALE / len);
+    _drawWI1Svg(elItem.svgGroup, sx, sy, ux, uy, nx, ny, elen, thPx, sagPxW, tStartW, len);
 };
 
 /**
