@@ -331,14 +331,28 @@ function _placeConstructStrip(lineInfo, thicknessM) {
 
     if (tEnd - tStart < 0.001) return; // вільного місця немає
 
-    const sx1 = x1 + ux * tStart * len, sy1 = y1 + uy * tStart * len;
-    const sx2 = x1 + ux * tEnd   * len, sy2 = y1 + uy * tEnd   * len;
+    // Для дуги: точки на самій дузі, а не на хорді
+    let sx1, sy1, sx2, sy2;
+    if (isArc) {
+        const ptA = _arcPointAt(x1, y1, x2, y2, sagPx, tStart);
+        const ptB = _arcPointAt(x1, y1, x2, y2, sagPx, tEnd);
+        sx1 = ptA.x; sy1 = ptA.y;
+        sx2 = ptB.x; sy2 = ptB.y;
+    } else {
+        sx1 = x1 + ux * tStart * len; sy1 = y1 + uy * tStart * len;
+        sx2 = x1 + ux * tEnd   * len; sy2 = y1 + uy * tEnd   * len;
+    }
+
+    // subSagPx — висота дуги підсегмента [tStart..tEnd]
+    let subSagPx = 0;
+    if (isArc) {
+        subSagPx = _subArcSag(x1, y1, x2, y2, sagPx, tStart, tEnd);
+    }
 
     let poly;
     if (isArc) {
-        // Будуємо closed path з двох дуг (зовнішня і внутрішня)
         poly = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        poly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thicknessPx, nx, ny));
+        poly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, subSagPx, thicknessPx, 1));
         poly.setAttribute('data-construct', '1');
         poly.setAttribute('data-arc', '1');
     } else {
@@ -366,8 +380,13 @@ function _placeConstructStrip(lineInfo, thicknessM) {
 
     _cActiveSvg.appendChild(poly);
 
-    // Мітка початку полоски
-    const startMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
+    // Мітка початку полоски (дотична до дуги в точці початку)
+    let markerUx = ux, markerUy = uy;
+    if (isArc) {
+        const tan = _arcTangentAt(x1, y1, x2, y2, sagPx, tStart);
+        markerUx = tan.tx; markerUy = tan.ty;
+    }
+    const startMarker = _createConstructStartMarker(sx1, sy1, markerUx, markerUy);
     _cActiveSvg.appendChild(startMarker);
 
     /* ── Реєструємо в ієрархії ── */
@@ -506,41 +525,164 @@ function _applyMatrix(m, x, y) {
 }
 
 /**
- * Будує closed SVG path полоски на дузі:
- * внутрішня дуга (sx1,sy1)→(sx2,sy2) зі stag sagPx,
- * зовнішня — (sx1+nx*th)→(sx2+nx*th) з радіусом R±th.
- * Повертає рядок 'd'.
+ * Знаходить центр кола та радіус для дуги між (x1,y1)-(x2,y2) з висотою sag.
+ * Повертає { cx, cy, R, angA, angB, sweep } або null.
+ * R > 0 завжди. sweep=1 означає SVG sweep-flag=1 (за годинниковою).
  */
-function _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, nx, ny) {
+function _arcCircle(x1, y1, x2, y2, sag) {
+    if (!sag || sag === 0) return null;
+    const dx = x2 - x1, dy = y2 - y1;
+    const chord = Math.sqrt(dx*dx + dy*dy);
+    if (chord < 1) return null;
+    // Одиничний перпендикуляр вліво від напрямку x1→x2
+    const pxN = -dy/chord, pyN = dx/chord;
+    // Радіус зі знаком (sag>0 → центр праворуч від перпендикуляра)
+    const Rs = (chord*chord/4 + sag*sag) / (2*sag);
+    const absR = Math.abs(Rs);
+    // Середина хорди
+    const mx = (x1+x2)/2, my = (y1+y2)/2;
+    // Центр кола: зміщений від середини хорди вздовж перпендикуляра на (Rs - sag)
+    const cx = mx + pxN * (Rs - sag);
+    const cy = my + pyN * (Rs - sag);
+    const angA = Math.atan2(y1 - cy, x1 - cx);
+    const angB = Math.atan2(y2 - cy, x2 - cx);
+    const sweep = sag > 0 ? 1 : 0;
+    return { cx, cy, R: absR, Rs, angA, angB, sweep };
+}
+
+/**
+ * Точка на дузі при кутовому параметрі t ∈ [0,1]:
+ * t=0 → (x1,y1), t=1 → (x2,y2), проміжне — лінійна інтерполяція кута.
+ */
+function _arcPointAt(x1, y1, x2, y2, sag, t) {
+    const c = _arcCircle(x1, y1, x2, y2, sag);
+    if (!c) {
+        return { x: x1 + (x2-x1)*t, y: y1 + (y2-y1)*t };
+    }
+    // Кут інтерполюємо в правильному напрямку
+    let angA = c.angA, angB = c.angB;
+    if (c.sweep === 1) {
+        // За годинниковою: angA → angB, angB може бути < angA
+        if (angB < angA) angB += 2*Math.PI;
+    } else {
+        if (angB > angA) angB -= 2*Math.PI;
+    }
+    const ang = angA + (angB - angA) * t;
+    return { x: c.cx + c.R * Math.cos(ang), y: c.cy + c.R * Math.sin(ang) };
+}
+
+/**
+ * Нормаль до дуги в точці при параметрі t (одиничний вектор від кола назовні / всередину).
+ * sag > 0: нормаль "вліво" від напрямку дуги = від центру назовні з боку дуги.
+ * Повертає { nx, ny } — нормаль вліво від напрямку x1→x2.
+ */
+function _arcNormalAt(x1, y1, x2, y2, sag, t) {
+    const c = _arcCircle(x1, y1, x2, y2, sag);
+    if (!c) {
+        const dx = x2-x1, dy = y2-y1;
+        const len = Math.sqrt(dx*dx+dy*dy) || 1;
+        return { nx: -dy/len, ny: dx/len };
+    }
+    const pt = _arcPointAt(x1, y1, x2, y2, sag, t);
+    // Вектор від центру до точки
+    const vx = pt.x - c.cx, vy = pt.y - c.cy;
+    const vlen = Math.sqrt(vx*vx+vy*vy) || 1;
+    // Якщо sag>0 дуга опукла вліво від напрямку → нормаль вліво = від центру
+    const sign = c.Rs > 0 ? 1 : -1;
+    return { nx: sign*vx/vlen, ny: sign*vy/vlen };
+}
+
+/**
+ * Обчислює висоту дуги (sag) підсегмента [tA..tB] повної дуги (x1,y1)→(x2,y2) sag.
+ * Параметри tA, tB — кутові параметри [0..1] на повній дузі.
+ * Повертає sag підсегмента зі знаком.
+ */
+function _subArcSag(x1, y1, x2, y2, sag, tA, tB) {
+    if (!sag || sag === 0 || tA === tB) return 0;
+    const c = _arcCircle(x1, y1, x2, y2, sag);
+    if (!c) return 0;
+    // Точки на дузі
+    const ptA = _arcPointAt(x1, y1, x2, y2, sag, tA);
+    const ptB = _arcPointAt(x1, y1, x2, y2, sag, tB);
+    // Хорда підсегмента
+    const subChord = Math.sqrt((ptB.x-ptA.x)**2+(ptB.y-ptA.y)**2);
+    if (subChord < 1e-6) return 0;
+    // Середина підхорди
+    const mx = (ptA.x+ptB.x)/2, my = (ptA.y+ptB.y)/2;
+    // Відстань від центру кола до середини підхорди
+    const dCenter = Math.sqrt((mx-c.cx)**2+(my-c.cy)**2);
+    // sag підсегмента = R - dCenter (зі знаком залежно від сторони)
+    const subSag = c.R - dCenter;
+    // Знак: перевіряємо чи середина підхорди на тому ж боці від хорди що й оригінальний sag
+    const signSag = sag > 0 ? 1 : -1;
+    return signSag * subSag;
+}
+
+/**
+ * Дотична (одиничний вектор вздовж дуги) в точці при параметрі t.
+ */
+function _arcTangentAt(x1, y1, x2, y2, sag, t) {
+    const c = _arcCircle(x1, y1, x2, y2, sag);
+    if (!c) {
+        const dx = x2-x1, dy = y2-y1;
+        const len = Math.sqrt(dx*dx+dy*dy) || 1;
+        return { tx: dx/len, ty: dy/len };
+    }
+    let angA = c.angA, angB = c.angB;
+    if (c.sweep === 1) { if (angB < angA) angB += 2*Math.PI; }
+    else               { if (angB > angA) angB -= 2*Math.PI; }
+    const ang = angA + (angB - angA) * t;
+    // Дотична до кола: перпендикуляр до радіуса
+    // sweep=1 → рух за год. → дотична = (sin(ang), -cos(ang))
+    const tx = c.sweep === 1 ?  Math.sin(ang) : -Math.sin(ang);
+    const ty = c.sweep === 1 ? -Math.cos(ang) :  Math.cos(ang);
+    return { tx, ty };
+}
+
+/**
+ * Будує closed SVG path полоски на дузі з рівномірною товщиною thPx.
+ * Внутрішня дуга: (sx1,sy1)→(sx2,sy2) з sag sagPx, радіус R.
+ * Зовнішня дуга: той самий центр кола, радіус R+thPx (або R-thPx залежно від знаку).
+ * Кінцеві точки зовнішньої дуги — проекції кінцевих точок на зовнішнє коло.
+ * side: +1=нормаль вліво (назовні), -1=всередину.
+ */
+function _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, side) {
     if (!sagPx || sagPx === 0) {
-        // fallback — звичайний прямокутник
+        // fallback — прямокутник
+        const dx = sx2-sx1, dy = sy2-sy1;
+        const len = Math.sqrt(dx*dx+dy*dy) || 1;
+        const nx = -dy/len * side, ny = dx/len * side;
         const p1 = sx1+','+sy1, p2 = sx2+','+sy2;
         const p3 = (sx2+nx*thPx)+','+(sy2+ny*thPx), p4 = (sx1+nx*thPx)+','+(sy1+ny*thPx);
         return 'M '+p1+' L '+p2+' L '+p3+' L '+p4+' Z';
     }
-    const dx = sx2 - sx1, dy = sy2 - sy1;
-    const chord = Math.sqrt(dx*dx + dy*dy);
-    if (chord < 1) return 'M '+sx1+','+sy1+' Z';
+    const c = _arcCircle(sx1, sy1, sx2, sy2, sagPx);
+    if (!c) return 'M '+sx1+','+sy1+' Z';
 
-    // Радіус внутрішньої дуги
-    const R = (chord*chord/4 + sagPx*sagPx) / (2*sagPx);
-    const largeArc = Math.abs(sagPx) > Math.abs(R) ? 1 : 0;
-    const sweep = sagPx > 0 ? 1 : 0;
-    const absR = Math.abs(R);
+    // Напрямок нормалі: вліво від дуги = від центру назовні (якщо Rs>0)
+    // side=+1 → назовні (від центру), side=-1 → всередину
+    const normalSign = (c.Rs > 0 ? 1 : -1) * side;
+    const innerR = c.R;
+    const outerR = innerR + normalSign * thPx;
+    if (outerR <= 0) return 'M '+sx1+','+sy1+' Z';
 
-    // Зовнішня хорда (зміщена на thPx по нормалі)
-    const ox1 = sx1 + nx*thPx, oy1 = sy1 + ny*thPx;
-    const ox2 = sx2 + nx*thPx, oy2 = sy2 + ny*thPx;
+    // Кути кінцевих точок (вже обчислені в _arcCircle)
+    const angA = c.angA, angB = c.angB;
 
-    // Радіус зовнішньої дуги: R + thPx (якщо sag>0 — ліворуч, outer далі від центру кола)
-    const outerR = Math.abs(R + (sagPx > 0 ? thPx : -thPx));
-    const outerSweep = sweep;
+    // Зовнішні кінцеві точки (той самий кут, зовнішній радіус)
+    const ox1 = c.cx + outerR * Math.cos(angA);
+    const oy1 = c.cy + outerR * Math.sin(angA);
+    const ox2 = c.cx + outerR * Math.cos(angB);
+    const oy2 = c.cy + outerR * Math.sin(angB);
+
+    const largeArc = Math.abs(sagPx) > innerR ? 1 : 0;
+    const sweep = c.sweep;
 
     return [
-        'M', ox1+','+oy1,
-        'A', outerR, outerR, 0, largeArc, outerSweep, ox2+','+oy2,
-        'L', sx2+','+sy2,
-        'A', absR, absR, 0, largeArc, (sweep ? 0 : 1), sx1+','+sy1,
+        'M', sx1+','+sy1,
+        'A', innerR, innerR, 0, largeArc, sweep, sx2+','+sy2,
+        'L', ox2+','+oy2,
+        'A', outerR, outerR, 0, largeArc, (sweep ? 0 : 1), ox1+','+oy1,
         'Z',
     ].join(' ');
 }
@@ -644,8 +786,16 @@ window._redrawConstructItem = function (item) {
         }
     }
 
-    const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
-    const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
+    // Базові точки на хорді (для прямої) або на дузі (для arc)
+    let sx1, sy1, sx2, sy2;
+    if (isArc) {
+        const ptAA = _arcPointAt(x1, y1, x2, y2, sagPx, tA);
+        const ptBB = _arcPointAt(x1, y1, x2, y2, sagPx, tB);
+        sx1 = ptAA.x; sy1 = ptAA.y; sx2 = ptBB.x; sy2 = ptBB.y;
+    } else {
+        sx1 = x1 + ux * tA * len; sy1 = y1 + uy * tA * len;
+        sx2 = x1 + ux * tB * len; sy2 = y1 + uy * tB * len;
+    }
 
     if (isArc) {
         // Перебудовуємо як path (може бути polygon → треба замінити елемент)
@@ -666,7 +816,11 @@ window._redrawConstructItem = function (item) {
             if (item._svgPoly.parentNode) item._svgPoly.parentNode.replaceChild(path, item._svgPoly);
             item._svgPoly = path;
         }
-        item._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx * sideSign, thicknessPx, nx, ny));
+        // Точки на дузі для підсегмента
+        const ptRA = _arcPointAt(item._lineX1, item._lineY1, item._lineX2, item._lineY2, sagPx, tA);
+        const ptRB = _arcPointAt(item._lineX1, item._lineY1, item._lineX2, item._lineY2, sagPx, tB);
+        const subSagR = _subArcSag(item._lineX1, item._lineY1, item._lineX2, item._lineY2, sagPx, tA, tB);
+        item._svgPoly.setAttribute('d', _buildArcStripPath(ptRA.x, ptRA.y, ptRB.x, ptRB.y, subSagR, thicknessPx, sideSign));
     } else {
         // Переконуємось що це polygon
         if (item._svgPoly.tagName === 'path') {
@@ -833,10 +987,17 @@ function _recalcAllStripBounds(changedItem) {
             }
         }
 
-        const sx1 = x1 + ux * tA * len, sy1 = y1 + uy * tA * len;
-        const sx2 = x1 + ux * tB * len, sy2 = y1 + uy * tB * len;
-
         const stripSagPx = strip._sagPx || 0;
+        let sx1, sy1, sx2, sy2;
+        if (stripSagPx !== 0) {
+            const ptSA = _arcPointAt(x1, y1, x2, y2, stripSagPx, tA);
+            const ptSB = _arcPointAt(x1, y1, x2, y2, stripSagPx, tB);
+            sx1 = ptSA.x; sy1 = ptSA.y; sx2 = ptSB.x; sy2 = ptSB.y;
+        } else {
+            sx1 = x1 + ux * tA * len; sy1 = y1 + uy * tA * len;
+            sx2 = x1 + ux * tB * len; sy2 = y1 + uy * tB * len;
+        }
+
         if (stripSagPx !== 0) {
             if (strip._svgPoly.tagName === 'polygon') {
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -854,7 +1015,8 @@ function _recalcAllStripBounds(changedItem) {
                 if (strip._svgPoly.parentNode) strip._svgPoly.parentNode.replaceChild(path, strip._svgPoly);
                 strip._svgPoly = path;
             }
-            strip._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, stripSagPx, thicknessPx, nx, ny));
+            const subSagR2 = _subArcSag(x1, y1, x2, y2, stripSagPx, tA, tB);
+            strip._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, subSagR2, thicknessPx, sideSign));
         } else {
             const polyPts = [
                 sx1 + ',' + sy1,
@@ -870,7 +1032,8 @@ function _recalcAllStripBounds(changedItem) {
         if (strip._svgStartMarker && strip._svgStartMarker.parentNode) {
             strip._svgStartMarker.parentNode.removeChild(strip._svgStartMarker);
         }
-        strip._svgStartMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
+        const markerTan = stripSagPx !== 0 ? _arcTangentAt(x1, y1, x2, y2, stripSagPx, tA) : null;
+        strip._svgStartMarker = _createConstructStartMarker(sx1, sy1, markerTan ? markerTan.tx : ux, markerTan ? markerTan.ty : uy);
         strip._svgStartMarker.style.display = strip.visible === false ? 'none' : '';
         _cActiveSvg.appendChild(strip._svgStartMarker);
         (function(hi) {
@@ -1096,6 +1259,7 @@ function _placeWindowOnLine(li) {
     const ux = dx / len, uy = dy / len;
     const nx = -uy * side, ny = ux * side;
 
+    // tDrop: проекція крапки кидання на хорду (апроксимація для дуги)
     const tDrop = _projectToLine(dropX, dropY, x1, y1, x2, y2);
     const winPx = _WIN_WIDTH_M * SCALE;
     const tHalf = (winPx / 2) / len;
@@ -1106,14 +1270,27 @@ function _placeWindowOnLine(li) {
     const thPx  = _WIN_THICKNESS_M * SCALE;
     const elStartM = parseFloat((tS * len / SCALE).toFixed(3));
     const elEndM   = parseFloat((tE * len / SCALE).toFixed(3));
-    const sx   = x1 + ux * tS * len, sy   = y1 + uy * tS * len;
-    const elen = (tE - tS) * len;
+
+    // Для дуги: стартова точка і кінцева — на дузі, а не на хорді
+    let sx, sy, sx2w, sy2w, wSubSag;
+    if (isArc) {
+        const ptWS = _arcPointAt(x1, y1, x2, y2, sagPx, tS);
+        const ptWE = _arcPointAt(x1, y1, x2, y2, sagPx, tE);
+        sx = ptWS.x; sy = ptWS.y;
+        sx2w = ptWE.x; sy2w = ptWE.y;
+        wSubSag = _subArcSag(x1, y1, x2, y2, sagPx, tS, tE);
+    } else {
+        sx = x1 + ux * tS * len; sy = y1 + uy * tS * len;
+        sx2w = x1 + ux * tE * len; sy2w = y1 + uy * tE * len;
+        wSubSag = 0;
+    }
+    const elen = Math.sqrt((sx2w-sx)**2+(sy2w-sy)**2);
 
     // Малюємо <g> з WI1
     const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const newId = G.hierarchyIdCounter++;
     grp.setAttribute('data-hierarchy-id', String(newId));
-    _drawWI1Svg(grp, sx, sy, ux, uy, nx, ny, elen, thPx, isArc ? sagPx : 0, tS, len);
+    _drawWI1Svg(grp, sx, sy, sx2w, sy2w, side, thPx, wSubSag);
 
     // Вікно малюємо ПРЯМО в SVG (не в групу фігури), щоб воно завжди було ВИЩЕ полосок
     _wActiveSvg.appendChild(grp);
@@ -1167,68 +1344,69 @@ function _placeWindowOnLine(li) {
     showToast('Вікно розміщено. Редагуйте у Властивостях.', 'success');
 }
 
-/** Малює WI1 у SVG-групу */
 /**
  * Малює WI1 у SVG-групу.
- * sagPx — висота дуги хост-лінії (0 = пряма); tStart — параметр початку на хорді; chordLen — довжина хорди.
- * Для дуг: передня і задня грані — дуги, бічні — прямі.
+ * sx1,sy1 — початок вікна на лінії/дузі (вже на дузі якщо arc).
+ * sx2,sy2 — кінець вікна.
+ * side: +1=нормаль вліво, -1=вправо.
+ * thPx — товщина в пікселях.
+ * sagPx — висота дуги підсегмента (0=пряма).
  */
-function _drawWI1Svg(target, sx, sy, ux, uy, nx, ny, elen, thPx, sagPx, tStart, chordLen) {
-    const c1x = sx, c1y = sy;
-    const c2x = sx + ux * elen, c2y = sy + uy * elen;
+function _drawWI1Svg(target, sx1, sy1, sx2, sy2, side, thPx, sagPx) {
+    const isArc = sagPx && sagPx !== 0;
+
+    if (isArc) {
+        // Контур: closed path з двох концентричних дуг + прямі торці
+        const outerD = _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, side);
+        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hit.setAttribute('d', outerD);
+        hit.setAttribute('fill', 'transparent'); hit.setAttribute('stroke', 'none');
+        target.appendChild(hit);
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        rect.setAttribute('d', outerD);
+        rect.setAttribute('fill', 'none'); rect.setAttribute('stroke', 'black');
+        rect.setAttribute('stroke-width', '1'); rect.setAttribute('vector-effect', 'non-scaling-stroke');
+        target.appendChild(rect);
+        // Середня дуга (sag половина товщини)
+        const c = _arcCircle(sx1, sy1, sx2, sy2, sagPx);
+        if (c) {
+            const normalSign = (c.Rs > 0 ? 1 : -1) * side;
+            const midR = c.R + normalSign * thPx / 2;
+            if (midR > 0) {
+                const angA = c.angA, angB = c.angB;
+                const m1x = c.cx + midR * Math.cos(angA), m1y = c.cy + midR * Math.sin(angA);
+                const m2x = c.cx + midR * Math.cos(angB), m2y = c.cy + midR * Math.sin(angB);
+                const midSag = sagPx + normalSign * thPx / 2;
+                const midPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                midPath.setAttribute('d', _buildArcPath(m1x, m1y, m2x, m2y, midSag));
+                midPath.setAttribute('fill', 'none'); midPath.setAttribute('stroke', 'black');
+                midPath.setAttribute('stroke-width', '1'); midPath.setAttribute('vector-effect', 'non-scaling-stroke');
+                target.appendChild(midPath);
+            }
+        }
+        return;
+    }
+
+    // Пряма версія
+    const dx = sx2-sx1, dy = sy2-sy1;
+    const elen = Math.sqrt(dx*dx+dy*dy);
+    if (elen < 1) return;
+    const ux = dx/elen, uy = dy/elen;
+    const nx = -uy * side, ny = ux * side;
+    const c1x = sx1, c1y = sy1;
+    const c2x = sx2, c2y = sy2;
     const c3x = c2x + nx * thPx, c3y = c2y + ny * thPx;
     const c4x = c1x + nx * thPx, c4y = c1y + ny * thPx;
 
-    const isArc = sagPx && sagPx !== 0 && chordLen && chordLen > 0;
-
-    if (isArc) {
-        // Вираховуємо sag для підсегмента [sx,sy]→[c2x,c2y]
-        // Передня грань: sag пропорційний до subLen/chordLen
-        const subSag = sagPx * (elen / chordLen);
-        // Задня грань (зміщена на thPx по нормалі): радіус менший або більший
-        const chord = Math.sqrt((c2x-c1x)**2+(c2y-c1y)**2);
-        if (chord > 0) {
-            const R = (chord*chord/4 + sagPx*sagPx) / (2*sagPx);
-            const outerR = Math.abs(R) - thPx * (sagPx > 0 ? 1 : -1);
-            // Хорда залишається та сама, лише R змінюється
-            const innerSag = (chord/2)**2 / (outerR + Math.sqrt(outerR**2 - (chord/2)**2));
-            const hitD = _buildArcStripPath(c1x, c1y, c2x, c2y, subSag, thPx, nx, ny);
-            const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            hit.setAttribute('d', hitD);
-            hit.setAttribute('fill', 'transparent'); hit.setAttribute('stroke', 'none');
-            target.appendChild(hit);
-            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            rect.setAttribute('d', hitD);
-            rect.setAttribute('fill', 'none'); rect.setAttribute('stroke', 'black');
-            rect.setAttribute('stroke-width', '1'); rect.setAttribute('vector-effect', 'non-scaling-stroke');
-            target.appendChild(rect);
-            // Середня лінія — arc посередині
-            const m1x = c1x + nx * thPx/2, m1y = c1y + ny * thPx/2;
-            const m2x = c2x + nx * thPx/2, m2y = c2y + ny * thPx/2;
-            const midPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            midPath.setAttribute('d', _buildArcPath(m1x, m1y, m2x, m2y, subSag));
-            midPath.setAttribute('fill', 'none'); midPath.setAttribute('stroke', 'black');
-            midPath.setAttribute('stroke-width', '1'); midPath.setAttribute('vector-effect', 'non-scaling-stroke');
-            target.appendChild(midPath);
-            return;
-        }
-    }
-
-    // Пряма (оригінальна) версія
-    // Прозора підкладка (hit-area)
     const hit = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     hit.setAttribute('points', [c1x+','+c1y, c2x+','+c2y, c3x+','+c3y, c4x+','+c4y].join(' '));
     hit.setAttribute('fill', 'transparent'); hit.setAttribute('stroke', 'none');
     target.appendChild(hit);
-
-    // Контур
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     rect.setAttribute('points', [c1x+','+c1y, c2x+','+c2y, c3x+','+c3y, c4x+','+c4y].join(' '));
     rect.setAttribute('fill', 'none'); rect.setAttribute('stroke', 'black');
     rect.setAttribute('stroke-width', '1'); rect.setAttribute('vector-effect', 'non-scaling-stroke');
     target.appendChild(rect);
-
-    // Середня лінія
     const mid = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     mid.setAttribute('x1', c1x + nx * thPx / 2); mid.setAttribute('y1', c1y + ny * thPx / 2);
     mid.setAttribute('x2', c2x + nx * thPx / 2); mid.setAttribute('y2', c2y + ny * thPx / 2);
@@ -1253,7 +1431,6 @@ window._redrawWindowElement = function(elItem) {
 
     const ux = dx / len, uy = dy / len;
     const side = elItem.elSide != null ? elItem.elSide : 1;
-    const nx = -uy * side, ny = ux * side;
     elItem._side = side;
 
     // Якщо авто-товщина — вимірюємо перпендикулярну відстань до найближчої паралельної стіни
@@ -1265,23 +1442,27 @@ window._redrawWindowElement = function(elItem) {
     }
 
     const thPx = (elItem.elThickness || _WIN_THICKNESS_M) * SCALE;
-    const elen  = (elItem.elEnd - elItem.elStart) * SCALE;
+    const sagPxW = elItem._sagPx || 0;
 
-    // elFromEnd: відлік від кінця лінії (B→A)
-    // elStart — відстань від точки B до ближнього до B краю вікна
-    // elEnd   — відстань від точки B до дальнього від B краю вікна
-    // Реальна стартова точка = (x2,y2) - ux * elEnd * SCALE
-    //                        = (x1,y1) + ux * (len - elEnd * SCALE)
-    const startPx = elItem.elFromEnd
-        ? (len - elItem.elEnd * SCALE)
-        : (elItem.elStart * SCALE);
+    // Параметри t на хорді
+    const tS = elItem.elFromEnd ? ((len - elItem.elEnd * SCALE) / len) : (elItem.elStart * SCALE / len);
+    const tE = elItem.elFromEnd ? ((len - elItem.elStart * SCALE) / len) : (elItem.elEnd * SCALE / len);
 
-    const sx = x1 + ux * startPx, sy = y1 + uy * startPx;
+    let wsx1, wsy1, wsx2, wsy2, wSubSag;
+    if (sagPxW !== 0) {
+        const ptWS = _arcPointAt(x1, y1, x2, y2, sagPxW, tS);
+        const ptWE = _arcPointAt(x1, y1, x2, y2, sagPxW, tE);
+        wsx1 = ptWS.x; wsy1 = ptWS.y;
+        wsx2 = ptWE.x; wsy2 = ptWE.y;
+        wSubSag = _subArcSag(x1, y1, x2, y2, sagPxW, tS, tE);
+    } else {
+        wsx1 = x1 + ux * tS * len; wsy1 = y1 + uy * tS * len;
+        wsx2 = x1 + ux * tE * len; wsy2 = y1 + uy * tE * len;
+        wSubSag = 0;
+    }
 
     while (elItem.svgGroup.firstChild) elItem.svgGroup.removeChild(elItem.svgGroup.firstChild);
-    const sagPxW = elItem._sagPx || 0;
-    const tStartW = elItem.elFromEnd ? ((len - elItem.elEnd * SCALE) / len) : (elItem.elStart * SCALE / len);
-    _drawWI1Svg(elItem.svgGroup, sx, sy, ux, uy, nx, ny, elen, thPx, sagPxW, tStartW, len);
+    _drawWI1Svg(elItem.svgGroup, wsx1, wsy1, wsx2, wsy2, side, thPx, wSubSag);
 };
 
 /**
