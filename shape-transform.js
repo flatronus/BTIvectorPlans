@@ -326,6 +326,19 @@ window.shapeTransform = (function () {
             if (!item || !item.svgGroup) return;
             _rotateTree(item, angle, _rotateCenterX, _rotateCenterY);
             _refreshPoints(item);
+        },
+
+        /**
+         * Обертає елемент item на angle градусів навколо ВЛАСНОГО центру
+         * (bbox групи і всіх її дочірніх груп). На відміну від rotateSelected,
+         * не залежить від drag-стану (_rotateCenterX/Y) — придатно для
+         * одноразового обертання кнопкою у Властивостях.
+         */
+        rotateItemByOwnCenter(item, angle) {
+            if (!item || !item.svgGroup) return;
+            const center = _computeTreeCenter(item);
+            _rotateTree(item, angle, center.cx, center.cy);
+            _refreshPoints(item);
         }
     };
 

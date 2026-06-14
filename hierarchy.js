@@ -692,6 +692,24 @@ window.renderProperties = function (item) {
     delBtn.onclick = function() { deleteSelectedHierarchyItem(); };
     titleBar.appendChild(delBtn);
 
+    if (item.type === 'room' || item.type === 'building' || item.type === 'contour') {
+        const rotBtn = document.createElement('button');
+        rotBtn.title = 'Обернути на 90° за годинниковою стрілкою (навколо власного центру)';
+        rotBtn.textContent = '↻';
+        rotBtn.style.cssText = [
+            'background:#3b82f6;color:#fff;border:1px solid #93c5fd;border-radius:3px;',
+            'font-size:13px;font-weight:700;padding:0 6px;cursor:pointer;',
+            'line-height:18px;flex-shrink:0;margin-left:4px;',
+        ].join('');
+        rotBtn.onclick = function() {
+            if (typeof window.shapeTransform !== 'undefined' &&
+                typeof window.shapeTransform.rotateItemByOwnCenter === 'function') {
+                window.shapeTransform.rotateItemByOwnCenter(item, 90);
+            }
+        };
+        titleBar.appendChild(rotBtn);
+    }
+
     body.appendChild(titleBar);
 
     /* ── Таблиця властивостей ── */
