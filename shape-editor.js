@@ -98,7 +98,9 @@ function _sumArcSegmentAreas(polygonShoelaceSum) {
         // Сегмент додає площу, якщо дуга вигинається у той самий бік, що інтер'єр полігону
         const contributionSign = (edgeSign === overallSign) ? sagSign : -sagSign;
 
-        total += contributionSign * segArea * overallSign;
+        // *2, бо calculateAndDisplayArea ділить (polygonShoelaceSum + arcArea) на 2;
+        // polygonShoelaceSum — подвоєна площа полігону, тож segArea теж потрібно подвоїти.
+        total += contributionSign * (2 * segArea) * overallSign;
     });
     return total;
 }
