@@ -287,6 +287,18 @@ window.transferFigureToMainCanvas = function () {
                 useOffsetY = offsetY;
             }
 
+            // Видаляємо застарілі дочірні елементи (WI1 тощо, прив'язані до lineData.elements),
+            // щоб _fillSvgGroup перереєстрував їх з актуальними значеннями без дублювання.
+            // Drag-вікна ('wi_drag_*'), що малюються окремо від групи фігури, не торкаємось.
+            if (existingItem.children && existingItem.children.length) {
+                existingItem.children = existingItem.children.filter(function(ch) {
+                    if (ch.type !== 'element') return true;
+                    if (ch._elKey && ch._elKey.startsWith('wi_drag_')) return true;
+                    if (G.selectedHierarchyItem === ch.id) G.selectedHierarchyItem = null;
+                    return false;
+                });
+            }
+
             _rebuildSvgGroup(existingItem.svgGroup, useOffsetX, useOffsetY, existingItem);
 
             existingItem.figureLines = JSON.parse(JSON.stringify(G.figureLines));
