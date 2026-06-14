@@ -41,10 +41,67 @@ window.calculateAndDisplayArea = function () {
         area += G.shapePoints[i].x * G.shapePoints[j].y;
         area -= G.shapePoints[j].x * G.shapePoints[i].y;
     }
+
+    // Сума підписаної площі сегментів дуги (хорда замінюється дугою)
+    const arcArea = _sumArcSegmentAreas(area);
+    area += arcArea;
+
     area = Math.abs(area) / 2;
     appState.calculatedArea = (area / (SCALE * SCALE)).toFixed(1);
     updateLinesList();
 };
+
+/**
+ * Обчислює суму підписаних площ кругових сегментів для всіх дугових ліній (lineType==='curve'),
+ * у тих самих одиницях що й подвоєна площа shoelace (без ділення на 2).
+ * polygonShoelaceSum — необроблена (неподілена на 2, без abs) сума shoelace для прямокутних вершин,
+ * використовується для визначення напрямку обходу полігону.
+ */
+function _sumArcSegmentAreas(polygonShoelaceSum) {
+    let total = 0;
+    (G.figureLines || []).forEach(function(line) {
+        if (line.isDiagonal || line.isPending || line.lineType !== 'curve') return;
+        const arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(line.elements || []) : null;
+        if (!arcP || !arcP.sagMeters) return;
+
+        const fromPt = G.shapePoints.find(function(p) { return p.num === line.from; });
+        const toPt   = G.shapePoints.find(function(p) { return p.num === line.to; });
+        if (!fromPt || !toPt) return;
+
+        const x1 = fromPt.x, y1 = fromPt.y, x2 = toPt.x, y2 = toPt.y;
+        const dx = x2 - x1, dy = y2 - y1;
+        const chord = Math.sqrt(dx*dx + dy*dy);
+        if (chord < 1) return;
+
+        const sagPx = arcP.sagMeters * SCALE;
+        // R = (chord²/4 + sag²) / (2*sag)
+        const Rs  = (chord*chord/4 + sagPx*sagPx) / (2*sagPx);
+        const R   = Math.abs(Rs);
+        // Половина кута дуги: sin(θ/2) = (chord/2)/R
+        const half = Math.asin(Math.min(1, (chord/2) / R));
+        const theta = half * 2;
+        // Площа кругового сегмента (між хордою і дугою)
+        const segArea = (R*R/2) * (theta - Math.sin(theta));
+
+        // shoelace-внесок цього ребра (без ділення на 2)
+        const edgeShoelace = x1*y2 - x2*y1;
+
+        // Якщо sag бере участь у тому ж напрямку обходу, що і загальний полігон
+        // (тобто дуга вигинається у бік інтер'єру), сегмент додає площу; інакше — віднімає.
+        // sag>0 — дуга вигинається ліворуч від напрямку from→to.
+        // Знак внеску ребра в shoelace показує напрямок обходу для цього ребра;
+        // узгоджуємо із загальним знаком обходу полігону.
+        const overallSign = polygonShoelaceSum >= 0 ? 1 : -1;
+        const edgeSign    = edgeShoelace >= 0 ? 1 : -1;
+        const sagSign     = arcP.sagMeters >= 0 ? 1 : -1;
+
+        // Сегмент додає площу, якщо дуга вигинається у той самий бік, що інтер'єр полігону
+        const contributionSign = (edgeSign === overallSign) ? sagSign : -sagSign;
+
+        total += contributionSign * segArea * overallSign;
+    });
+    return total;
+}
 
 /* ── Автомасштабування shapeCanvas ── */
 window.autoScaleAndCenterFigure = function () {

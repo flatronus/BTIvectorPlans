@@ -351,8 +351,10 @@ function _placeConstructStrip(lineInfo, thicknessM) {
 
     let poly;
     if (isArc) {
+        const _tmpItem = { _lineX1: x1, _lineY1: y1, _lineX2: x2, _lineY2: y2, _tStart: tStart, _tEnd: tEnd, _sagPx: sagPx, _svgPoly: null };
+        const joinInfo = _getArcStripJoinInfo(_tmpItem);
         poly = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        poly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, subSagPx, thicknessPx, 1));
+        poly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, subSagPx, thicknessPx, -1, joinInfo));
         poly.setAttribute('data-construct', '1');
         poly.setAttribute('data-arc', '1');
     } else {
@@ -506,6 +508,28 @@ function _parsePolygonPoints(poly) {
     }).filter(function(p) { return !isNaN(p.x) && !isNaN(p.y); });
 }
 
+/**
+ * Знаходить точки перетину прямої (через (px1,py1)-(px2,py2)) з колом (cx,cy,R).
+ * Повертає масив {x,y} (0, 1 або 2 точки).
+ */
+function _lineCircleIntersect(cx, cy, R, px1, py1, px2, py2) {
+    const dx = px2 - px1, dy = py2 - py1;
+    const fx = px1 - cx,  fy = py1 - cy;
+    const a = dx*dx + dy*dy;
+    if (a < 1e-10) return [];
+    const b = 2 * (fx*dx + fy*dy);
+    const c = fx*fx + fy*fy - R*R;
+    const disc = b*b - 4*a*c;
+    if (disc < 0) return [];
+    const sq = Math.sqrt(disc);
+    const t1 = (-b - sq) / (2*a);
+    const t2 = (-b + sq) / (2*a);
+    return [
+        { x: px1 + t1*dx, y: py1 + t1*dy },
+        { x: px1 + t2*dx, y: py1 + t2*dy },
+    ];
+}
+
 /* ── Допоміжні функції ── */
 
 function _flattenHierarchy(items, result) {
@@ -646,7 +670,7 @@ function _arcTangentAt(x1, y1, x2, y2, sag, t) {
  * Кінцеві точки зовнішньої дуги — проекції кінцевих точок на зовнішнє коло.
  * side: +1=нормаль вліво (назовні), -1=всередину.
  */
-function _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, side) {
+function _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, side, joinInfo) {
     if (!sagPx || sagPx === 0) {
         // fallback — прямокутник
         const dx = sx2-sx1, dy = sy2-sy1;
@@ -670,10 +694,37 @@ function _buildArcStripPath(sx1, sy1, sx2, sy2, sagPx, thPx, side) {
     const angA = c.angA, angB = c.angB;
 
     // Зовнішні кінцеві точки (той самий кут, зовнішній радіус)
-    const ox1 = c.cx + outerR * Math.cos(angA);
-    const oy1 = c.cy + outerR * Math.sin(angA);
-    const ox2 = c.cx + outerR * Math.cos(angB);
-    const oy2 = c.cy + outerR * Math.sin(angB);
+    let ox1 = c.cx + outerR * Math.cos(angA);
+    let oy1 = c.cy + outerR * Math.sin(angA);
+    let ox2 = c.cx + outerR * Math.cos(angB);
+    let oy2 = c.cy + outerR * Math.sin(angB);
+
+    // Зʼєднання з сусідньою прямокутною полоскою: переносимо зовнішній кут
+    // у точку перетину торцевої грані сусідньої полоски з зовнішнім колом дуги.
+    if (joinInfo && joinInfo.start) {
+        const pts = _lineCircleIntersect(c.cx, c.cy, outerR,
+            joinInfo.start.ax, joinInfo.start.ay, joinInfo.start.bx, joinInfo.start.by);
+        if (pts.length) {
+            const best = pts.reduce(function(a, b) {
+                const da = (a.x-ox1)*(a.x-ox1) + (a.y-oy1)*(a.y-oy1);
+                const db = (b.x-ox1)*(b.x-ox1) + (b.y-oy1)*(b.y-oy1);
+                return db < da ? b : a;
+            });
+            ox1 = best.x; oy1 = best.y;
+        }
+    }
+    if (joinInfo && joinInfo.end) {
+        const pts = _lineCircleIntersect(c.cx, c.cy, outerR,
+            joinInfo.end.ax, joinInfo.end.ay, joinInfo.end.bx, joinInfo.end.by);
+        if (pts.length) {
+            const best = pts.reduce(function(a, b) {
+                const da = (a.x-ox2)*(a.x-ox2) + (a.y-oy2)*(a.y-oy2);
+                const db = (b.x-ox2)*(b.x-ox2) + (b.y-oy2)*(b.y-oy2);
+                return db < da ? b : a;
+            });
+            ox2 = best.x; oy2 = best.y;
+        }
+    }
 
     const largeArc = Math.abs(sagPx) > innerR ? 1 : 0;
     const sweep = c.sweep;
@@ -820,7 +871,8 @@ window._redrawConstructItem = function (item) {
         const ptRA = _arcPointAt(item._lineX1, item._lineY1, item._lineX2, item._lineY2, sagPx, tA);
         const ptRB = _arcPointAt(item._lineX1, item._lineY1, item._lineX2, item._lineY2, sagPx, tB);
         const subSagR = _subArcSag(item._lineX1, item._lineY1, item._lineX2, item._lineY2, sagPx, tA, tB);
-        item._svgPoly.setAttribute('d', _buildArcStripPath(ptRA.x, ptRA.y, ptRB.x, ptRB.y, subSagR, thicknessPx, sideSign));
+        const joinInfo = _getArcStripJoinInfo(item, tA, tB);
+        item._svgPoly.setAttribute('d', _buildArcStripPath(ptRA.x, ptRA.y, ptRB.x, ptRB.y, subSagR, thicknessPx, sideSign, joinInfo));
     } else {
         // Переконуємось що це polygon
         if (item._svgPoly.tagName === 'path') {
@@ -1016,7 +1068,8 @@ function _recalcAllStripBounds(changedItem) {
                 strip._svgPoly = path;
             }
             const subSagR2 = _subArcSag(x1, y1, x2, y2, stripSagPx, tA, tB);
-            strip._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, subSagR2, thicknessPx, sideSign));
+            const joinInfo2 = _getArcStripJoinInfo(strip, tA, tB);
+            strip._svgPoly.setAttribute('d', _buildArcStripPath(sx1, sy1, sx2, sy2, subSagR2, thicknessPx, sideSign, joinInfo2));
         } else {
             const polyPts = [
                 sx1 + ',' + sy1,
@@ -1064,6 +1117,71 @@ function _findWI1ThicknessOnLine(item) {
         }
     }
     return null;
+}
+
+/**
+ * Знаходить торцеву грань (від внутрішнього до зовнішнього кута) сусідньої прямокутної
+ * полоски, яка прилягає до спільної вершини (vx,vy) на іншій лінії фігури.
+ * Повертає {ax,ay,bx,by} (внутрішній кут → зовнішній кут) або null.
+ */
+function _getAdjacentStripEndCap(item, vx, vy) {
+    const EPS = 2; // px
+    const strips = (G.hierarchyData || []).filter(function(it) {
+        return it.type === 'construct' && it !== item && it._svgPoly &&
+               it._lineX1 != null && !(it._sagPx);
+    });
+
+    for (let i = 0; i < strips.length; i++) {
+        const s = strips[i];
+        const x1 = s._lineX1, y1 = s._lineY1, x2 = s._lineX2, y2 = s._lineY2;
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.sqrt(dx*dx + dy*dy);
+        if (len < 1) continue;
+        const ux = dx/len, uy = dy/len;
+        const sideSign = s.constructSideInward ? 1 : -1;
+        const nx = uy * sideSign, ny = -ux * sideSign;
+        const thicknessPx = (s.constructThickness || CONSTRUCT_THICKNESS_M) * SCALE;
+
+        let tA = s._tStart, tB = s._tEnd;
+        const lenM = s.constructLength || 0;
+        if (lenM > 0) {
+            const tSpan = (lenM * SCALE) / len;
+            if (s.constructFromEnd) tA = Math.max(s._tStart, tB - tSpan);
+            else                    tB = Math.min(s._tEnd, tA + tSpan);
+        }
+
+        // Кінець полоски, що дотикається лінії в t=0
+        if (Math.abs(tA) < 1e-6) {
+            const ix = x1, iy = y1;
+            if (Math.abs(ix - vx) < EPS && Math.abs(iy - vy) < EPS) {
+                return { ax: ix, ay: iy, bx: ix + nx*thicknessPx, by: iy + ny*thicknessPx };
+            }
+        }
+        // Кінець полоски, що дотикається лінії в t=1
+        if (Math.abs(tB - 1) < 1e-6) {
+            const ix = x2, iy = y2;
+            if (Math.abs(ix - vx) < EPS && Math.abs(iy - vy) < EPS) {
+                return { ax: ix, ay: iy, bx: ix + nx*thicknessPx, by: iy + ny*thicknessPx };
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Обчислює інформацію для зʼєднання дугоподібної полоски з сусідньою прямокутною
+ * полоскою на іншій лінії, що сходяться у спільній вершині фігури.
+ * Повертає { start: capInfo|null, end: capInfo|null } для t=0 та t=1 хорди-носія.
+ */
+function _getArcStripJoinInfo(item, tA, tB) {
+    if (!item || item._lineX1 == null) return null;
+    const x1 = item._lineX1, y1 = item._lineY1, x2 = item._lineX2, y2 = item._lineY2;
+    if (tA === undefined) tA = item._tStart;
+    if (tB === undefined) tB = item._tEnd;
+    const result = { start: null, end: null };
+    if (Math.abs(tA) < 1e-6) result.start = _getAdjacentStripEndCap(item, x1, y1);
+    if (Math.abs(tB - 1) < 1e-6) result.end = _getAdjacentStripEndCap(item, x2, y2);
+    return result;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

@@ -111,8 +111,8 @@ window._highlightSvgItem = function (item) {
             el.removeAttribute('data-orig-stroke');
             el.removeAttribute('data-orig-stroke-width');
         });
-        // Знімаємо виділення з полосок конструктивів + відновлюємо маркери початку
-        mainSvg.querySelectorAll('polygon[data-construct][data-selected-construct]').forEach(function(el) {
+        // Знімаємо виділення з полосок конструктивів (polygon або path для дуг) + відновлюємо маркери початку
+        mainSvg.querySelectorAll('polygon[data-construct][data-selected-construct], path[data-construct][data-selected-construct]').forEach(function(el) {
             el.setAttribute('stroke', el.getAttribute('data-orig-stroke') || '#38bdf8');
             el.setAttribute('stroke-width', '1');
             el.removeAttribute('data-selected-construct');
