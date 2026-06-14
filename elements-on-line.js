@@ -12,7 +12,7 @@ window.drawElementsOnLine = function (parsedData, x1, y1, x2, y2, scale, targetG
     if (len === 0) return;
 
     const ux = dx / len, uy = dy / len;
-    const px = uy,       py = -ux;
+    const px = -uy,      py = ux;
 
     // Дуга: визначаємо висоту дуги (sag) у пікселях, якщо лінія дугова
     let sagPx = 0;

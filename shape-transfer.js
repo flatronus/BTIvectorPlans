@@ -104,7 +104,7 @@ window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, pare
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) return;
     const ux = dx / len, uy = dy / len;
-    const px = uy, py = -ux;
+    const px = -uy, py = ux;
     const elements = lineData.elements || [];
 
     for (let i = 0; i < elements.length; i++) {
@@ -382,7 +382,7 @@ window._computeAnchorOnCanvas = function (anchorDef, parentItem, offsetX, offset
     if (len === 0) return null;
 
     const ux = dx / len, uy = dy / len;
-    const px = uy, py = -ux;
+    const px = -uy, py = ux;
     const side = elSide || 1;
 
     const wA_x = x1 + ux * elStart * SCALE + px * thickness * SCALE * side;
@@ -564,7 +564,7 @@ window.transferElementResultToMainCanvas = function (src) {
                 const len = Math.sqrt(dx * dx + dy * dy);
                 if (len > 0) {
                     const ux = dx / len, uy = dy / len;
-                    const px = uy, py = -ux;
+                    const px = -uy, py = ux;
                     const side      = el.side || 1;
                     const thickness = appState.editingElementThickness;
 
