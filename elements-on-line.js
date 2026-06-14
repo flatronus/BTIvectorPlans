@@ -98,7 +98,7 @@ function _drawWI1Arc(target, sx1, sy1, sx2, sy2, side, thPx, subSagPx) {
         const dx = sx2-sx1, dy = sy2-sy1;
         const len = Math.sqrt(dx*dx+dy*dy) || 1;
         const ux = dx/len, uy = dy/len;
-        const px = uy, py = -ux;
+        const px = -uy, py = ux;
         _drawWI1(target, sx1, sy1, ux, uy, px, py, len, thPx, side);
         return;
     }

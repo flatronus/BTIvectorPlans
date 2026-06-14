@@ -107,6 +107,13 @@ window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, pare
     const px = -uy, py = ux;
     const elements = lineData.elements || [];
 
+    // Дуга: визначаємо висоту дуги (sag) у пікселях, якщо лінія дугова
+    let sagPx = 0;
+    if (lineData.lineType === 'curve' && typeof _parseArcParams === 'function') {
+        const arcP = _parseArcParams(elements);
+        sagPx = arcP ? arcP.sagMeters * scale : 0;
+    }
+
     for (let i = 0; i < elements.length; i++) {
         if (elements[i]?.type     === 'number' &&
             elements[i+1]?.type   === 'number' &&
@@ -169,7 +176,17 @@ window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, pare
                 const elThickness = (elItem && elItem.elThickness != null)
                     ? elItem.elThickness
                     : lineThickness;
-                _drawWI1inGroup(elGroup, sx, sy, ux, uy, px, py, elen, elThickness * scale, side);
+                const thPx = elThickness * scale;
+
+                if (sagPx) {
+                    const tStart = start / len, tEnd = end / len;
+                    const ptA = _arcPointAt(x1, y1, x2, y2, sagPx, tStart);
+                    const ptB = _arcPointAt(x1, y1, x2, y2, sagPx, tEnd);
+                    const subSag = _subArcSag(x1, y1, x2, y2, sagPx, tStart, tEnd);
+                    _drawWI1ArcInGroup(elGroup, ptA.x, ptA.y, ptB.x, ptB.y, side, thPx, subSag);
+                } else {
+                    _drawWI1inGroup(elGroup, sx, sy, ux, uy, px, py, elen, thPx, side);
+                }
             }
 
             i += 2;
@@ -212,6 +229,59 @@ function _drawWI1inGroup(target, sx, sy, ux, uy, px, py, elen, thickness, side) 
     midLine.setAttribute('stroke-width', '1');
     midLine.setAttribute('vector-effect', 'non-scaling-stroke');
     target.appendChild(midLine);
+}
+
+/**
+ * Малює WI1 на дузі у вказану групу (аналог _drawWI1Arc з elements-on-line.js,
+ * з прозорим hit-полігоном для клікабельності, як у _drawWI1inGroup).
+ * sx1,sy1 → sx2,sy2 — точки на дузі (на лінії стіни); subSagPx — висота
+ * піддуги; side — сторона ('-' префікс коду WI1); thPx — товщина в пікселях.
+ */
+function _drawWI1ArcInGroup(target, sx1, sy1, sx2, sy2, side, thPx, subSagPx) {
+    if (!subSagPx || subSagPx === 0) {
+        const dx = sx2-sx1, dy = sy2-sy1;
+        const len = Math.sqrt(dx*dx+dy*dy) || 1;
+        const ux = dx/len, uy = dy/len;
+        const px = -uy, py = ux;
+        _drawWI1inGroup(target, sx1, sy1, ux, uy, px, py, len, thPx, side);
+        return;
+    }
+
+    const outerD = _buildArcStripPath(sx1, sy1, sx2, sy2, subSagPx, thPx, -side);
+
+    const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hit.setAttribute('d', outerD);
+    hit.setAttribute('fill', 'transparent');
+    hit.setAttribute('stroke', 'none');
+    hit.setAttribute('data-hit-area', '1');
+    target.appendChild(hit);
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    rect.setAttribute('d', outerD);
+    rect.setAttribute('fill', 'none');
+    rect.setAttribute('stroke', 'black');
+    rect.setAttribute('stroke-width', '1');
+    rect.setAttribute('vector-effect', 'non-scaling-stroke');
+    target.appendChild(rect);
+
+    const c = _arcCircle(sx1, sy1, sx2, sy2, subSagPx);
+    if (c) {
+        const normalSign = (c.Rs > 0 ? 1 : -1) * (-side);
+        const midR = c.R + normalSign * thPx / 2;
+        if (midR > 0) {
+            const angA = c.angA, angB = c.angB;
+            const m1x = c.cx + midR * Math.cos(angA), m1y = c.cy + midR * Math.sin(angA);
+            const m2x = c.cx + midR * Math.cos(angB), m2y = c.cy + midR * Math.sin(angB);
+            const largeArc = Math.abs(subSagPx) > c.R ? 1 : 0;
+            const midPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            midPath.setAttribute('d', 'M '+m1x+','+m1y+' A '+midR+','+midR+' 0 '+largeArc+' '+c.sweep+' '+m2x+','+m2y);
+            midPath.setAttribute('fill', 'none');
+            midPath.setAttribute('stroke', 'black');
+            midPath.setAttribute('stroke-width', '1');
+            midPath.setAttribute('vector-effect', 'non-scaling-stroke');
+            target.appendChild(midPath);
+        }
+    }
 }
 
 /** Очищає групу і перебудовує її вміст (для режиму редагування) */
