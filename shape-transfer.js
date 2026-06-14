@@ -252,7 +252,7 @@ function _drawWI1ArcInGroup(target, sx1, sy1, sx2, sy2, side, thPx, subSagPx) {
         return;
     }
 
-    const outerD = _buildArcStripPath(sx1, sy1, sx2, sy2, subSagPx, thPx, -side);
+    const outerD = _buildArcStripPath(sx1, sy1, sx2, sy2, subSagPx, thPx, side);
 
     const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     hit.setAttribute('d', outerD);
@@ -271,7 +271,7 @@ function _drawWI1ArcInGroup(target, sx1, sy1, sx2, sy2, side, thPx, subSagPx) {
 
     const c = _arcCircle(sx1, sy1, sx2, sy2, subSagPx);
     if (c) {
-        const normalSign = (c.Rs > 0 ? 1 : -1) * (-side);
+        const normalSign = (c.Rs > 0 ? 1 : -1) * side;
         const midR = c.R + normalSign * thPx / 2;
         if (midR > 0) {
             const angA = c.angA, angB = c.angB;
