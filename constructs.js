@@ -1445,7 +1445,10 @@ function _placeWindowOnLine(li) {
     const codeStr = side === -1 ? '-WI1' : 'WI1';
     lineData.elements.push({ type: 'number', value: elStartM });
     lineData.elements.push({ type: 'number', value: elEndM   });
-    lineData.elements.push({ type: 'element', value: codeStr  });
+    // _dragId позначає тріплет як належний drag-вікну з власною <g>,
+    // намальованою напряму в SVG канви — щоб _drawElementsIntoGroups
+    // не малював цей тріплет повторно (дублікат).
+    lineData.elements.push({ type: 'element', value: codeStr, _dragId: String(newId) });
 
     if (!item.children) item.children = [];
     item.children.push(hItem);
