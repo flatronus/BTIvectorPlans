@@ -1082,3 +1082,64 @@ window.createHierarchyItemElement = function (item) {
 
     return container;
 };
+
+/** Виділяє всі об'єкти ієрархії на активній канві */
+window.selectAllHierarchyItems = function () {
+    const canvas  = window.canvasManager?.canvases.find(c => c.id === window.canvasManager?.activeCanvasId);
+    const mainSvg = canvas ? document.querySelector(`[data-canvas-id="${canvas.id}"] svg`) : null;
+
+    // Спочатку знімаємо попереднє виділення
+    _highlightSvgItem(null);
+
+    const flat = (typeof _flattenHierarchy === 'function') ? _flattenHierarchy(G.hierarchyData) : [];
+
+    flat.forEach(function(item) {
+        if (item.type === 'construct') {
+            if (item._svgPoly) {
+                const orig = item._svgPoly.getAttribute('stroke') || '#38bdf8';
+                item._svgPoly.setAttribute('data-orig-stroke', orig);
+                item._svgPoly.setAttribute('data-selected-construct', '1');
+                item._svgPoly.setAttribute('stroke', '#ef4444');
+                item._svgPoly.setAttribute('stroke-width', '2.5');
+            }
+            if (item._svgStartMarker) {
+                const circ  = item._svgStartMarker.querySelector('circle');
+                if (circ) { circ.setAttribute('stroke', '#ef4444'); circ.setAttribute('fill', 'rgba(239,68,68,0.18)'); }
+                const arrow = item._svgStartMarker.querySelector('polygon');
+                if (arrow) arrow.setAttribute('fill', '#ef4444');
+            }
+            return;
+        }
+
+        if (!item.svgGroup) return;
+
+        (function collectLines(node) {
+            node.childNodes.forEach(function(child) {
+                if (child.nodeType !== 1) return;
+                if (child.tagName === 'g' && child.hasAttribute('data-hierarchy-id')) return;
+                var tag = child.tagName;
+                if (tag === 'line' || tag === 'polyline' || tag === 'polygon' || tag === 'path') {
+                    if (!child.hasAttribute('data-selected')) {
+                        var orig = child.getAttribute('stroke') || 'black';
+                        child.setAttribute('data-orig-stroke', orig);
+                        child.setAttribute('data-selected', '1');
+                        child.setAttribute('stroke', '#ef4444');
+                    }
+                }
+                if (tag === 'g') collectLines(child);
+            });
+        })(item.svgGroup);
+    });
+
+    G.selectedHierarchyItem = null;
+    renderHierarchy();
+    renderProperties(null);
+};
+
+/** Знімає всі виділення на активній канві */
+window.deselectAllHierarchyItems = function () {
+    G.selectedHierarchyItem = null;
+    _highlightSvgItem(null);
+    renderHierarchy();
+    renderProperties(null);
+};
