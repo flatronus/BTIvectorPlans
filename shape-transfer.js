@@ -125,6 +125,11 @@ window._drawElementsIntoGroups = function (lineData, x1, y1, x2, y2, scale, pare
             let side    = 1;
             if (code.startsWith('-')) { side = -1; code = code.substring(1); }
 
+            // Drag-розміщені вікна (wi_drag_*) малюються окремо безпосередньо в SVG
+            // канви (constructs.js: _placeWindowOnLine); їхній тріплет позначений
+            // _dragId і тут не повинен малюватись повторно (дублікат).
+            if (elements[i+2]._dragId != null) { i += 2; continue; }
+
             const sx   = x1 + ux * start;
             const sy   = y1 + uy * start;
             const elen = end - start;
