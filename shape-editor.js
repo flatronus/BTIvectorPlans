@@ -266,6 +266,48 @@ window.drawLineOnCanvas = function (parsedData) {
     let endX = lastPoint.x, endY = lastPoint.y;
     let lineLength = 0;
 
+    // ── Поділ на кілька відрізків: декілька чистих чисел без кодів елементів ──
+    if (!isClosing && parsedData.lineType === 'line' &&
+        parsedData.elements.length > 1 &&
+        parsedData.elements.every(el => el.type === 'number')) {
+
+        let curFrom = lastPoint;
+        let curDirection = parsedData.direction;
+
+        parsedData.elements.forEach((el, idx) => {
+            const segLength  = parseFloat(el.value);
+            const scaledLen  = segLength * SCALE;
+            const rel        = _calcRelativeEnd(curFrom.x, curFrom.y, curDirection, scaledLen);
+            const segEndX    = rel.x, segEndY = rel.y;
+
+            const segParsed = {
+                direction: curDirection,
+                lineType:  'line',
+                elements:  [{ type: 'number', value: segLength }],
+                quadrant:  parsedData.quadrant
+            };
+
+            _renderSvgLine(svg, curFrom.x, curFrom.y, segEndX, segEndY, G.lineIdCounter);
+            drawLineDimension(curFrom.x, curFrom.y, segEndX, segEndY, segLength, null);
+            drawElementsOnLine(segParsed, curFrom.x, curFrom.y, segEndX, segEndY, SCALE);
+
+            G.pointCounter++;
+            G.shapePoints.push({ x: segEndX, y: segEndY, num: G.pointCounter });
+            _renderSvgPoint(svg, segEndX, segEndY, G.pointCounter);
+
+            const segLineData = _makeLineData(G.lineIdCounter, curFrom.num, G.pointCounter, segParsed, segLength, false, false);
+            G.figureLines.push(segLineData);
+            G.lineIdCounter++;
+
+            curFrom      = { x: segEndX, y: segEndY, num: G.pointCounter };
+            curDirection = 'straight';
+        });
+
+        updateLinesList();
+        autoScaleAndCenterFigure();
+        return;
+    }
+
     if (parsedData.lineType === 'curve') {
         const arcP = _parseArcParams(parsedData.elements);
         lineLength = arcP ? arcP.chordWidth : 0;
