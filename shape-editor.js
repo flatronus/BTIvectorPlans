@@ -538,7 +538,6 @@ window.updateExistingLine = function (lineId, parsedData) {
     // загальна довжина). Проміжні точки отримують унікальні позначення зі штрихом:
     // <from>', <from>'', ... Кінцева точка лінії (line.to) залишається незмінною.
     if (!G.figureLines[idx].isDiagonal &&
-        !G.figureLines[idx]._cachedEnd &&
         !G.figureLines[idx].isPending &&
         parsedData.lineType === 'line' &&
         parsedData.elements.length > 1 &&
@@ -547,9 +546,27 @@ window.updateExistingLine = function (lineId, parsedData) {
         const origLine = G.figureLines[idx];
         const marks    = [0].concat(parsedData.elements.map(function(el) { return parseFloat(el.value); }));
 
+        let firstCachedEnd = null;
+        if (origLine._cachedEnd) {
+            // Лінія з фіксованим напрямком (зафіксована діагоналлю): рахуємо реальний
+            // вектор від точки 'from' до _cachedEnd і будуємо перший відрізок уздовж нього.
+            _rebuildChainPoints();
+            const fromPt = G.shapePoints.find(function(p) { return p.num === origLine.from; });
+            if (fromPt) {
+                const dx = origLine._cachedEnd.x - fromPt.x;
+                const dy = origLine._cachedEnd.y - fromPt.y;
+                const len = Math.sqrt(dx * dx + dy * dy) || 1;
+                const ux = dx / len, uy = dy / len;
+                firstCachedEnd = {
+                    x: fromPt.x + ux * marks[1] * SCALE,
+                    y: fromPt.y + uy * marks[1] * SCALE
+                };
+            }
+        }
+
         const newLines = _buildSplitSegments(
             origLine.from, marks, origLine.to, origLine.isClosing,
-            origLine.direction, origLine.quadrant, origLine
+            origLine.direction, origLine.quadrant, origLine, firstCachedEnd
         );
         newLines[0].id = origLine.id;
         G.lineIdCounter--; // перший сегмент перевикористовує id оригінальної лінії
