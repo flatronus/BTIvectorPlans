@@ -466,6 +466,53 @@ window.updateExistingLine = function (lineId, parsedData) {
     const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
+    // ── Поділ існуючої лінії на кілька відрізків за засічками ──
+    // Якщо введено декілька чистих чисел без кодів елементів — лінія розбивається
+    // на N послідовних відрізків (засічки від точки 'from', останнє число —
+    // загальна довжина). Проміжні точки отримують унікальні позначення зі штрихом:
+    // <from>', <from>'', ... Кінцева точка лінії (line.to) залишається незмінною.
+    if (!G.figureLines[idx].isDiagonal &&
+        !G.figureLines[idx]._cachedEnd &&
+        !G.figureLines[idx].isPending &&
+        parsedData.lineType === 'line' &&
+        parsedData.elements.length > 1 &&
+        parsedData.elements.every(function(el) { return el.type === 'number'; })) {
+
+        const origLine = G.figureLines[idx];
+        const marks    = [0].concat(parsedData.elements.map(function(el) { return parseFloat(el.value); }));
+        const segCount = marks.length - 1;
+
+        const newLines = [];
+        for (let s = 0; s < segCount; s++) {
+            const segLength = marks[s + 1] - marks[s];
+            const segFrom   = (s === 0) ? origLine.from : (origLine.from + "'".repeat(s));
+            const segTo     = (s === segCount - 1) ? origLine.to : (origLine.from + "'".repeat(s + 1));
+            const segDirection = (s === 0) ? origLine.direction : 'straight';
+
+            newLines.push({
+                id:               (s === 0) ? origLine.id : G.lineIdCounter++,
+                from:             segFrom,
+                to:               segTo,
+                direction:        segDirection,
+                lineType:         'line',
+                elements:         [{ type: 'number', value: segLength }],
+                code:             segDirection + '\nline\n' + segLength,
+                length:           segLength,
+                isClosing:        (s === segCount - 1) ? origLine.isClosing : false,
+                isPending:        false,
+                quadrant:         (s === segCount - 1) ? origLine.quadrant : null,
+                dimensionVisible: origLine.dimensionVisible !== false,
+                dimensionRotated: origLine.dimensionRotated === true,
+                isSubSegment:     true,
+                _fixedTo:         (s === segCount - 1) ? null : segTo
+            });
+        }
+
+        G.figureLines.splice(idx, 1, ...newLines);
+        redrawEntireFigure();
+        return;
+    }
+
     let newLength = 0;
     if (parsedData.lineType === 'curve') {
         const arcP = _parseArcParams(parsedData.elements);
@@ -623,10 +670,19 @@ window._rebuildChainPoints = function () {
             endY = lastPt.y + vy * scaledLen;
         }
 
-        currentPointNum++;
-        G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
-        G.figureLines[index].from = lastPt.num;
-        G.figureLines[index].to   = currentPointNum;
+        if (lineData._fixedTo !== undefined && lineData._fixedTo !== null) {
+            if (typeof lineData._fixedTo === 'number') {
+                currentPointNum = lineData._fixedTo;
+            }
+            G.shapePoints.push({ x: endX, y: endY, num: lineData._fixedTo });
+            G.figureLines[index].from = lastPt.num;
+            G.figureLines[index].to   = lineData._fixedTo;
+        } else {
+            currentPointNum++;
+            G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
+            G.figureLines[index].from = lastPt.num;
+            G.figureLines[index].to   = currentPointNum;
+        }
 
         // Оновлюємо вектор і скидаємо прапорець першої лінії
         const dx = endX - lastPt.x, dy = endY - lastPt.y;
