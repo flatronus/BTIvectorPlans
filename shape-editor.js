@@ -267,18 +267,23 @@ window.drawLineOnCanvas = function (parsedData) {
     let lineLength = 0;
 
     // ── Поділ на кілька відрізків: декілька чистих чисел без кодів елементів ──
+    // Введені числа тлумачаться як позначки (засічки) від спільної початкової точки
+    // вздовж лінії; останнє число — загальна довжина лінії. Відрізки = різниці
+    // між послідовними засічками (включно з 0 на старті).
     if (!isClosing && parsedData.lineType === 'line' &&
         parsedData.elements.length > 1 &&
         parsedData.elements.every(el => el.type === 'number')) {
 
+        const marks = [0, ...parsedData.elements.map(el => parseFloat(el.value))];
+
         let curFrom = lastPoint;
         let curDirection = parsedData.direction;
 
-        parsedData.elements.forEach((el, idx) => {
-            const segLength  = parseFloat(el.value);
-            const scaledLen  = segLength * SCALE;
-            const rel        = _calcRelativeEnd(curFrom.x, curFrom.y, curDirection, scaledLen);
-            const segEndX    = rel.x, segEndY = rel.y;
+        for (let m = 1; m < marks.length; m++) {
+            const segLength = marks[m] - marks[m - 1];
+            const scaledLen = segLength * SCALE;
+            const rel       = _calcRelativeEnd(curFrom.x, curFrom.y, curDirection, scaledLen);
+            const segEndX   = rel.x, segEndY = rel.y;
 
             const segParsed = {
                 direction: curDirection,
@@ -301,7 +306,7 @@ window.drawLineOnCanvas = function (parsedData) {
 
             curFrom      = { x: segEndX, y: segEndY, num: G.pointCounter };
             curDirection = 'straight';
-        });
+        }
 
         updateLinesList();
         autoScaleAndCenterFigure();
