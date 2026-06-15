@@ -227,6 +227,47 @@ window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
     };
 };
 
+/**
+ * Будує масив об'єктів-ліній для поділу однієї лінії на N відрізків за засічками.
+ * marksFromZero — масив [0, m1, m2, ..., mLast] (mLast — загальна довжина).
+ * fromNum — номер початкової точки; toNum/isClosingFinal — кінець останнього відрізка.
+ * firstDirection — напрямок першого відрізка; наступні — 'straight'.
+ */
+window._buildSplitSegments = function (fromNum, marksFromZero, toNum, isClosingFinal, firstDirection, quadrant, dimMeta, firstCachedEnd) {
+    const segCount = marksFromZero.length - 1;
+    const newLines = [];
+    for (let s = 0; s < segCount; s++) {
+        const segLength    = marksFromZero[s + 1] - marksFromZero[s];
+        const segFrom      = (s === 0) ? fromNum : (fromNum + "'".repeat(s));
+        const segTo        = (s === segCount - 1) ? toNum : (fromNum + "'".repeat(s + 1));
+        const segDirection = (s === 0) ? firstDirection : 'straight';
+
+        const segLine = {
+            id:               G.lineIdCounter++,
+            from:             segFrom,
+            to:               segTo,
+            direction:        segDirection,
+            lineType:         'line',
+            elements:         [{ type: 'number', value: segLength }],
+            code:             segDirection + '\nline\n' + segLength,
+            length:           segLength,
+            isClosing:        (s === segCount - 1) ? isClosingFinal : false,
+            isPending:        false,
+            quadrant:         (s === segCount - 1) ? (quadrant || null) : null,
+            dimensionVisible: dimMeta && dimMeta.dimensionVisible !== false,
+            dimensionRotated: !!(dimMeta && dimMeta.dimensionRotated === true),
+            isSubSegment:     true,
+            _fixedTo:         (s === segCount - 1) ? null : segTo
+        };
+        if (s === 0 && firstCachedEnd) {
+            segLine.direction  = 'free';
+            segLine._cachedEnd = firstCachedEnd;
+        }
+        newLines.push(segLine);
+    }
+    return newLines;
+};
+
 /* ── Малювання лінії на shapeCanvas ── */
 window.drawLineOnCanvas = function (parsedData) {
     const svg       = document.getElementById('shapeCanvas');
@@ -332,6 +373,31 @@ window.drawLineOnCanvas = function (parsedData) {
         const scaledLen = lineLength * SCALE;
         const rel = _calcRelativeEnd(lastPoint.x, lastPoint.y, parsedData.direction, scaledLen);
         endX = rel.x; endY = rel.y;
+    }
+
+    // ── Поділ замикаючої лінії на кілька відрізків за засічками ──
+    if (isClosing && parsedData.lineType === 'line' &&
+        parsedData.elements.length > 1 &&
+        parsedData.elements.every(function(el) { return el.type === 'number'; })) {
+
+        const marks = [0].concat(parsedData.elements.map(function(el) { return parseFloat(el.value); }));
+        const dx = endX - lastPoint.x, dy = endY - lastPoint.y;
+        const fullLen = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ux = dx / fullLen, uy = dy / fullLen;
+
+        const firstCachedEnd = {
+            x: lastPoint.x + ux * marks[1] * SCALE,
+            y: lastPoint.y + uy * marks[1] * SCALE
+        };
+
+        const newLines = _buildSplitSegments(
+            lastPoint.num, marks, 1, true, parsedData.direction, parsedData.quadrant, null, firstCachedEnd
+        );
+
+        G.figureLines.push(...newLines);
+        appState.isClosingLine = false;
+        redrawEntireFigure();
+        return;
     }
 
     if (parsedData.lineType === 'curve') {
@@ -480,33 +546,13 @@ window.updateExistingLine = function (lineId, parsedData) {
 
         const origLine = G.figureLines[idx];
         const marks    = [0].concat(parsedData.elements.map(function(el) { return parseFloat(el.value); }));
-        const segCount = marks.length - 1;
 
-        const newLines = [];
-        for (let s = 0; s < segCount; s++) {
-            const segLength = marks[s + 1] - marks[s];
-            const segFrom   = (s === 0) ? origLine.from : (origLine.from + "'".repeat(s));
-            const segTo     = (s === segCount - 1) ? origLine.to : (origLine.from + "'".repeat(s + 1));
-            const segDirection = (s === 0) ? origLine.direction : 'straight';
-
-            newLines.push({
-                id:               (s === 0) ? origLine.id : G.lineIdCounter++,
-                from:             segFrom,
-                to:               segTo,
-                direction:        segDirection,
-                lineType:         'line',
-                elements:         [{ type: 'number', value: segLength }],
-                code:             segDirection + '\nline\n' + segLength,
-                length:           segLength,
-                isClosing:        (s === segCount - 1) ? origLine.isClosing : false,
-                isPending:        false,
-                quadrant:         (s === segCount - 1) ? origLine.quadrant : null,
-                dimensionVisible: origLine.dimensionVisible !== false,
-                dimensionRotated: origLine.dimensionRotated === true,
-                isSubSegment:     true,
-                _fixedTo:         (s === segCount - 1) ? null : segTo
-            });
-        }
+        const newLines = _buildSplitSegments(
+            origLine.from, marks, origLine.to, origLine.isClosing,
+            origLine.direction, origLine.quadrant, origLine
+        );
+        newLines[0].id = origLine.id;
+        G.lineIdCounter--; // перший сегмент перевикористовує id оригінальної лінії
 
         G.figureLines.splice(idx, 1, ...newLines);
         redrawEntireFigure();
