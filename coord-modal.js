@@ -186,7 +186,7 @@ window.parseCoordinateInput = function (inputText) {
     }
 
     const direction = lines[0].toLowerCase();
-    if (!['left', 'right', 'free', 'diagonal'].includes(direction)) {
+    if (!['left', 'right', 'straight', 'free', 'diagonal'].includes(direction)) {
         showToast('Невірний напрямок. Використовуйте: right, left', 'error'); return null;
     }
 
