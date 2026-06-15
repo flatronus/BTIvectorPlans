@@ -189,6 +189,28 @@ window.canvasManager = {
                             const g = svgDom.querySelector(`[data-hierarchy-id="${item.id}"]`);
                             if (g) item.svgGroup = g;
                         }
+                        if (item.type === 'construct' && item.id != null) {
+                            const poly = svgDom.querySelector(`[data-construct][data-construct-id="${item.id}"]`);
+                            if (poly) {
+                                item._svgPoly = poly;
+                                poly.addEventListener('click', function(e) {
+                                    e.stopPropagation();
+                                    if (typeof selectHierarchyItem === 'function') selectHierarchyItem(item);
+                                });
+                                poly.addEventListener('dblclick', function(e) {
+                                    e.stopPropagation();
+                                    if (poly.parentNode) poly.parentNode.removeChild(poly);
+                                });
+                            }
+                            const marker = svgDom.querySelector(`[data-construct-start][data-construct-id="${item.id}"]`);
+                            if (marker) {
+                                item._svgStartMarker = marker;
+                                marker.addEventListener('click', function(e) {
+                                    e.stopPropagation();
+                                    if (typeof selectHierarchyItem === 'function') selectHierarchyItem(item);
+                                });
+                            }
+                        }
                         reattachGroups(item.children);
                     });
                 }
@@ -241,7 +263,7 @@ window.canvasManager = {
             return (items || []).map(function(item) {
                 const clean = {};
                 for (const k in item) {
-                    if (k === 'svgGroup') continue; // DOM-вузол — пропускаємо
+                    if (k === 'svgGroup' || k === '_svgPoly' || k === '_svgStartMarker') continue; // DOM-вузли — пропускаємо
                     if (k === 'children') { clean.children = stripDom(item.children); continue; }
                     clean[k] = item[k];
                 }

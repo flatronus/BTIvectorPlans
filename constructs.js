@@ -393,6 +393,9 @@ function _placeConstructStrip(lineInfo, thicknessM) {
 
     /* ── Реєструємо в ієрархії ── */
     const stripCount = G.hierarchyData.filter(function(i) { return i.type === 'construct'; }).length + 1;
+    const _newConstructId = G.hierarchyIdCounter;
+    poly.setAttribute('data-construct-id', _newConstructId);
+    startMarker.setAttribute('data-construct-id', _newConstructId);
     const hierarchyItem = {
         id:                   G.hierarchyIdCounter++,
         type:                 'construct',
@@ -858,6 +861,7 @@ window._redrawConstructItem = function (item) {
             path.setAttribute('vector-effect', 'non-scaling-stroke');
             path.setAttribute('data-construct', '1');
             path.setAttribute('data-arc', '1');
+            path.setAttribute('data-construct-id', item.id);
             path.style.cursor = 'pointer';
             path.title = 'Подвійний клік — видалити';
             (function(hi) {
@@ -882,6 +886,7 @@ window._redrawConstructItem = function (item) {
             poly.setAttribute('stroke-width', '1');
             poly.setAttribute('vector-effect', 'non-scaling-stroke');
             poly.setAttribute('data-construct', '1');
+            poly.setAttribute('data-construct-id', item.id);
             poly.style.cursor = 'pointer';
             poly.title = 'Подвійний клік — видалити';
             (function(hi) {
@@ -906,6 +911,7 @@ window._redrawConstructItem = function (item) {
     }
     if (_cActiveSvg) {
         item._svgStartMarker = _createConstructStartMarker(sx1, sy1, ux, uy);
+        item._svgStartMarker.setAttribute('data-construct-id', item.id);
         item._svgStartMarker.style.display = item.visible === false ? 'none' : '';
         _cActiveSvg.appendChild(item._svgStartMarker);
         (function(hi) {
@@ -1059,6 +1065,7 @@ function _recalcAllStripBounds(changedItem) {
                 path.setAttribute('vector-effect', 'non-scaling-stroke');
                 path.setAttribute('data-construct', '1');
                 path.setAttribute('data-arc', '1');
+                path.setAttribute('data-construct-id', strip.id);
                 path.style.cursor = 'pointer';
                 (function(hi) {
                     path.addEventListener('dblclick', function(e) { e.stopPropagation(); if (path.parentNode) path.parentNode.removeChild(path); });
@@ -1087,6 +1094,7 @@ function _recalcAllStripBounds(changedItem) {
         }
         const markerTan = stripSagPx !== 0 ? _arcTangentAt(x1, y1, x2, y2, stripSagPx, tA) : null;
         strip._svgStartMarker = _createConstructStartMarker(sx1, sy1, markerTan ? markerTan.tx : ux, markerTan ? markerTan.ty : uy);
+        strip._svgStartMarker.setAttribute('data-construct-id', strip.id);
         strip._svgStartMarker.style.display = strip.visible === false ? 'none' : '';
         _cActiveSvg.appendChild(strip._svgStartMarker);
         (function(hi) {
