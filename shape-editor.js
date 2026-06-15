@@ -216,7 +216,7 @@ window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
         switch (direction) {
             case 'right':    vx = -uy; vy =  ux; break; // праворуч від напрямку (+90° за год. в SVG)
             case 'left':     vx =  uy; vy = -ux; break; // ліворуч від напрямку (-90° проти год. в SVG)
-            case 'straight': vx = -ux; vy = -uy; break; // прямо (180° до попередньої)
+            case 'straight': vx =  ux; vy =  uy; break; // прямо (продовження попередньої лінії)
             default:         vx =  ux; vy =  uy; break;
         }
     }
@@ -568,7 +568,7 @@ window._rebuildChainPoints = function () {
                 switch (lineData.direction) {
                     case 'right':    vx = -prevUy; vy =  prevUx; break; // праворуч від напрямку
                     case 'left':     vx =  prevUy; vy = -prevUx; break; // ліворуч від напрямку
-                    case 'straight': vx = -prevUx; vy = -prevUy; break; // прямо (180°)
+                    case 'straight': vx =  prevUx; vy =  prevUy; break; // прямо (продовження)
                     default:         vx =  prevUx; vy =  prevUy; break;
                 }
             }
@@ -1229,7 +1229,7 @@ window._addLineToElementEditor = function (parsedData) {
         switch (parsedData.direction) {
             case 'right':    vx = -prevUy; vy =  prevUx; break;
             case 'left':     vx =  prevUy; vy = -prevUx; break;
-            case 'straight': vx = -prevUx; vy = -prevUy; break;
+            case 'straight': vx =  prevUx; vy =  prevUy; break;
             default:         vx =  prevUx; vy =  prevUy; break;
         }
     }
