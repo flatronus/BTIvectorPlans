@@ -192,6 +192,9 @@
                 <button class="shape-btn shape-btn-cyan" id="shapeToolbarQuickBtn" onclick="openQuickShapeModal()" title="Швидке створення">
                     <i class="fas fa-bolt"></i><span class="shape-btn-label"> Швидко</span>
                 </button>
+                <button class="shape-btn" style="background:#e53935;" id="shapeToolbarDeletePointBtn" onclick="openDeletePointModal()" title="Видалити точку">
+                    <i class="fas fa-eraser"></i><span class="shape-btn-label"> Видалити точку</span>
+                </button>
                 <button class="shape-btn shape-btn-green" onclick="closeShapeModal()" title="Зберегти і закрити">
                     <i class="fas fa-check"></i><span class="shape-btn-label"> OK</span>
                 </button>
@@ -320,6 +323,32 @@
     </div>
 
     <!-- Модалка діагоналі -->
+    <!-- Модалка видалення точки -->
+    <div id="deletePointModal" class="modal">
+        <div class="modal-content" style="max-width: 380px;">
+            <h3 style="margin-top: 0;">Видалити точку</h3>
+
+            <div style="margin-bottom: 12px; font-size: 13px; color: #555; background: #fff3e0; border: 1px solid #ffb74d; border-radius: 4px; padding: 10px;">
+                Оберіть точку для видалення.<br>
+                Між сусідніми точками автоматично утвориться пряма лінія.
+            </div>
+
+            <div style="margin-bottom: 8px; font-size: 12px; color: #888;" id="deletePointHint"></div>
+
+            <select id="deletePointSelect" style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #e53935; border-radius: 4px; box-sizing: border-box; margin-bottom: 16px;">
+            </select>
+
+            <div class="modal-buttons">
+                <button class="btn-copy" style="background-color: #e53935;" onclick="applyDeletePoint()">
+                    <i class="fas fa-trash"></i> Видалити
+                </button>
+                <button class="btn-close" style="background-color: #9E9E9E;" onclick="closeDeletePointModal()">
+                    <i class="fas fa-times"></i> Скасувати
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="diagonalModal" class="modal">
         <div class="modal-content" style="max-width: 420px;">
             <h3 style="margin-top: 0;">Діагональ між точками</h3>

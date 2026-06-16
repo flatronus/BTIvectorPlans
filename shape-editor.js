@@ -510,6 +510,132 @@ window.deleteLineAndFollowing = function (lineId) {
     showToast('Лінію видалено', 'info');
 };
 
+/* ── Видалення точки фігури ── */
+window.openDeletePointModal = function () {
+    _rebuildChainPoints();
+    // Збираємо всі точки крім точки 1 (початкова) і замикаючих
+    const deletable = G.shapePoints.filter(function(p) { return !p.isTemp; });
+    if (deletable.length < 2) {
+        showToast('Немає точок для видалення', 'warning');
+        return;
+    }
+
+    const select = document.getElementById('deletePointSelect');
+    select.innerHTML = '';
+    deletable.forEach(function(p) {
+        const opt = document.createElement('option');
+        opt.value = String(p.num);
+        opt.textContent = 'Точка ' + p.num;
+        select.appendChild(opt);
+    });
+
+    const hint = document.getElementById('deletePointHint');
+    hint.textContent = 'Наявні точки: ' + deletable.map(function(p) { return p.num; }).join(', ');
+
+    document.getElementById('deletePointModal').style.display = 'block';
+};
+
+window.closeDeletePointModal = function () {
+    document.getElementById('deletePointModal').style.display = 'none';
+};
+
+window.applyDeletePoint = function () {
+    const select = document.getElementById('deletePointSelect');
+    const ptNum  = select.value;
+
+    if (!ptNum) {
+        showToast('Оберіть точку', 'warning');
+        return;
+    }
+
+    _deleteShapePoint(ptNum);
+    closeDeletePointModal();
+};
+
+/**
+ * Видаляє точку з номером ptNum з фігури.
+ * Знаходить лінію що ЗАКІНЧУЄТЬСЯ на ptNum і лінію що ПОЧИНАЄТЬСЯ з ptNum,
+ * об'єднує їх в одну пряму лінію між попередньою і наступною точками.
+ */
+window._deleteShapePoint = function (ptNum) {
+    _rebuildChainPoints();
+
+    // Знаходимо лінію що закінчується на ptNum (lineIn) і що починається (lineOut)
+    const lineInIdx  = G.figureLines.findIndex(function(l) {
+        return !l.isDiagonal && (String(l.to) === String(ptNum));
+    });
+    const lineOutIdx = G.figureLines.findIndex(function(l) {
+        return !l.isDiagonal && (String(l.from) === String(ptNum));
+    });
+
+    if (lineInIdx === -1 || lineOutIdx === -1) {
+        showToast('Не вдалося знайти лінії для точки ' + ptNum, 'error');
+        return;
+    }
+
+    const lineIn  = G.figureLines[lineInIdx];
+    const lineOut = G.figureLines[lineOutIdx];
+
+    // Координати точки «from» lineIn і точки «to» lineOut
+    const ptFrom = G.shapePoints.find(function(p) { return String(p.num) === String(lineIn.from); });
+    const ptTo   = lineOut.isClosing
+        ? G.shapePoints[0]
+        : G.shapePoints.find(function(p) { return String(p.num) === String(lineOut.to); });
+
+    if (!ptFrom || !ptTo) {
+        showToast('Помилка координат точок', 'error');
+        return;
+    }
+
+    // Обчислюємо довжину нової прямої між ptFrom і ptTo
+    const dx = ptTo.x - ptFrom.x;
+    const dy = ptTo.y - ptFrom.y;
+    const newLen = parseFloat((Math.sqrt(dx * dx + dy * dy) / SCALE).toFixed(3));
+
+    // Будуємо нову об'єднану лінію замість lineIn і lineOut
+    const mergedLine = {
+        id:               lineIn.id,
+        from:             lineIn.from,
+        to:               lineOut.to,
+        direction:        'free',
+        lineType:         'line',
+        elements:         [{ type: 'number', value: newLen }],
+        code:             'free\nline\n' + newLen,
+        length:           newLen,
+        isClosing:        lineOut.isClosing,
+        isPending:        false,
+        dimensionVisible: lineIn.dimensionVisible !== false,
+        dimensionRotated: false,
+        _cachedEnd:       lineOut.isClosing ? null : { x: ptTo.x, y: ptTo.y }
+    };
+
+    // Видаляємо діагоналі, що посилаються на видалену точку
+    G.figureLines = G.figureLines.filter(function(l) {
+        if (!l.isDiagonal) return true;
+        return String(l.from) !== String(ptNum) && String(l.to) !== String(ptNum);
+    });
+
+    // Замінюємо lineIn і lineOut на mergedLine (замінюємо lineIn, видаляємо lineOut)
+    const idxIn  = G.figureLines.findIndex(function(l) { return l.id === lineIn.id; });
+    const idxOut = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
+
+    if (idxIn === -1 || idxOut === -1) {
+        showToast('Внутрішня помилка: лінії не знайдено після фільтрації', 'error');
+        return;
+    }
+
+    G.figureLines.splice(idxIn, 1, mergedLine);
+    const idxOutNew = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
+    if (idxOutNew !== -1) G.figureLines.splice(idxOutNew, 1);
+
+    appState.calculatedArea = null;
+    appState.customArea     = null;
+
+    redrawEntireFigure();
+    updateLinesList();
+    showToast('Точку ' + ptNum + ' видалено', 'info');
+};
+
 /* ── Редагування лінії ── */
 window.editLine = function (line) {
     // Діагональ — відкриваємо модалку діагоналі з поточною довжиною
