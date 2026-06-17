@@ -514,7 +514,7 @@ window.deleteLineAndFollowing = function (lineId) {
 window.openDeletePointModal = function () {
     _rebuildChainPoints();
     // Збираємо всі точки крім точки 1 (початкова) і замикаючих
-    const deletable = G.shapePoints.filter(function(p) { return !p.isTemp; });
+    const deletable = G.shapePoints.filter(function(p) { return !p.isTemp && String(p.num) !== '1'; });
     if (deletable.length < 2) {
         showToast('Немає точок для видалення', 'warning');
         return;
@@ -556,16 +556,18 @@ window.applyDeletePoint = function () {
  * Видаляє точку з номером ptNum з фігури.
  * Знаходить лінію що ЗАКІНЧУЄТЬСЯ на ptNum і лінію що ПОЧИНАЄТЬСЯ з ptNum,
  * об'єднує їх в одну пряму лінію між попередньою і наступною точками.
+ * Координати всіх точок фіксуються до видалення і не змінюються.
  */
 window._deleteShapePoint = function (ptNum) {
+    // Спочатку будуємо актуальні координати всіх точок
     _rebuildChainPoints();
 
-    // Знаходимо лінію що закінчується на ptNum (lineIn) і що починається (lineOut)
+    // Знаходимо лінії за значеннями .from/.to ПІСЛЯ rebuildChainPoints
     const lineInIdx  = G.figureLines.findIndex(function(l) {
-        return !l.isDiagonal && (String(l.to) === String(ptNum));
+        return !l.isDiagonal && String(l.to) === String(ptNum);
     });
     const lineOutIdx = G.figureLines.findIndex(function(l) {
-        return !l.isDiagonal && (String(l.from) === String(ptNum));
+        return !l.isDiagonal && String(l.from) === String(ptNum);
     });
 
     if (lineInIdx === -1 || lineOutIdx === -1) {
@@ -576,7 +578,8 @@ window._deleteShapePoint = function (ptNum) {
     const lineIn  = G.figureLines[lineInIdx];
     const lineOut = G.figureLines[lineOutIdx];
 
-    // Координати точки «from» lineIn і точки «to» lineOut
+    // Фіксуємо координати точки-«джерела» (from lineIn) та точки-«мети» (to lineOut)
+    // прямо з G.shapePoints — вони вже розраховані _rebuildChainPoints
     const ptFrom = G.shapePoints.find(function(p) { return String(p.num) === String(lineIn.from); });
     const ptTo   = lineOut.isClosing
         ? G.shapePoints[0]
@@ -587,12 +590,14 @@ window._deleteShapePoint = function (ptNum) {
         return;
     }
 
-    // Обчислюємо довжину нової прямої між ptFrom і ptTo
+    // Відстань між фіксованими точками → довжина нової прямої
     const dx = ptTo.x - ptFrom.x;
     const dy = ptTo.y - ptFrom.y;
     const newLen = parseFloat((Math.sqrt(dx * dx + dy * dy) / SCALE).toFixed(3));
 
-    // Будуємо нову об'єднану лінію замість lineIn і lineOut
+    // Нова об'єднана лінія: direction='free', _cachedEnd вказує точні координати ptTo
+    // (для не-замикаючих). Це гарантує що _rebuildChainPoints не буде обчислювати
+    // кінцеву точку через кути/вектори, а візьме збережені координати.
     const mergedLine = {
         id:               lineIn.id,
         from:             lineIn.from,
@@ -615,18 +620,16 @@ window._deleteShapePoint = function (ptNum) {
         return String(l.from) !== String(ptNum) && String(l.to) !== String(ptNum);
     });
 
-    // Замінюємо lineIn і lineOut на mergedLine (замінюємо lineIn, видаляємо lineOut)
-    const idxIn  = G.figureLines.findIndex(function(l) { return l.id === lineIn.id; });
-    const idxOut = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
-
-    if (idxIn === -1 || idxOut === -1) {
-        showToast('Внутрішня помилка: лінії не знайдено після фільтрації', 'error');
-        return;
-    }
-
+    // Замінюємо lineIn на mergedLine, видаляємо lineOut
+    const idxIn = G.figureLines.findIndex(function(l) { return l.id === lineIn.id; });
     G.figureLines.splice(idxIn, 1, mergedLine);
-    const idxOutNew = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
-    if (idxOutNew !== -1) G.figureLines.splice(idxOutNew, 1);
+
+    const idxOut = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
+    if (idxOut !== -1) G.figureLines.splice(idxOut, 1);
+
+    // Якщо mergedLine — тепер остання не-замикаюча перед замикаючою,
+    // то замикаюча лінія теж повинна залишитись зі своїми from/to без зрушень.
+    // _rebuildChainPoints при redrawEntireFigure перерахує її довжину автоматично.
 
     appState.calculatedArea = null;
     appState.customArea     = null;
