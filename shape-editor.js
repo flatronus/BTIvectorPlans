@@ -513,8 +513,8 @@ window.deleteLineAndFollowing = function (lineId) {
 /* ── Видалення точки фігури ── */
 window.openDeletePointModal = function () {
     _rebuildChainPoints();
-    // Збираємо всі точки крім точки 1 (початкова) і замикаючих
-    const deletable = G.shapePoints.filter(function(p) { return !p.isTemp && String(p.num) !== '1'; });
+    // Збираємо всі точки крім pending (isTemp)
+    const deletable = G.shapePoints.filter(function(p) { return !p.isTemp; });
     if (deletable.length < 2) {
         showToast('Немає точок для видалення', 'warning');
         return;
@@ -591,6 +591,7 @@ window._deleteShapePoint = function (ptNum) {
     });
 
     // 3. Знаходимо лінію що ЗАКІНЧУЄТЬСЯ на ptNum і що ПОЧИНАЄТЬСЯ з ptNum
+    //    Для точки 1: лінія що входить — це замикаюча (isClosing=true, to=1)
     const lineInIdx  = G.figureLines.findIndex(function(l) {
         return !l.isDiagonal && String(l.to) === String(ptNum);
     });
@@ -650,6 +651,39 @@ window._deleteShapePoint = function (ptNum) {
     G.figureLines.splice(idxIn, 1, mergedLine);
     const idxOut = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
     if (idxOut !== -1) G.figureLines.splice(idxOut, 1);
+
+    // 9. Якщо видалялась точка 1 — нова перша точка = ptTo (колишня точка після 1).
+    //    Ротуємо масив ліній так щоб нова замикаюча стала останньою,
+    //    і встановлюємо G._overrideStart = координати нової точки 1.
+    if (String(ptNum) === '1') {
+        // Нова «перша» точка — це ptTo (колишня точка lineOut.to)
+        // Ланцюг тепер починається з неї. Оскільки всі лінії вже free+_cachedEnd,
+        // треба ротувати масив: знайти першу не-діагональну лінію що починається з ptTo
+        // і переставити її на початок (разом з хвостом до неї).
+        const newFirstIdx = G.figureLines.findIndex(function(l) {
+            return !l.isDiagonal && String(l.from) === String(lineOut.to);
+        });
+        if (newFirstIdx > 0) {
+            const diags    = G.figureLines.filter(function(l) { return  l.isDiagonal; });
+            const nonDiags = G.figureLines.filter(function(l) { return !l.isDiagonal; });
+            const rotated  = nonDiags.slice(newFirstIdx).concat(nonDiags.slice(0, newFirstIdx));
+            // Остання стає замикаючою
+            rotated[rotated.length - 1].isClosing  = true;
+            rotated[rotated.length - 1]._cachedEnd = null;
+            // Перша більше не замикаюча
+            rotated[0].isClosing = false;
+            G.figureLines = rotated.concat(diags);
+        }
+        // Перенумеровуємо from/to: нова точка 1 = ptTo.num → 1
+        const oldNum1 = String(lineOut.to);
+        if (oldNum1 !== '1') {
+            G.figureLines.forEach(function(l) {
+                if (String(l.from) === oldNum1) l.from = 1;
+                if (String(l.to)   === oldNum1) l.to   = 1;
+            });
+        }
+        G._overrideStart = { x: ptTo.x, y: ptTo.y };
+    }
 
     appState.calculatedArea = null;
     appState.customArea     = null;
@@ -837,7 +871,9 @@ window.redrawEntireFigure = function () {
  * Діагоналі пов'язують наявні точки — нових не додають.
  */
 window._rebuildChainPoints = function () {
-    G.shapePoints = [{ x: START_X, y: START_Y, num: 1 }];
+    const sx = (G._overrideStart && G._overrideStart.x !== undefined) ? G._overrideStart.x : START_X;
+    const sy = (G._overrideStart && G._overrideStart.y !== undefined) ? G._overrideStart.y : START_Y;
+    G.shapePoints = [{ x: sx, y: sy, num: 1 }];
     let currentPointNum = 1;
     let prevUx = 1, prevUy = 0; // дефолтний вектор
     let isFirstLine = true;     // прапорець першої лінії
