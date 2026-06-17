@@ -588,7 +588,21 @@ window.applyDeleteLine = function () {
         return;
     }
     _deleteSingleLine(lineId);
-    closeDeleteLineModal();
+
+    // Оновлюємо список ліній у вже відкритій модалці
+    const lines = G.figureLines.filter(function(l) { return !l.isDiagonal && !l.isPending; });
+    if (lines.length === 0) {
+        closeDeleteLineModal();
+        return;
+    }
+    select.innerHTML = '';
+    lines.forEach(function(l) {
+        const opt = document.createElement('option');
+        opt.value = String(l.id);
+        const toLabel = l.isClosing ? '1' : String(l.to);
+        opt.textContent = String(l.from) + '-' + toLabel + (l.isClosing ? ' (замикаюча)' : '');
+        select.appendChild(opt);
+    });
 };
 
 /**
