@@ -620,29 +620,26 @@ window._deleteSingleLine = function (lineId) {
     const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
-    // 1. Актуальні координати
-    _rebuildChainPoints();
-
-    // 2. Заморожуємо всі не-замикаючі лінії
-    G.figureLines.forEach(function(lineData) {
-        if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
-        if (lineData.direction !== 'free' || !lineData._cachedEnd) {
-            const toPt = G.shapePoints.find(function(p) {
-                return String(p.num) === String(lineData.to);
-            });
-            if (toPt) {
-                lineData.direction  = 'free';
-                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
-            }
-        }
-    });
-
-    // 3. Знімок координат усіх точок (включно з тими, що будуть «висячими» після видалення)
+    // 1. Знімок поточних координат G.shapePoints — БЕЗ виклику _rebuildChainPoints,
+    //    бо після першого видалення G.shapePoints вже містить правильні координати знімка,
+    //    а _rebuildChainPoints перерахує їх через ланцюг і зіпсує.
     const pointsSnapshot = G.shapePoints.map(function(p) {
         return { x: p.x, y: p.y, num: p.num };
     });
 
-    // 4. Видаляємо лінію
+    // 2. Заморожуємо всі не-замикаючі лінії (direction='free' + _cachedEnd з поточного знімка)
+    G.figureLines.forEach(function(lineData) {
+        if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
+        const toPt = pointsSnapshot.find(function(p) {
+            return String(p.num) === String(lineData.to);
+        });
+        if (toPt) {
+            lineData.direction  = 'free';
+            lineData._cachedEnd = { x: toPt.x, y: toPt.y };
+        }
+    });
+
+    // 3. Видаляємо лінію
     G.figureLines.splice(idx, 1);
 
     appState.calculatedArea = null;
@@ -652,18 +649,18 @@ window._deleteSingleLine = function (lineId) {
 
     if (G.figureLines.length === 0) {
         resetSvgCanvas(svg);
+        G.shapePoints = pointsSnapshot;
         updateLinesList();
         return;
     }
 
-    // 5. Перемальовуємо вручну зі знімка точок
+    // 4. Перемальовуємо вручну зі знімка — БЕЗ autoScaleAndCenterFigure
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-    // Малюємо всі лінії що залишились
     G.figureLines.forEach(function(lineData) {
         const fromPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.from); });
         const toPt   = lineData.isClosing
-            ? pointsSnapshot[0]
+            ? pointsSnapshot.find(function(p) { return p.num === 1; }) || pointsSnapshot[0]
             : pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.to); });
         if (!fromPt || !toPt) return;
 
@@ -687,18 +684,17 @@ window._deleteSingleLine = function (lineId) {
         }
     });
 
-    // Малюємо ВСІ точки зі знімка (незалежно від того чи є до них/від них лінії)
+    // Малюємо ВСІ точки зі знімка
     pointsSnapshot.forEach(function(p) {
         if (!p.num) return;
         _renderSvgPoint(svg, p.x, p.y, p.num);
     });
 
-    // Синхронізуємо G.shapePoints зі знімком
+    // 5. Синхронізуємо G.shapePoints зі знімком (незмінно)
     G.shapePoints = pointsSnapshot;
 
     updateLinesList();
-    autoScaleAndCenterFigure();
-    drawRoomNumber();
+    if (typeof drawRoomNumber === 'function') drawRoomNumber();
     showToast('Лінію видалено', 'info');
 };
 
