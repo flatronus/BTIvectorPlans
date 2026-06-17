@@ -561,6 +561,7 @@ window.openDeleteLineModal = function () {
         return;
     }
 
+    // Актуалізуємо координати перед показом списку
     _rebuildChainPoints();
 
     const select = document.getElementById('deleteLineSelect');
@@ -568,8 +569,18 @@ window.openDeleteLineModal = function () {
     lines.forEach(function(l) {
         const opt = document.createElement('option');
         opt.value = String(l.id);
-        const toLabel = l.isClosing ? '1' : String(l.to);
-        opt.textContent = String(l.from) + '-' + toLabel + (l.isClosing ? ' (замикаюча)' : '');
+
+        // Підпис: from завжди є, to — з G.shapePoints або '?'
+        const fromLabel = String(l.from);
+        var toLabel;
+        if (l.isClosing) {
+            toLabel = '1 (замикаюча)';
+        } else {
+            // Шукаємо to у G.shapePoints
+            const toPt = G.shapePoints.find(function(p) { return String(p.num) === String(l.to); });
+            toLabel = toPt ? String(l.to) : (l._cachedEnd ? String(l.to) : '?');
+        }
+        opt.textContent = fromLabel + '-' + toLabel;
         select.appendChild(opt);
     });
 
@@ -599,8 +610,15 @@ window.applyDeleteLine = function () {
     lines.forEach(function(l) {
         const opt = document.createElement('option');
         opt.value = String(l.id);
-        const toLabel = l.isClosing ? '1' : String(l.to);
-        opt.textContent = String(l.from) + '-' + toLabel + (l.isClosing ? ' (замикаюча)' : '');
+        const fromLabel = String(l.from);
+        var toLabel;
+        if (l.isClosing) {
+            toLabel = '1 (замикаюча)';
+        } else {
+            const toPt = G.shapePoints.find(function(p) { return String(p.num) === String(l.to); });
+            toLabel = toPt ? String(l.to) : (l._cachedEnd ? String(l.to) : '?');
+        }
+        opt.textContent = fromLabel + '-' + toLabel;
         select.appendChild(opt);
     });
 };
@@ -620,23 +638,23 @@ window._deleteSingleLine = function (lineId) {
     const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
-    // 1. Знімок поточних координат G.shapePoints — БЕЗ виклику _rebuildChainPoints,
-    //    бо після першого видалення G.shapePoints вже містить правильні координати знімка,
-    //    а _rebuildChainPoints перерахує їх через ланцюг і зіпсує.
-    const pointsSnapshot = G.shapePoints.map(function(p) {
-        return { x: p.x, y: p.y, num: p.num };
-    });
-
-    // 2. Заморожуємо всі не-замикаючі лінії (direction='free' + _cachedEnd з поточного знімка)
+    // 1. Спочатку заморожуємо координати всіх ліній через _rebuildChainPoints
+    //    щоб _cachedEnd був актуальним для ВСІХ ліній.
+    _rebuildChainPoints();
     G.figureLines.forEach(function(lineData) {
         if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
-        const toPt = pointsSnapshot.find(function(p) {
+        const toPt = G.shapePoints.find(function(p) {
             return String(p.num) === String(lineData.to);
         });
         if (toPt) {
             lineData.direction  = 'free';
             lineData._cachedEnd = { x: toPt.x, y: toPt.y };
         }
+    });
+
+    // 2. Знімок координат усіх точок ПІСЛЯ _rebuildChainPoints
+    const pointsSnapshot = G.shapePoints.map(function(p) {
+        return { x: p.x, y: p.y, num: p.num };
     });
 
     // 3. Видаляємо лінію
@@ -654,14 +672,22 @@ window._deleteSingleLine = function (lineId) {
         return;
     }
 
-    // 4. Перемальовуємо вручну зі знімка — БЕЗ autoScaleAndCenterFigure
+    // 4. Перемальовуємо вручну.
+    //    Координати беремо: fromPt — з pointsSnapshot по from;
+    //    toPt — спочатку з _cachedEnd (найнадійніше після заморозки),
+    //    потім fallback на pointsSnapshot по to.
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
     G.figureLines.forEach(function(lineData) {
-        const fromPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.from); });
-        const toPt   = lineData.isClosing
-            ? pointsSnapshot.find(function(p) { return p.num === 1; }) || pointsSnapshot[0]
-            : pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.to); });
+        var fromPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.from); });
+        var toPt;
+        if (lineData.isClosing) {
+            toPt = pointsSnapshot.find(function(p) { return p.num === 1; }) || pointsSnapshot[0];
+        } else if (lineData._cachedEnd) {
+            toPt = lineData._cachedEnd;
+        } else {
+            toPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.to); });
+        }
         if (!fromPt || !toPt) return;
 
         if (lineData.isDiagonal) {
@@ -673,8 +699,8 @@ window._deleteSingleLine = function (lineId) {
             drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
         } else {
             if (lineData.lineType === 'curve') {
-                const arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(lineData.elements || []) : null;
-                const sag  = arcP ? arcP.sagMeters * SCALE : 0;
+                var arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(lineData.elements || []) : null;
+                var sag  = arcP ? arcP.sagMeters * SCALE : 0;
                 _renderSvgArc(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, sag, lineData.id);
             } else {
                 _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
@@ -690,7 +716,7 @@ window._deleteSingleLine = function (lineId) {
         _renderSvgPoint(svg, p.x, p.y, p.num);
     });
 
-    // 5. Синхронізуємо G.shapePoints зі знімком (незмінно)
+    // 5. Фіксуємо G.shapePoints
     G.shapePoints = pointsSnapshot;
 
     updateLinesList();
