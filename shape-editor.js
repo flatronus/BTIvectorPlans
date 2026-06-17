@@ -552,6 +552,86 @@ window.applyDeletePoint = function () {
     closeDeletePointModal();
 };
 
+/* ── Видалення однієї лінії без зміни координат точок ── */
+
+window.openDeleteLineModal = function () {
+    const lines = G.figureLines.filter(function(l) { return !l.isDiagonal && !l.isPending; });
+    if (lines.length === 0) {
+        showToast('Немає ліній для видалення', 'warning');
+        return;
+    }
+
+    _rebuildChainPoints();
+
+    const select = document.getElementById('deleteLineSelect');
+    select.innerHTML = '';
+    lines.forEach(function(l) {
+        const opt = document.createElement('option');
+        opt.value = String(l.id);
+        const toLabel = l.isClosing ? '1' : String(l.to);
+        opt.textContent = String(l.from) + '-' + toLabel + (l.isClosing ? ' (замикаюча)' : '');
+        select.appendChild(opt);
+    });
+
+    document.getElementById('deleteLineModal').style.display = 'block';
+};
+
+window.closeDeleteLineModal = function () {
+    document.getElementById('deleteLineModal').style.display = 'none';
+};
+
+window.applyDeleteLine = function () {
+    const select = document.getElementById('deleteLineSelect');
+    const lineId = parseInt(select.value);
+    if (isNaN(lineId)) {
+        showToast('Оберіть лінію', 'warning');
+        return;
+    }
+    _deleteSingleLine(lineId);
+    closeDeleteLineModal();
+};
+
+/**
+ * Видаляє одну лінію (по id) без зміни координат інших точок фігури.
+ * Всі не-замикаючі лінії спочатку фіксуються через _cachedEnd,
+ * потім обрана лінія просто прибирається з масиву.
+ * Фігура перемальовується — точки залишаються на місцях.
+ */
+window._deleteSingleLine = function (lineId) {
+    const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
+    if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
+
+    // Заморожуємо координати всіх не-замикаючих ліній
+    _rebuildChainPoints();
+    G.figureLines.forEach(function(lineData) {
+        if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
+        if (lineData.direction !== 'free' || !lineData._cachedEnd) {
+            const toPt = G.shapePoints.find(function(p) {
+                return String(p.num) === String(lineData.to);
+            });
+            if (toPt) {
+                lineData.direction  = 'free';
+                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
+            }
+        }
+    });
+
+    G.figureLines.splice(idx, 1);
+
+    appState.calculatedArea = null;
+    appState.customArea     = null;
+
+    if (G.figureLines.length === 0) {
+        const svg = document.getElementById('shapeCanvas');
+        resetSvgCanvas(svg);
+        updateLinesList();
+        return;
+    }
+
+    redrawEntireFigure();
+    showToast('Лінію видалено', 'info');
+};
+
 /**
  * Видаляє точку з номером ptNum з фігури.
  * Перед видаленням заморожує координати ВСІХ точок:
