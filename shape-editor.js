@@ -592,17 +592,24 @@ window.applyDeleteLine = function () {
 };
 
 /**
- * Видаляє одну лінію (по id) без зміни координат інших точок фігури.
- * Всі не-замикаючі лінії спочатку фіксуються через _cachedEnd,
- * потім обрана лінія просто прибирається з масиву.
- * Фігура перемальовується — точки залишаються на місцях.
+ * Видаляє одну лінію (по id) без зміни координат точок фігури.
+ * Алгоритм:
+ *   1. Перебудовуємо координати всіх точок (_rebuildChainPoints).
+ *   2. Заморожуємо всі не-замикаючі лінії: direction='free' + _cachedEnd.
+ *   3. Зберігаємо знімок координат G.shapePoints (щоб точки не зникли
+ *      після видалення лінії — _rebuildChainPoints будує точки лише з ланцюга ліній,
+ *      і точки що не мають вхідної лінії просто не з'являються).
+ *   4. Видаляємо лінію з масиву.
+ *   5. Перемальовуємо фігуру вручну з збереженого знімка точок.
  */
 window._deleteSingleLine = function (lineId) {
     const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
     if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
 
-    // Заморожуємо координати всіх не-замикаючих ліній
+    // 1. Актуальні координати
     _rebuildChainPoints();
+
+    // 2. Заморожуємо всі не-замикаючі лінії
     G.figureLines.forEach(function(lineData) {
         if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
         if (lineData.direction !== 'free' || !lineData._cachedEnd) {
@@ -616,19 +623,68 @@ window._deleteSingleLine = function (lineId) {
         }
     });
 
+    // 3. Знімок координат усіх точок (включно з тими, що будуть «висячими» після видалення)
+    const pointsSnapshot = G.shapePoints.map(function(p) {
+        return { x: p.x, y: p.y, num: p.num };
+    });
+
+    // 4. Видаляємо лінію
     G.figureLines.splice(idx, 1);
 
     appState.calculatedArea = null;
     appState.customArea     = null;
 
+    const svg = document.getElementById('shapeCanvas');
+
     if (G.figureLines.length === 0) {
-        const svg = document.getElementById('shapeCanvas');
         resetSvgCanvas(svg);
         updateLinesList();
         return;
     }
 
-    redrawEntireFigure();
+    // 5. Перемальовуємо вручну зі знімка точок
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // Малюємо всі лінії що залишились
+    G.figureLines.forEach(function(lineData) {
+        const fromPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.from); });
+        const toPt   = lineData.isClosing
+            ? pointsSnapshot[0]
+            : pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.to); });
+        if (!fromPt || !toPt) return;
+
+        if (lineData.isDiagonal) {
+            if (typeof _renderSvgDashedLine === 'function') {
+                _renderSvgDashedLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            } else {
+                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            }
+            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
+        } else {
+            if (lineData.lineType === 'curve') {
+                const arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(lineData.elements || []) : null;
+                const sag  = arcP ? arcP.sagMeters * SCALE : 0;
+                _renderSvgArc(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, sag, lineData.id);
+            } else {
+                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
+            }
+            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
+            drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
+        }
+    });
+
+    // Малюємо ВСІ точки зі знімка (незалежно від того чи є до них/від них лінії)
+    pointsSnapshot.forEach(function(p) {
+        if (!p.num) return;
+        _renderSvgPoint(svg, p.x, p.y, p.num);
+    });
+
+    // Синхронізуємо G.shapePoints зі знімком
+    G.shapePoints = pointsSnapshot;
+
+    updateLinesList();
+    autoScaleAndCenterFigure();
+    drawRoomNumber();
     showToast('Лінію видалено', 'info');
 };
 
