@@ -554,15 +554,43 @@ window.applyDeletePoint = function () {
 
 /**
  * Видаляє точку з номером ptNum з фігури.
- * Знаходить лінію що ЗАКІНЧУЄТЬСЯ на ptNum і лінію що ПОЧИНАЄТЬСЯ з ptNum,
- * об'єднує їх в одну пряму лінію між попередньою і наступною точками.
- * Координати всіх точок фіксуються до видалення і не змінюються.
+ * Перед видаленням заморожує координати ВСІХ точок:
+ * кожна не-замикаюча лінія переводиться в direction='free' з _cachedEnd,
+ * тому _rebuildChainPoints більше не перераховує координати через ланцюг кутів.
+ * Після цього дві лінії що суміжні з видаленою точкою об'єднуються в одну пряму.
  */
 window._deleteShapePoint = function (ptNum) {
-    // Спочатку будуємо актуальні координати всіх точок
+    // 1. Будуємо актуальні координати всіх точок
     _rebuildChainPoints();
 
-    // Знаходимо лінії за значеннями .from/.to ПІСЛЯ rebuildChainPoints
+    // 2. Заморожуємо координати: кожну не-замикаючу лінію → direction='free' + _cachedEnd
+    //    Це гарантує що після будь-яких змін у масиві ліній _rebuildChainPoints
+    //    не буде перераховувати позиції через ланцюг напрямків.
+    G.figureLines.forEach(function(lineData) {
+        if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
+        if (lineData.direction !== 'free') {
+            // Знаходимо кінцеву точку цієї лінії в G.shapePoints
+            const toPt = G.shapePoints.find(function(p) {
+                return String(p.num) === String(lineData.to);
+            });
+            if (toPt) {
+                lineData.direction  = 'free';
+                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
+            }
+        }
+        // Для ліній зі штрихами (_fixedTo): також зберігаємо _cachedEnd якщо ще немає
+        if (lineData._fixedTo !== undefined && lineData._fixedTo !== null && !lineData._cachedEnd) {
+            const toPt = G.shapePoints.find(function(p) {
+                return String(p.num) === String(lineData._fixedTo);
+            });
+            if (toPt) {
+                lineData.direction  = 'free';
+                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
+            }
+        }
+    });
+
+    // 3. Знаходимо лінію що ЗАКІНЧУЄТЬСЯ на ptNum і що ПОЧИНАЄТЬСЯ з ptNum
     const lineInIdx  = G.figureLines.findIndex(function(l) {
         return !l.isDiagonal && String(l.to) === String(ptNum);
     });
@@ -578,8 +606,7 @@ window._deleteShapePoint = function (ptNum) {
     const lineIn  = G.figureLines[lineInIdx];
     const lineOut = G.figureLines[lineOutIdx];
 
-    // Фіксуємо координати точки-«джерела» (from lineIn) та точки-«мети» (to lineOut)
-    // прямо з G.shapePoints — вони вже розраховані _rebuildChainPoints
+    // 4. Координати фіксованих сусідніх точок з G.shapePoints
     const ptFrom = G.shapePoints.find(function(p) { return String(p.num) === String(lineIn.from); });
     const ptTo   = lineOut.isClosing
         ? G.shapePoints[0]
@@ -590,14 +617,12 @@ window._deleteShapePoint = function (ptNum) {
         return;
     }
 
-    // Відстань між фіксованими точками → довжина нової прямої
+    // 5. Довжина нової прямої між незрушеними точками
     const dx = ptTo.x - ptFrom.x;
     const dy = ptTo.y - ptFrom.y;
     const newLen = parseFloat((Math.sqrt(dx * dx + dy * dy) / SCALE).toFixed(3));
 
-    // Нова об'єднана лінія: direction='free', _cachedEnd вказує точні координати ptTo
-    // (для не-замикаючих). Це гарантує що _rebuildChainPoints не буде обчислювати
-    // кінцеву точку через кути/вектори, а візьме збережені координати.
+    // 6. Нова об'єднана лінія
     const mergedLine = {
         id:               lineIn.id,
         from:             lineIn.from,
@@ -614,22 +639,17 @@ window._deleteShapePoint = function (ptNum) {
         _cachedEnd:       lineOut.isClosing ? null : { x: ptTo.x, y: ptTo.y }
     };
 
-    // Видаляємо діагоналі, що посилаються на видалену точку
+    // 7. Видаляємо діагоналі що посилаються на видалену точку
     G.figureLines = G.figureLines.filter(function(l) {
         if (!l.isDiagonal) return true;
         return String(l.from) !== String(ptNum) && String(l.to) !== String(ptNum);
     });
 
-    // Замінюємо lineIn на mergedLine, видаляємо lineOut
+    // 8. Замінюємо lineIn на mergedLine, видаляємо lineOut
     const idxIn = G.figureLines.findIndex(function(l) { return l.id === lineIn.id; });
     G.figureLines.splice(idxIn, 1, mergedLine);
-
     const idxOut = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
     if (idxOut !== -1) G.figureLines.splice(idxOut, 1);
-
-    // Якщо mergedLine — тепер остання не-замикаюча перед замикаючою,
-    // то замикаюча лінія теж повинна залишитись зі своїми from/to без зрушень.
-    // _rebuildChainPoints при redrawEntireFigure перерахує її довжину автоматично.
 
     appState.calculatedArea = null;
     appState.customArea     = null;
