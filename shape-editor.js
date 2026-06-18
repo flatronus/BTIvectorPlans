@@ -232,14 +232,24 @@ window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
  * marksFromZero — масив [0, m1, m2, ..., mLast] (mLast — загальна довжина).
  * fromNum — номер початкової точки; toNum/isClosingFinal — кінець останнього відрізка.
  * firstDirection — напрямок першого відрізка; наступні — 'straight'.
+ * Проміжні точки отримують реальні числові номери через G.pointCounter
+ * (без штрихів); точки перенумеровуються за порядком слідування ліній фігури.
  */
 window._buildSplitSegments = function (fromNum, marksFromZero, toNum, isClosingFinal, firstDirection, quadrant, dimMeta, firstCachedEnd) {
     const segCount = marksFromZero.length - 1;
     const newLines = [];
+
+    // Генеруємо числові номери для ПРОМІЖНИХ точок (не для останньої — вона toNum)
+    const midNums = [];
+    for (let s = 0; s < segCount - 1; s++) {
+        G.pointCounter++;
+        midNums.push(G.pointCounter);
+    }
+
     for (let s = 0; s < segCount; s++) {
         const segLength    = marksFromZero[s + 1] - marksFromZero[s];
-        const segFrom      = (s === 0) ? fromNum : (fromNum + "'".repeat(s));
-        const segTo        = (s === segCount - 1) ? toNum : (fromNum + "'".repeat(s + 1));
+        const segFrom      = (s === 0) ? fromNum : midNums[s - 1];
+        const segTo        = (s === segCount - 1) ? toNum : midNums[s];
         const segDirection = (s === 0) ? firstDirection : 'straight';
 
         const segLine = {
@@ -257,7 +267,7 @@ window._buildSplitSegments = function (fromNum, marksFromZero, toNum, isClosingF
             dimensionVisible: dimMeta && dimMeta.dimensionVisible !== false,
             dimensionRotated: !!(dimMeta && dimMeta.dimensionRotated === true),
             isSubSegment:     true,
-            _fixedTo:         (s === segCount - 1) ? null : segTo
+            _fixedTo:         (s === segCount - 1) ? null : midNums[s]
         };
         if (s === 0 && firstCachedEnd) {
             segLine.direction  = 'free';
@@ -552,170 +562,24 @@ window.applyDeletePoint = function () {
     closeDeletePointModal();
 };
 
-/* ── Видалення однієї лінії без зміни координат точок ── */
-
-window.openDeleteLineModal = function () {
-    const lines = G.figureLines.filter(function(l) { return !l.isDiagonal && !l.isPending; });
-    if (lines.length === 0) {
-        showToast('Немає ліній для видалення', 'warning');
-        return;
-    }
-
-    // Актуалізуємо координати перед показом списку
-    _rebuildChainPoints();
-
-    const select = document.getElementById('deleteLineSelect');
-    select.innerHTML = '';
-    lines.forEach(function(l) {
-        const opt = document.createElement('option');
-        opt.value = String(l.id);
-
-        // Підпис: from завжди є, to — з G.shapePoints або '?'
-        const fromLabel = String(l.from);
-        var toLabel;
-        if (l.isClosing) {
-            toLabel = '1 (замикаюча)';
-        } else {
-            // Шукаємо to у G.shapePoints
-            const toPt = G.shapePoints.find(function(p) { return String(p.num) === String(l.to); });
-            toLabel = toPt ? String(l.to) : (l._cachedEnd ? String(l.to) : '?');
-        }
-        opt.textContent = fromLabel + '-' + toLabel;
-        select.appendChild(opt);
-    });
-
-    document.getElementById('deleteLineModal').style.display = 'block';
-};
-
-window.closeDeleteLineModal = function () {
-    document.getElementById('deleteLineModal').style.display = 'none';
-};
-
-window.applyDeleteLine = function () {
-    const select = document.getElementById('deleteLineSelect');
-    const lineId = parseInt(select.value);
-    if (isNaN(lineId)) {
-        showToast('Оберіть лінію', 'warning');
-        return;
-    }
-    _deleteSingleLine(lineId);
-    closeDeleteLineModal();
-};
-
-/**
- * Видаляє одну лінію (по id) без зміни координат точок фігури.
- * Після заморозки (_frozenFromTo=true) _rebuildChainPoints не змінює from/to цих ліній,
- * тому повторні видалення не плутають адресацію.
- */
-window._deleteSingleLine = function (lineId) {
-    const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
-    if (idx === -1) { showToast('Лінію не знайдено', 'error'); return; }
-
-    // 1. Актуалізуємо координати (тільки якщо є незаморожені лінії)
-    const hasUnfrozen = G.figureLines.some(function(l) { return !l._frozenFromTo; });
-    if (hasUnfrozen) _rebuildChainPoints();
-
-    // 2. Заморожуємо всі лінії: direction='free' + _cachedEnd + _frozenFromTo
-    G.figureLines.forEach(function(lineData) {
-        if (lineData.isDiagonal || lineData.isPending) return;
-        if (!lineData.isClosing && !lineData._cachedEnd) {
-            const toPt = G.shapePoints.find(function(p) {
-                return String(p.num) === String(lineData.to);
-            });
-            if (toPt) {
-                lineData.direction  = 'free';
-                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
-            }
-        }
-        if (!lineData.isClosing) lineData.direction = 'free';
-        lineData._frozenFromTo = true;
-    });
-
-    // 3. Знімок координат усіх точок
-    const pointsSnapshot = G.shapePoints.map(function(p) {
-        return { x: p.x, y: p.y, num: p.num };
-    });
-
-    // 4. Видаляємо лінію
-    G.figureLines.splice(idx, 1);
-
-    appState.calculatedArea = null;
-    appState.customArea     = null;
-
-    const svg = document.getElementById('shapeCanvas');
-
-    if (G.figureLines.length === 0) {
-        resetSvgCanvas(svg);
-        G.shapePoints = pointsSnapshot;
-        updateLinesList();
-        return;
-    }
-
-    // 5. Перемальовуємо вручну зі знімка
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-
-    G.figureLines.forEach(function(lineData) {
-        var fromPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.from); });
-        var toPt;
-        if (lineData.isClosing) {
-            toPt = pointsSnapshot.find(function(p) { return p.num === 1; }) || pointsSnapshot[0];
-        } else if (lineData._cachedEnd) {
-            toPt = lineData._cachedEnd;
-        } else {
-            toPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.to); });
-        }
-        if (!fromPt || !toPt) return;
-
-        if (lineData.isDiagonal) {
-            if (typeof _renderSvgDashedLine === 'function') {
-                _renderSvgDashedLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-            } else {
-                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-            }
-            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
-        } else {
-            if (lineData.lineType === 'curve') {
-                var arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(lineData.elements || []) : null;
-                var sag  = arcP ? arcP.sagMeters * SCALE : 0;
-                _renderSvgArc(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, sag, lineData.id);
-            } else {
-                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-            }
-            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
-            drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
-        }
-    });
-
-    // Малюємо ВСІ точки зі знімка
-    pointsSnapshot.forEach(function(p) {
-        if (!p.num) return;
-        _renderSvgPoint(svg, p.x, p.y, p.num);
-    });
-
-    // 6. Фіксуємо G.shapePoints
-    G.shapePoints = pointsSnapshot;
-
-    updateLinesList();
-    if (typeof drawRoomNumber === 'function') drawRoomNumber();
-    showToast('Лінію видалено', 'info');
-};
-
 /**
  * Видаляє точку з номером ptNum з фігури.
- * Логіка: точка зникає, а обидві лінії що входять і виходять з неї — теж зникають.
- * Ніяких об'єднань і перейменувань точок.
- * Перед видаленням заморожуємо всі лінії (_frozenFromTo) щоб _rebuildChainPoints
- * не змінював адресацію решти ліній.
+ * Перед видаленням заморожує координати ВСІХ точок:
+ * кожна не-замикаюча лінія переводиться в direction='free' з _cachedEnd,
+ * тому _rebuildChainPoints більше не перераховує координати через ланцюг кутів.
+ * Після цього дві лінії що суміжні з видаленою точкою об'єднуються в одну пряму.
  */
 window._deleteShapePoint = function (ptNum) {
-    // 1. Актуалізуємо координати
-    const hasUnfrozen = G.figureLines.some(function(l) { return !l._frozenFromTo; });
-    if (hasUnfrozen) _rebuildChainPoints();
+    // 1. Будуємо актуальні координати всіх точок
+    _rebuildChainPoints();
 
-    // 2. Заморожуємо всі лінії
+    // 2. Заморожуємо координати: кожну не-замикаючу лінію → direction='free' + _cachedEnd
+    //    Це гарантує що після будь-яких змін у масиві ліній _rebuildChainPoints
+    //    не буде перераховувати позиції через ланцюг напрямків.
     G.figureLines.forEach(function(lineData) {
-        if (lineData.isDiagonal || lineData.isPending) return;
-        if (!lineData.isClosing && !lineData._cachedEnd) {
+        if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
+        if (lineData.direction !== 'free') {
+            // Знаходимо кінцеву точку цієї лінії в G.shapePoints
             const toPt = G.shapePoints.find(function(p) {
                 return String(p.num) === String(lineData.to);
             });
@@ -724,76 +588,118 @@ window._deleteShapePoint = function (ptNum) {
                 lineData._cachedEnd = { x: toPt.x, y: toPt.y };
             }
         }
-        if (!lineData.isClosing) lineData.direction = 'free';
-        lineData._frozenFromTo = true;
+        // Для ліній зі штрихами (_fixedTo): також зберігаємо _cachedEnd якщо ще немає
+        if (lineData._fixedTo !== undefined && lineData._fixedTo !== null && !lineData._cachedEnd) {
+            const toPt = G.shapePoints.find(function(p) {
+                return String(p.num) === String(lineData._fixedTo);
+            });
+            if (toPt) {
+                lineData.direction  = 'free';
+                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
+            }
+        }
     });
 
-    // 3. Видаляємо всі лінії що торкаються цієї точки (входять або виходять)
+    // 3. Знаходимо лінію що ЗАКІНЧУЄТЬСЯ на ptNum і що ПОЧИНАЄТЬСЯ з ptNum
+    //    Для точки 1: лінія що входить — це замикаюча (isClosing=true, to=1)
+    const lineInIdx  = G.figureLines.findIndex(function(l) {
+        return !l.isDiagonal && String(l.to) === String(ptNum);
+    });
+    const lineOutIdx = G.figureLines.findIndex(function(l) {
+        return !l.isDiagonal && String(l.from) === String(ptNum);
+    });
+
+    if (lineInIdx === -1 || lineOutIdx === -1) {
+        showToast('Не вдалося знайти лінії для точки ' + ptNum, 'error');
+        return;
+    }
+
+    const lineIn  = G.figureLines[lineInIdx];
+    const lineOut = G.figureLines[lineOutIdx];
+
+    // 4. Координати фіксованих сусідніх точок з G.shapePoints
+    const ptFrom = G.shapePoints.find(function(p) { return String(p.num) === String(lineIn.from); });
+    const ptTo   = lineOut.isClosing
+        ? G.shapePoints[0]
+        : G.shapePoints.find(function(p) { return String(p.num) === String(lineOut.to); });
+
+    if (!ptFrom || !ptTo) {
+        showToast('Помилка координат точок', 'error');
+        return;
+    }
+
+    // 5. Довжина нової прямої між незрушеними точками
+    const dx = ptTo.x - ptFrom.x;
+    const dy = ptTo.y - ptFrom.y;
+    const newLen = parseFloat((Math.sqrt(dx * dx + dy * dy) / SCALE).toFixed(3));
+
+    // 6. Нова об'єднана лінія
+    const mergedLine = {
+        id:               lineIn.id,
+        from:             lineIn.from,
+        to:               lineOut.to,
+        direction:        'free',
+        lineType:         'line',
+        elements:         [{ type: 'number', value: newLen }],
+        code:             'free\nline\n' + newLen,
+        length:           newLen,
+        isClosing:        lineOut.isClosing,
+        isPending:        false,
+        dimensionVisible: lineIn.dimensionVisible !== false,
+        dimensionRotated: false,
+        _cachedEnd:       lineOut.isClosing ? null : { x: ptTo.x, y: ptTo.y }
+    };
+
+    // 7. Видаляємо діагоналі що посилаються на видалену точку
     G.figureLines = G.figureLines.filter(function(l) {
+        if (!l.isDiagonal) return true;
         return String(l.from) !== String(ptNum) && String(l.to) !== String(ptNum);
     });
 
-    // 4. Видаляємо точку з G.shapePoints
-    G.shapePoints = G.shapePoints.filter(function(p) {
-        return String(p.num) !== String(ptNum);
-    });
+    // 8. Замінюємо lineIn на mergedLine, видаляємо lineOut
+    const idxIn = G.figureLines.findIndex(function(l) { return l.id === lineIn.id; });
+    G.figureLines.splice(idxIn, 1, mergedLine);
+    const idxOut = G.figureLines.findIndex(function(l) { return l.id === lineOut.id; });
+    if (idxOut !== -1) G.figureLines.splice(idxOut, 1);
+
+    // 9. Якщо видалялась точка 1 — нова перша точка = ptTo (колишня точка після 1).
+    //    Ротуємо масив ліній так щоб нова замикаюча стала останньою,
+    //    і встановлюємо G._overrideStart = координати нової точки 1.
+    if (String(ptNum) === '1') {
+        // Нова «перша» точка — це ptTo (колишня точка lineOut.to)
+        // Ланцюг тепер починається з неї. Оскільки всі лінії вже free+_cachedEnd,
+        // треба ротувати масив: знайти першу не-діагональну лінію що починається з ptTo
+        // і переставити її на початок (разом з хвостом до неї).
+        const newFirstIdx = G.figureLines.findIndex(function(l) {
+            return !l.isDiagonal && String(l.from) === String(lineOut.to);
+        });
+        if (newFirstIdx > 0) {
+            const diags    = G.figureLines.filter(function(l) { return  l.isDiagonal; });
+            const nonDiags = G.figureLines.filter(function(l) { return !l.isDiagonal; });
+            const rotated  = nonDiags.slice(newFirstIdx).concat(nonDiags.slice(0, newFirstIdx));
+            // Остання стає замикаючою
+            rotated[rotated.length - 1].isClosing  = true;
+            rotated[rotated.length - 1]._cachedEnd = null;
+            // Перша більше не замикаюча
+            rotated[0].isClosing = false;
+            G.figureLines = rotated.concat(diags);
+        }
+        // Перенумеровуємо from/to: нова точка 1 = ptTo.num → 1
+        const oldNum1 = String(lineOut.to);
+        if (oldNum1 !== '1') {
+            G.figureLines.forEach(function(l) {
+                if (String(l.from) === oldNum1) l.from = 1;
+                if (String(l.to)   === oldNum1) l.to   = 1;
+            });
+        }
+        G._overrideStart = { x: ptTo.x, y: ptTo.y };
+    }
 
     appState.calculatedArea = null;
     appState.customArea     = null;
 
-    const svg = document.getElementById('shapeCanvas');
-
-    if (G.figureLines.length === 0) {
-        resetSvgCanvas(svg);
-        updateLinesList();
-        return;
-    }
-
-    // 5. Перемальовуємо вручну зі збережених координат
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-
-    const pointsSnapshot = G.shapePoints;
-
-    G.figureLines.forEach(function(lineData) {
-        var fromPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.from); });
-        var toPt;
-        if (lineData.isClosing) {
-            toPt = pointsSnapshot.find(function(p) { return p.num === 1; }) || pointsSnapshot[0];
-        } else if (lineData._cachedEnd) {
-            toPt = lineData._cachedEnd;
-        } else {
-            toPt = pointsSnapshot.find(function(p) { return String(p.num) === String(lineData.to); });
-        }
-        if (!fromPt || !toPt) return;
-
-        if (lineData.isDiagonal) {
-            if (typeof _renderSvgDashedLine === 'function') {
-                _renderSvgDashedLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-            } else {
-                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-            }
-            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
-        } else {
-            if (lineData.lineType === 'curve') {
-                var arcP = (typeof _parseArcParams === 'function') ? _parseArcParams(lineData.elements || []) : null;
-                var sag  = arcP ? arcP.sagMeters * SCALE : 0;
-                _renderSvgArc(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, sag, lineData.id);
-            } else {
-                _renderSvgLine(svg, fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.id);
-            }
-            drawLineDimension(fromPt.x, fromPt.y, toPt.x, toPt.y, lineData.length, lineData);
-            drawElementsOnLine(lineData, fromPt.x, fromPt.y, toPt.x, toPt.y, SCALE);
-        }
-    });
-
-    // Малюємо всі точки що залишились
-    pointsSnapshot.forEach(function(p) {
-        if (!p.num) return;
-        _renderSvgPoint(svg, p.x, p.y, p.num);
-    });
-
+    redrawEntireFigure();
     updateLinesList();
-    if (typeof drawRoomNumber === 'function') drawRoomNumber();
     showToast('Точку ' + ptNum + ' видалено', 'info');
 };
 
@@ -849,6 +755,17 @@ window.updateExistingLine = function (lineId, parsedData) {
                     y: fromPt.y + uy * marks[1] * SCALE
                 };
             }
+        }
+
+        // Встановлюємо G.pointCounter до максимального наявного числового номера точки,
+        // щоб нові проміжні точки не колідували з існуючими.
+        {
+            let maxPtNum = 1;
+            G.figureLines.forEach(function(l) {
+                if (typeof l.from === 'number' && l.from > maxPtNum) maxPtNum = l.from;
+                if (typeof l.to   === 'number' && l.to   > maxPtNum) maxPtNum = l.to;
+            });
+            G.pointCounter = maxPtNum;
         }
 
         const newLines = _buildSplitSegments(
@@ -1027,22 +944,13 @@ window._rebuildChainPoints = function () {
                 currentPointNum = lineData._fixedTo;
             }
             G.shapePoints.push({ x: endX, y: endY, num: lineData._fixedTo });
-            // Якщо лінія заморожена — не перезаписуємо from/to
-            if (!lineData._frozenFromTo) {
-                G.figureLines[index].from = lastPt.num;
-                G.figureLines[index].to   = lineData._fixedTo;
-            }
+            G.figureLines[index].from = lastPt.num;
+            G.figureLines[index].to   = lineData._fixedTo;
         } else {
-            // Якщо лінія заморожена — не змінюємо її from/to і не інкрементуємо currentPointNum
-            if (lineData._frozenFromTo) {
-                // Просто додаємо точку з зафіксованим номером
-                G.shapePoints.push({ x: endX, y: endY, num: lineData.to });
-            } else {
-                currentPointNum++;
-                G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
-                G.figureLines[index].from = lastPt.num;
-                G.figureLines[index].to   = currentPointNum;
-            }
+            currentPointNum++;
+            G.shapePoints.push({ x: endX, y: endY, num: currentPointNum });
+            G.figureLines[index].from = lastPt.num;
+            G.figureLines[index].to   = currentPointNum;
         }
 
         // Оновлюємо вектор і скидаємо прапорець першої лінії
@@ -1057,10 +965,8 @@ window._rebuildChainPoints = function () {
     G.figureLines.forEach(function(lineData, index) {
         if (!lineData.isClosing || lineData.isDiagonal) return;
         const lastNonDiag = G.shapePoints[G.shapePoints.length - 1];
-        if (!lineData._frozenFromTo) {
-            G.figureLines[index].from = lastNonDiag.num;
-            G.figureLines[index].to   = 1;
-        }
+        G.figureLines[index].from = lastNonDiag.num;
+        G.figureLines[index].to   = 1;
         _updateClosingLineLength(index);
     });
 };
