@@ -195,9 +195,6 @@
                 <button class="shape-btn" style="background:#e53935;" id="shapeToolbarDeletePointBtn" onclick="openDeletePointModal()" title="Видалити точку">
                     <i class="fas fa-eraser"></i><span class="shape-btn-label"> Видалити точку</span>
                 </button>
-                <button class="shape-btn" style="background:#b71c1c;" id="shapeToolbarDeleteLineBtn" onclick="openDeleteLineModal()" title="Видалити лінію">
-                    <i class="fas fa-cut"></i><span class="shape-btn-label"> Видалити лінію</span>
-                </button>
                 <button class="shape-btn shape-btn-green" onclick="closeShapeModal()" title="Зберегти і закрити">
                     <i class="fas fa-check"></i><span class="shape-btn-label"> OK</span>
                 </button>
@@ -346,30 +343,6 @@
                     <i class="fas fa-trash"></i> Видалити
                 </button>
                 <button class="btn-close" style="background-color: #9E9E9E;" onclick="closeDeletePointModal()">
-                    <i class="fas fa-times"></i> Скасувати
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модалка видалення лінії -->
-    <div id="deleteLineModal" class="modal">
-        <div class="modal-content" style="max-width: 380px;">
-            <h3 style="margin-top: 0;">Видалити лінію</h3>
-
-            <div style="margin-bottom: 12px; font-size: 13px; color: #555; background: #fff3e0; border: 1px solid #ffb74d; border-radius: 4px; padding: 10px;">
-                Оберіть лінію для видалення.<br>
-                Координати точок залишаються незмінними.
-            </div>
-
-            <select id="deleteLineSelect" style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #b71c1c; border-radius: 4px; box-sizing: border-box; margin-bottom: 16px;">
-            </select>
-
-            <div class="modal-buttons">
-                <button class="btn-copy" style="background-color: #b71c1c;" onclick="applyDeleteLine()">
-                    <i class="fas fa-cut"></i> Видалити
-                </button>
-                <button class="btn-close" style="background-color: #9E9E9E;" onclick="closeDeleteLineModal()">
                     <i class="fas fa-times"></i> Скасувати
                 </button>
             </div>
