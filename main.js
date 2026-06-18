@@ -114,10 +114,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const quickModal    = document.getElementById('quickShapeModal');
         const coordModal    = document.getElementById('coordModal');
         const diagonalModal = document.getElementById('diagonalModal');
+        const deleteLineModal = document.getElementById('deleteLineModal');
         if (event.target === copyModal)     copyModal.style.display = 'none';
         if (event.target === quickModal)    closeQuickShapeModal();
         if (event.target === coordModal)    cancelCoordModal();
         if (event.target === diagonalModal) closeDiagonalModal();
+        if (event.target === deleteLineModal) closeDeleteLineModal();
     });
 
     /* ── Escape закриває модалки без змін ── */
@@ -125,6 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (e.key === 'Escape') {
             if (document.getElementById('coordModal').style.display    === 'block') cancelCoordModal();
             if (document.getElementById('diagonalModal').style.display === 'block') closeDiagonalModal();
+            if (document.getElementById('deleteLineModal').style.display === 'block') closeDeleteLineModal();
         }
     });
 

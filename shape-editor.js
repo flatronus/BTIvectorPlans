@@ -562,6 +562,79 @@ window.applyDeletePoint = function () {
     closeDeletePointModal();
 };
 
+/* ── Видалення лінії фігури ── */
+window.openDeleteLineModal = function () {
+    _rebuildChainPoints();
+    const deletable = G.figureLines.filter(function(l) { return !l.isPending; });
+    if (deletable.length === 0) {
+        showToast('Немає ліній для видалення', 'warning');
+        return;
+    }
+
+    const select = document.getElementById('deleteLineSelect');
+    select.innerHTML = '';
+    deletable.forEach(function(l) {
+        const opt = document.createElement('option');
+        opt.value = String(l.id);
+        const toLabel = l.isClosing ? '1' : String(l.to);
+        const diagMark = l.isDiagonal ? ' (діаг.)' : '';
+        opt.textContent = String(l.from) + '-' + toLabel + diagMark;
+        select.appendChild(opt);
+    });
+
+    const hint = document.getElementById('deleteLineHint');
+    hint.textContent = 'Ліній: ' + deletable.length;
+
+    document.getElementById('deleteLineModal').style.display = 'block';
+};
+
+window.closeDeleteLineModal = function () {
+    document.getElementById('deleteLineModal').style.display = 'none';
+};
+
+window.applyDeleteLine = function () {
+    const select = document.getElementById('deleteLineSelect');
+    const lineId = parseInt(select.value);
+    if (isNaN(lineId)) {
+        showToast('Оберіть лінію', 'warning');
+        return;
+    }
+    _deleteShapeLine(lineId);
+    closeDeleteLineModal();
+};
+
+/**
+ * Видаляє лінію з G.figureLines за її id.
+ * Точки залишаються на своїх місцях — нові лінії не створюються.
+ * Якщо це була замикаюча лінія — фігура перестає бути замкненою.
+ */
+window._deleteShapeLine = function (lineId) {
+    const idx = G.figureLines.findIndex(function(l) { return l.id === lineId; });
+    if (idx === -1) {
+        showToast('Лінію не знайдено', 'error');
+        return;
+    }
+
+    const line = G.figureLines[idx];
+    const label = String(line.from) + '-' + (line.isClosing ? '1' : String(line.to));
+
+    G.figureLines.splice(idx, 1);
+
+    appState.calculatedArea = null;
+    appState.customArea     = null;
+
+    if (G.figureLines.length === 0) {
+        const svg = document.getElementById('shapeCanvas');
+        resetSvgCanvas(svg);
+        updateLinesList();
+        showToast('Лінію ' + label + ' видалено', 'info');
+        return;
+    }
+
+    redrawEntireFigure();
+    showToast('Лінію ' + label + ' видалено', 'info');
+};
+
 /**
  * Видаляє точку з номером ptNum з фігури.
  * Перед видаленням заморожує координати ВСІХ точок:
