@@ -615,6 +615,27 @@ window._deleteShapeLine = function (lineId) {
         return;
     }
 
+    // 1. Фіксуємо поточні координати всіх точок перед видаленням,
+    //    щоб _rebuildChainPoints не перераховував ланцюг і не зрушував точки.
+    _rebuildChainPoints();
+    G.figureLines.forEach(function(lineData) {
+        if (lineData.isDiagonal || lineData.isClosing || lineData.isPending) return;
+        if (lineData.direction !== 'free') {
+            const toPt = G.shapePoints.find(function(p) {
+                return String(p.num) === String(lineData.to);
+            });
+            if (toPt) {
+                lineData.direction  = 'free';
+                lineData._cachedEnd = { x: toPt.x, y: toPt.y };
+            }
+        }
+    });
+
+    // 2. Зберігаємо знімок усіх точок (включаючи ті що можуть стати «осиротілими»)
+    const allPointsSnapshot = G.shapePoints.map(function(p) {
+        return { x: p.x, y: p.y, num: p.num };
+    });
+
     const line = G.figureLines[idx];
     const label = String(line.from) + '-' + (line.isClosing ? '1' : String(line.to));
 
@@ -626,12 +647,25 @@ window._deleteShapeLine = function (lineId) {
     if (G.figureLines.length === 0) {
         const svg = document.getElementById('shapeCanvas');
         resetSvgCanvas(svg);
+        // Малюємо всі точки зі знімку
+        allPointsSnapshot.forEach(function(p) { _renderSvgPoint(svg, p.x, p.y, p.num); });
         updateLinesList();
         showToast('Лінію ' + label + ' видалено', 'info');
         return;
     }
 
     redrawEntireFigure();
+
+    // 3. Домальовуємо «осиротілі» точки — ті що були в знімку,
+    //    але після перебудови не потрапили до G.shapePoints (не є кінцем жодної лінії).
+    const svg = document.getElementById('shapeCanvas');
+    allPointsSnapshot.forEach(function(snap) {
+        const exists = G.shapePoints.some(function(p) { return p.num === snap.num; });
+        if (!exists) {
+            _renderSvgPoint(svg, snap.x, snap.y, snap.num);
+        }
+    });
+
     showToast('Лінію ' + label + ' видалено', 'info');
 };
 
