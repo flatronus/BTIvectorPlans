@@ -232,14 +232,24 @@ window._calcRelativeEnd = function (fromX, fromY, direction, scaledLen) {
  * marksFromZero — масив [0, m1, m2, ..., mLast] (mLast — загальна довжина).
  * fromNum — номер початкової точки; toNum/isClosingFinal — кінець останнього відрізка.
  * firstDirection — напрямок першого відрізка; наступні — 'straight'.
+ * Проміжні точки отримують реальні числові номери через G.pointCounter
+ * (без штрихів); точки перенумеровуються за порядком слідування ліній фігури.
  */
 window._buildSplitSegments = function (fromNum, marksFromZero, toNum, isClosingFinal, firstDirection, quadrant, dimMeta, firstCachedEnd) {
     const segCount = marksFromZero.length - 1;
     const newLines = [];
+
+    // Генеруємо числові номери для ПРОМІЖНИХ точок (не для останньої — вона toNum)
+    const midNums = [];
+    for (let s = 0; s < segCount - 1; s++) {
+        G.pointCounter++;
+        midNums.push(G.pointCounter);
+    }
+
     for (let s = 0; s < segCount; s++) {
         const segLength    = marksFromZero[s + 1] - marksFromZero[s];
-        const segFrom      = (s === 0) ? fromNum : (fromNum + "'".repeat(s));
-        const segTo        = (s === segCount - 1) ? toNum : (fromNum + "'".repeat(s + 1));
+        const segFrom      = (s === 0) ? fromNum : midNums[s - 1];
+        const segTo        = (s === segCount - 1) ? toNum : midNums[s];
         const segDirection = (s === 0) ? firstDirection : 'straight';
 
         const segLine = {
@@ -257,7 +267,7 @@ window._buildSplitSegments = function (fromNum, marksFromZero, toNum, isClosingF
             dimensionVisible: dimMeta && dimMeta.dimensionVisible !== false,
             dimensionRotated: !!(dimMeta && dimMeta.dimensionRotated === true),
             isSubSegment:     true,
-            _fixedTo:         (s === segCount - 1) ? null : segTo
+            _fixedTo:         (s === segCount - 1) ? null : midNums[s]
         };
         if (s === 0 && firstCachedEnd) {
             segLine.direction  = 'free';
@@ -745,6 +755,17 @@ window.updateExistingLine = function (lineId, parsedData) {
                     y: fromPt.y + uy * marks[1] * SCALE
                 };
             }
+        }
+
+        // Встановлюємо G.pointCounter до максимального наявного числового номера точки,
+        // щоб нові проміжні точки не колідували з існуючими.
+        {
+            let maxPtNum = 1;
+            G.figureLines.forEach(function(l) {
+                if (typeof l.from === 'number' && l.from > maxPtNum) maxPtNum = l.from;
+                if (typeof l.to   === 'number' && l.to   > maxPtNum) maxPtNum = l.to;
+            });
+            G.pointCounter = maxPtNum;
         }
 
         const newLines = _buildSplitSegments(
